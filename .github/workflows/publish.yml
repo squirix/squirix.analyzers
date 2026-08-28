@@ -1,0 +1,83 @@
+name: Publish
+
+on:
+    push:
+        tags:
+            - 'v*'
+    workflow_dispatch:
+        inputs:
+            packageVersion:
+                description: "Package version to validate, for example 0.1.0. Only used for a dry run; NuGet publishing happens on a v* tag push."
+                required: true
+                type: string
+
+jobs:
+    pack-and-publish:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            -   name: Set Git Options
+                run: |
+                    git config --global core.autocrlf false
+                    git config --global core.eol lf
+
+            -   name: Checkout
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    persist-credentials: false
+
+            -   name: Setup .NET
+                uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+                with:
+                    global-json-file: global.json
+
+            -   name: Resolve package version
+                id: version
+                run: |
+                    if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+                        version="${GITHUB_REF_NAME#v}"
+                    else
+                        version="${PACKAGE_VERSION#v}"
+                    fi
+                    echo "package-version=${version}" >> "$GITHUB_OUTPUT"
+                env:
+                    PACKAGE_VERSION: ${{ inputs.packageVersion }}
+
+            -   name: Build
+                env:
+                    PACKAGE_VERSION: ${{ steps.version.outputs.package-version }}
+                run: dotnet build src/squirix.analyzers/Squirix.Analyzers.csproj --configuration Release -p:Version="$PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true
+
+            -   name: Pack
+                env:
+                    PACKAGE_VERSION: ${{ steps.version.outputs.package-version }}
+                run: dotnet pack src/squirix.analyzers/Squirix.Analyzers.csproj --configuration Release --no-build --output ./artifacts/packages -p:Version="$PACKAGE_VERSION"
+
+            -   name: NuGet login (OIDC to temp API key)
+                id: login
+                uses: NuGet/login@v1
+                with:
+                    user: ${{ secrets.NUGET_USER }}
+
+            -   name: Publish to nuget.org
+                if: github.event_name == 'push'
+                run: |
+                    set -euo pipefail
+                    shopt -s nullglob
+                    packages=(artifacts/packages/*.nupkg)
+                    if [[ ${#packages[@]} -eq 0 ]]; then
+                        echo "No .nupkg files found under artifacts/packages" >&2
+                        exit 1
+                    fi
+                    for package in "${packages[@]}"; do
+                        if [[ "$package" == *.snupkg ]]; then
+                            continue
+                        fi
+                        dotnet nuget push "$package" \
+                            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+                            --source "https://api.nuget.org/v3/index.json" \
+                            --skip-duplicate
+                    done

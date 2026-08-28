@@ -1,0 +1,11 @@
+<Solution>
+    <Configurations>
+        <Platform Name="Any CPU"/>
+    </Configurations>
+    <Folder Name="/src/">
+        <Project Path="src/squirix.analyzers/Squirix.Analyzers.csproj"/>
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj"/>
+    </Folder>
+</Solution>

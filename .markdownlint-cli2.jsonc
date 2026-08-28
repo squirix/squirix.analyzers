@@ -1,0 +1,15 @@
+{
+  "config": ".markdownlint.json",
+  "globs": [
+    "**/*.md"
+  ],
+  "ignores": [
+    ".git/**",
+    "**/AGENTS.md",
+    "**/.cursor/**",
+    ".tools/**",
+    "artifacts/**",
+    "**/*.tmp.md",
+    "**/AnalyzerReleases.*.md"
+  ]
+}

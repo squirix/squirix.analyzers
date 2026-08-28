@@ -1,0 +1,150 @@
+# Top-most EditorConfig file
+root = true # top-most EditorConfig; stops parent-dir lookup
+
+# ===========================================================================
+# Core file settings (apply to every tracked file)
+# ===========================================================================
+[*.{cs,csproj,props,targets,sln,json,md,yml,yaml,editorconfig,xml,txt,proto,ps1,runsettings,config,toml,http,svg,cshtml,razor,sql,sh,cmd,bat,mdc,csx}]
+charset = utf-8 # file encoding
+end_of_line = lf # normalize line endings to LF
+indent_size = 4 # indent width in spaces
+indent_style = space # use spaces, not tabs
+insert_final_newline = true # ensure trailing newline at EOF
+max_line_length = 180 # hard limit for line length
+tab_width = 4 # visual tab width
+trim_trailing_whitespace = true # strip trailing whitespace
+
+# ===========================================================================
+# C# language style + IDE code-style diagnostics (built into the C# compiler/IDE)
+# ===========================================================================
+csharp_new_line_before_open_brace = all # place open brace on its own line (Allman)
+csharp_place_expr_method_on_single_line = if_owner_is_single_line # keep expression-bodied method on one line only if owner fits
+csharp_prefer_braces = false # omit braces for single embedded statements (incl nested loops); keep for multi-statement bodies (SQR0008)
+csharp_prefer_simple_using_statement = true:warning # prefer using declaration over using block
+csharp_prefer_static_local_function = true:error # prefer static local functions
+csharp_space_after_cast = false # no space after a cast
+csharp_style_deconstructed_variable_declaration = true:warning # prefer deconstructed variable declaration
+csharp_style_expression_bodied_accessors = when_on_single_line:warning # expression body for accessors when single line
+csharp_style_expression_bodied_indexers = when_on_single_line:warning # expression body for indexers when single line
+csharp_style_expression_bodied_local_functions = false:warning # no expression body for local functions
+csharp_style_expression_bodied_methods = when_on_single_line:warning # expression body for methods when single line
+csharp_style_expression_bodied_operators = false:warning # no expression body for operators
+csharp_style_expression_bodied_properties = when_on_single_line:warning # expression body for properties when single line
+csharp_style_inlined_variable_declaration = true:warning # prefer inlined variable declaration
+csharp_style_namespace_declarations = file_scoped # use file-scoped namespaces
+csharp_style_pattern_matching_over_as_with_null_check = true:warning # pattern match over as plus null check
+csharp_style_pattern_matching_over_is_with_cast_check = true:warning # pattern match over is plus cast check
+csharp_style_prefer_not_pattern = true:warning # prefer not pattern
+csharp_style_prefer_pattern_matching = true:warning # prefer pattern matching
+csharp_style_prefer_switch_expression = true:warning # prefer switch expression
+csharp_style_unused_value_assignment_preference = discard_variable:warning # prefer discard for unused assignments
+csharp_style_unused_value_expression_statement_preference = discard_variable:warning # prefer explicit discard when intentionally ignoring a value
+csharp_style_var_elsewhere = true:suggestion # use var where type not apparent
+csharp_style_var_for_built_in_types = true:warning # use latest C# style rules
+csharp_style_var_when_type_is_apparent = true:suggestion # use var when type apparent
+
+dotnet_diagnostic.CA1510.severity = warning # throw helpers instead of multi-line ArgumentNullException/ObjectDisposedException blocks
+dotnet_diagnostic.CA1511.severity = warning # use ArgumentException throw helper
+dotnet_diagnostic.CA1512.severity = warning # use InvalidOperationException throw helper
+dotnet_diagnostic.CA1513.severity = warning # use ObjectDisposedException throw helper
+dotnet_diagnostic.IDE0003.severity = warning # suppresses redundant this. qualification
+dotnet_diagnostic.IDE0005.severity = error # remove unused using directives (fails build via EnforceCodeStyleInBuild)
+dotnet_diagnostic.IDE0007.severity = warning # use implicit type (var) where applicable
+dotnet_diagnostic.IDE0011.severity = error # IDE0011 unreliable at omitting braces when csharp_prefer_braces=false; SQR0010 is the build gate for single-line bodies
+dotnet_diagnostic.IDE0017.severity = warning # use object initializers
+dotnet_diagnostic.IDE0018.severity = warning # use inlined variable declaration
+dotnet_diagnostic.IDE0019.severity = warning # pattern match over as with null check
+dotnet_diagnostic.IDE0020.severity = warning # pattern match over is with cast check
+dotnet_diagnostic.IDE0021.severity = warning # use expression body for constructors
+dotnet_diagnostic.IDE0022.severity = warning # use expression body for methods
+dotnet_diagnostic.IDE0023.severity = warning # use expression body for conversion operators
+dotnet_diagnostic.IDE0025.severity = warning # use expression body for properties
+dotnet_diagnostic.IDE0026.severity = warning # use expression body for indexers
+dotnet_diagnostic.IDE0027.severity = warning # use expression body for accessors
+dotnet_diagnostic.IDE0028.severity = warning # use collection initializers
+dotnet_diagnostic.IDE0029.severity = warning # simplify null check with coalesce expression
+dotnet_diagnostic.IDE0031.severity = warning # use null propagation (?.)
+dotnet_diagnostic.IDE0041.severity = warning # use is null / is not null check
+dotnet_diagnostic.IDE0055.severity = error # enforce code-style formatting in build
+dotnet_diagnostic.IDE0063.severity = warning # use simple using statement
+dotnet_diagnostic.IDE0066.severity = warning # use switch expression
+dotnet_diagnostic.IDE0074.severity = warning # use coalesce compound assignment
+dotnet_diagnostic.IDE0078.severity = none # use pattern matching combinators (and/or)
+dotnet_diagnostic.IDE0083.severity = warning # use not pattern
+dotnet_diagnostic.IDE0090.severity = warning # use target-typed new (simplify new expression)
+dotnet_diagnostic.IDE0130.severity = error # namespace should match folder
+dotnet_diagnostic.IDE0160.severity = none # no block-scoped namespace preference
+dotnet_diagnostic.IDE0161.severity = error # use file-scoped namespaces
+dotnet_diagnostic.IDE0290.severity = none # use primary constructor
+dotnet_diagnostic.IDE0300.severity = warning # use collection expression for array
+dotnet_diagnostic.IDE0301.severity = warning # use collection expression for empty
+dotnet_diagnostic.IDE0305.severity = warning # use collection expression for fluent
+
+dotnet_style_collection_initializer = true:warning # use collection initializer
+dotnet_style_coalesce_expression = true:warning # use coalesce expression
+dotnet_style_null_propagation = true:warning # use null propagation
+dotnet_style_object_initializer = true:warning # use object initializer
+dotnet_style_prefer_collection_expression = when_types_exactly_match:warning # use collection expression when types match
+dotnet_style_prefer_compound_assignment = true:warning # use compound assignment
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning # use is null check over reference equality
+dotnet_style_qualification_for_event = false:warning # do not qualify events with this.
+dotnet_style_qualification_for_field = false:warning # omit redundant this. (IDE0003 warning fails build under TreatWarningsAsErrors)
+dotnet_style_qualification_for_method = false:warning # do not qualify methods with this.
+dotnet_style_qualification_for_property = false:warning # do not qualify properties with this.
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:suggestion # nullable/language enforced via MSBuild too
+
+csharp_indent_case_contents = true # indent case contents
+csharp_indent_case_contents_when_block = false # do not indent case block contents
+csharp_indent_switch_labels = true # indent switch labels
+
+# ===========================================================================
+# Microsoft code analysis (CA*) — reliability / disposal / performance / usage
+# (shipped with the .NET SDK; enabled by default)
+# ===========================================================================
+dotnet_diagnostic.CA1816.severity = error # dispose methods should call base
+dotnet_diagnostic.CA1822.severity = error # mark members as static
+dotnet_diagnostic.CA1823.severity = warning # unused private fields
+dotnet_diagnostic.CA1825.severity = warning # avoid unnecessary zero-length array allocations
+dotnet_diagnostic.CA1834.severity = error # use Span-based string append
+dotnet_diagnostic.CA1845.severity = warning # use span-based overloads
+dotnet_diagnostic.CA1852.severity = warning # seal types for performance
+dotnet_diagnostic.CA1861.severity = error # use SearchValues for char search
+dotnet_diagnostic.CA1869.severity = warning # cache and reuse Regex
+dotnet_diagnostic.CA2000.severity = error # dispose objects before losing scope
+dotnet_diagnostic.CA2012.severity = error # use ValueTask correctly
+dotnet_diagnostic.CA2016.severity = warning # forward CancellationToken
+dotnet_diagnostic.CA2201.severity = warning # do not raise reserved exception types
+dotnet_diagnostic.CA2208.severity = warning # instantiate argument exceptions correctly
+dotnet_diagnostic.CA2213.severity = error # disposable fields should be disposed
+
+# ===========================================================================
+# Roslyn analyzer framework (RS*) — release tracking / banned API
+# (Microsoft.CodeAnalysis.Analyzers, an implicit dependency of analyzer projects)
+# ===========================================================================
+dotnet_diagnostic.RS0030.severity = error # symbol has been banned
+dotnet_diagnostic.RS0031.severity = error # symbol has been banned for use in declarations
+
+# ===========================================================================
+# Squirix analyzers (SQR*) — this package's own rules
+# Severities mirror the analyzer defaults (no Error tier in v0.1).
+# ===========================================================================
+dotnet_diagnostic.SQR0001.severity = warning # outer for/foreach/while/do must omit braces when body is only a nested loop
+dotnet_diagnostic.SQR0002.severity = suggestion # design/naming limit
+dotnet_diagnostic.SQR0003.severity = suggestion # design/naming limit
+dotnet_diagnostic.SQR0004.severity = suggestion # type name length limit
+dotnet_diagnostic.SQR0005.severity = suggestion # method name length limit
+dotnet_diagnostic.SQR0006.severity = suggestion # field name length limit
+dotnet_diagnostic.SQR0007.severity = suggestion # type name must not repeat namespace
+dotnet_diagnostic.SQR0008.severity = warning # multiline embedded loop bodies (except nested loops) must use braces
+dotnet_diagnostic.SQR0009.severity = suggestion # redundant named argument
+dotnet_diagnostic.SQR0010.severity = warning # omit braces for single-line bodies
+dotnet_diagnostic.SQR0011.severity = suggestion # redundant default argument value
+dotnet_diagnostic.SQR0012.severity = suggestion # prefer == / != over is / is not for constants
+dotnet_diagnostic.SQR0013.severity = suggestion # prefer == over is for constants
+dotnet_diagnostic.SQR0014.severity = suggestion # prefer != over is not for constants
+dotnet_diagnostic.SQR0015.severity = warning # bool dispose guard must be int via Interlocked
+dotnet_diagnostic.SQR0016.severity = warning # int dispose flag only via Interlocked/Volatile
+dotnet_diagnostic.SQR0017.severity = warning # forbid TestContext.Current.CancellationToken direct use
+dotnet_diagnostic.SQR0018.severity = warning # multiline embedded if/else bodies must use braces
+dotnet_diagnostic.SQR0019.severity = warning # forbid allocating xUnit Assert.Throws*
+dotnet_diagnostic.SQR0020.severity = warning # merge duplicate catch blocks with identical bodies

@@ -1,0 +1,29 @@
+## Build output
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+
+## Visual Studio
+.vs/
+*.user
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+## Rider
+.idea/
+*.sln.iml
+
+## Test results
+TestResults/
+[Tt]est[Rr]esult[Dd]ata/
+coverage*.xml
+*.coverage
+*.coveragexml
+
+## Misc
+*.log
+.DS_Store

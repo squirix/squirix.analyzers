@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <LangVersion>12.0</LangVersion>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <!-- RS1041: in-repo analyzers are private tooling; see https://github.com/dotnet/roslyn-analyzers/issues/7470 -->
+        <NoWarn>$(NoWarn);RS1041</NoWarn>
+        <DevelopmentDependency>true</DevelopmentDependency>
+
+        <!-- Pack as a Roslyn analyzer NuGet package. -->
+        <IsPackable>true</IsPackable>
+        <PackageId>squirix.analyzers</PackageId>
+        <Version>0.1.0</Version>
+        <Authors>Squirix Team</Authors>
+        <Description>Design-time Roslyn analyzers that enforce squirix's internal coding conventions: brace style, member-size limits, naming rules, and code-smell guards.</Description>
+        <RepositoryUrl>https://github.com/squirix/Squirix.Analyzers</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageProjectUrl>https://github.com/squirix/Squirix.Analyzers</PackageProjectUrl>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <PackageTags>roslyn;analyzers;code-analysis;csharp;dotnet;squirix</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <DebugType>portable</DebugType>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_IncludeAnalyzerInPackage</TargetsForTfmSpecificContentInPackage>
+        <!-- Assembly version attributes are authored in AssemblyInfo.cs; skip auto-generation. -->
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400" PrivateAssets="all"/>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <Target Name="_IncludeAnalyzerInPackage">
+        <ItemGroup>
+            <TfmSpecificPackageFile Include="$(TargetDir)\$(AssemblyName).dll"
+                                    PackagePath="analyzers/dotnet/cs"
+                                    Visible="false"/>
+            <TfmSpecificPackageFile Include="$(TargetDir)\$(AssemblyName).pdb"
+                                    PackagePath="analyzers/dotnet/cs"
+                                    Visible="false"/>
+        </ItemGroup>
+    </Target>
+
+</Project>

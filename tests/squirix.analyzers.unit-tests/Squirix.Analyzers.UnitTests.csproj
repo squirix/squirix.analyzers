@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+        <OutputType>Exe</OutputType>
+        <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+        <UseAppHost>true</UseAppHost>
+        <RootNamespace>Squirix.Analyzers.UnitTests</RootNamespace>
+        <AssemblyName>Squirix.Analyzers.UnitTests</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0"/>
+        <PackageReference Include="xunit.v3" Version="4.0.0"/>
+        <PackageReference Include="xunit.v3.assert" Version="4.0.0"/>
+        <PackageReference Include="xunit.analyzers" Version="2.0.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\squirix.analyzers\Squirix.Analyzers.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="..\xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+</Project>

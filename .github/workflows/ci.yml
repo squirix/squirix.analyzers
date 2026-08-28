@@ -1,0 +1,62 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+jobs:
+    build:
+        name: Build and Test
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            -   name: Set Git Options
+                run: |
+                    git config --global core.autocrlf false
+                    git config --global core.eol lf
+
+            -   name: Checkout
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    persist-credentials: false
+
+            -   name: Setup .NET
+                uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+                with:
+                    global-json-file: global.json
+
+            -   name: Cache NuGet Packages
+                uses: actions/cache@v6
+                with:
+                    path: ~/.nuget/packages
+                    key: ${{ runner.os }}-dotnet10-nuget-${{ hashFiles('**/global.json', '**/*.csproj') }}
+                    restore-keys: |
+                        ${{ runner.os }}-dotnet10-nuget-
+
+            -   name: Restore
+                run: dotnet restore Squirix.Analyzers.slnx
+
+            -   name: Build
+                run: dotnet build Squirix.Analyzers.slnx --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
+
+            -   name: Test
+                run: dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
+
+            -   name: Pack
+                run: dotnet pack src/squirix.analyzers/Squirix.Analyzers.csproj --configuration Release --no-build --output ./artifacts/packages
+
+    markdownlint:
+        name: Markdownlint
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    persist-credentials: false
+
+            -   name: Markdownlint
+                uses: DavidAnson/markdownlint-cli2-action@v19
+                with:
+                    globs: '**/*.md'
