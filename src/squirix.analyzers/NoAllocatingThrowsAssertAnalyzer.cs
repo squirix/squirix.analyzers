@@ -9,13 +9,13 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Squirix.Analyzers;
 
 /// <summary>
-/// Forbids exception-assert invocations that capture the operation in a delegate to allocate a display class on every
-/// call, regardless of the assert library (xUnit <c language="csharp">Assert.Throws</c>, FluentAssertions
-/// <c language="csharp">Should().Throw</c>, NUnit <c language="csharp">Assert.Throws</c>, and similar helpers). An
-/// invocation is flagged when the method is a <c language="csharp">Throws</c>/<c language="csharp">Throw</c> family
-/// member and at least one argument is a lambda or anonymous method (a delegate capture). Use an allocation-free assert
-/// that takes an already-started operation instead, for example a closure-free testkit <c language="csharp">Throws</c>
-/// helper.
+/// Forbids exception-assert invocations that allocate a new delegate on every call, regardless of the assert library
+/// (xUnit <c language="csharp">Assert.Throws</c>, FluentAssertions <c language="csharp">Should().Throw</c>, NUnit
+/// <c language="csharp">Assert.Throws</c>, and similar helpers). An invocation is flagged when the method is a
+/// <c language="csharp">Throws</c>/<c language="csharp">Throw</c> family member and at least one argument is a
+/// capturing delegate (a non-static lambda or an anonymous method, which allocates a new delegate and a display class
+/// on every call). A <c language="csharp">static</c> lambda has no closure and is cached as a single static delegate,
+/// so it does not allocate and is not flagged.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
@@ -29,8 +29,10 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
     ];
 
     private static readonly LocalizableString Description =
-        "Exception asserts that capture the operation in a delegate allocate a display class on every call. Supply an " +
-        "already-started operation to an allocation-free assert instead of a lambda or anonymous method.";
+        "Exception asserts that capture the operation in a non-static delegate allocate a new delegate and a display " +
+        "class on every call. A static lambda has no closure, is cached as a single static delegate, and does not " +
+        "allocate. Supply an already-started operation to an allocation-free assert instead of a capturing lambda or " +
+        "anonymous method.";
 
     private static readonly LocalizableString MessageFormat =
         "Do not use {0} with a delegate; use an allocation-free exception assert that takes an already-started operation instead";
@@ -67,7 +69,6 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
         if (!CapturesDelegate(node))
             return;
-
         context.ReportDiagnostic(Diagnostic.Create(Rule, node.GetLocation(), $"`{name}`"));
     }
 
@@ -78,32 +79,48 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
         foreach (var argument in invocation.ArgumentList.Arguments)
         {
-            if (ContainsDelegateSyntax(argument.Expression))
+            if (ContainsCapturingDelegate(argument.Expression))
                 return true;
         }
 
         return false;
     }
 
-    private static bool ContainsDelegateSyntax(ExpressionSyntax expression)
+    private static bool ContainsCapturingDelegate(ExpressionSyntax expression)
     {
-        if (expression.IsKind(SyntaxKind.SimpleLambdaExpression)
-            || expression.IsKind(SyntaxKind.ParenthesizedLambdaExpression)
-            || expression.IsKind(SyntaxKind.AnonymousMethodExpression))
+        foreach (var node in EnumerateDelegateNodes(expression))
         {
-            return true;
-        }
-
-        foreach (var descendant in expression.DescendantNodes())
-        {
-            if (descendant.IsKind(SyntaxKind.SimpleLambdaExpression)
-                || descendant.IsKind(SyntaxKind.ParenthesizedLambdaExpression)
-                || descendant.IsKind(SyntaxKind.AnonymousMethodExpression))
+            switch (node)
             {
-                return true;
+                // Static lambdas have no closure: the compiler caches a single static delegate, so repeated calls do
+                // not allocate. Capturing (non-static) lambdas and anonymous methods allocate a new delegate, plus a
+                // display class when they capture state, on every call.
+                case AnonymousMethodExpressionSyntax:
+                    return true;
+                case SimpleLambdaExpressionSyntax { Modifiers: var simpleModifiers } when !simpleModifiers.Any(SyntaxKind.StaticKeyword):
+                    return true;
+                case ParenthesizedLambdaExpressionSyntax { Modifiers: var parenthesizedModifiers } when !parenthesizedModifiers.Any(SyntaxKind.StaticKeyword):
+                    return true;
             }
         }
 
         return false;
     }
+
+    private static IEnumerable<SyntaxNode> EnumerateDelegateNodes(ExpressionSyntax expression)
+    {
+        if (IsDelegateNode(expression))
+            yield return expression;
+
+        foreach (var descendant in expression.DescendantNodes())
+        {
+            if (IsDelegateNode(descendant))
+                yield return descendant;
+        }
+    }
+
+    private static bool IsDelegateNode(SyntaxNode node) =>
+        node.IsKind(SyntaxKind.SimpleLambdaExpression)
+        || node.IsKind(SyntaxKind.ParenthesizedLambdaExpression)
+        || node.IsKind(SyntaxKind.AnonymousMethodExpression);
 }

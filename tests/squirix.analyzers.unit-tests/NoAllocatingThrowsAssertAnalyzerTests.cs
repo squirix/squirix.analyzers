@@ -112,6 +112,34 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
     }
 
     [Fact]
+    public async Task AllowsStaticLambdaWithoutCaptureAllocation()
+    {
+        const string source = """
+            namespace Other
+            {
+                static class Assert
+                {
+                    public static void Throws<T>(System.Action action) where T : System.Exception
+                    {
+                    }
+                }
+            }
+
+            class C
+            {
+                void M()
+                {
+                    Other.Assert.Throws<System.InvalidOperationException>(static () => { });
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task AllowsUnrelatedMethod()
     {
         const string source = """
