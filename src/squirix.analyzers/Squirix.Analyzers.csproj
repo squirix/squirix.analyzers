@@ -14,7 +14,7 @@
         <!-- Pack as a Roslyn analyzer NuGet package. -->
         <IsPackable>true</IsPackable>
         <PackageId>squirix.analyzers</PackageId>
-        <Version>0.1.2</Version>
+        <Version>0.1.3</Version>
         <Authors>Squirix Team</Authors>
         <Description>Design-time Roslyn analyzers that enforce squirix's internal coding conventions: brace style, member-size limits, naming rules, and code-smell guards.</Description>
         <RepositoryUrl>https://github.com/squirix/Squirix.Analyzers</RepositoryUrl>
