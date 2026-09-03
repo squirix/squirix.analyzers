@@ -148,3 +148,7 @@ dotnet_diagnostic.SQR0017.severity = warning # forbid TestContext.Current.Cancel
 dotnet_diagnostic.SQR0018.severity = warning # multiline embedded if/else bodies must use braces
 dotnet_diagnostic.SQR0019.severity = warning # forbid allocating xUnit Assert.Throws*
 dotnet_diagnostic.SQR0020.severity = warning # merge duplicate catch blocks with identical bodies
+dotnet_diagnostic.SQR0021.severity = suggestion # prefer ArgumentException throw helpers over manual guards
+dotnet_diagnostic.SQR0022.severity = suggestion # prefer ArgumentOutOfRangeException throw helpers for TimeSpan guards
+dotnet_diagnostic.SQR0023.severity = suggestion # prefer ArgumentNullException.ThrowIfNull over null-coalescing throw
+dotnet_diagnostic.SQR0024.severity = suggestion # prefer a throw-helper method over null-coalescing throw
