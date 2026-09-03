@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
@@ -36,6 +35,6 @@ internal static class AnalyzerRunner
         var withAnalyzers = compilation.WithAnalyzers([analyzer], options);
         var allDiagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync(cancellationToken);
         var supportedIds = analyzer.SupportedDiagnostics.Select(static d => d.Id).ToHashSet();
-        return allDiagnostics.Where(d => supportedIds.Contains(d.Id)).ToImmutableArray();
+        return [.. allDiagnostics.Where(d => supportedIds.Contains(d.Id))];
     }
 }

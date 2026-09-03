@@ -57,7 +57,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Single(diagnostics);
+        _ = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostics[0].Id);
     }
 
@@ -83,7 +83,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Single(diagnostics);
+        _ = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostics[0].Id);
     }
 
@@ -186,7 +186,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Single(diagnostics);
+        _ = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostics[0].Id);
     }
 
