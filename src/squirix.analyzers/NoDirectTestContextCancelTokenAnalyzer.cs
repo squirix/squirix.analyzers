@@ -66,7 +66,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
 
     private static bool ExposesSharedCancellationToken(INamedTypeSymbol symbol)
     {
-        for (INamedTypeSymbol? current = symbol; current is not null; current = current.BaseType)
+        for (var current = symbol; current is not null; current = current.BaseType)
         {
             if (current.TypeKind == TypeKind.Class && DeclaresCancellationTokenMember(current))
                 return true;

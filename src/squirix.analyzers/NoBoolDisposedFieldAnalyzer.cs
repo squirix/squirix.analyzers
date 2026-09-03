@@ -12,12 +12,12 @@ namespace Squirix.Analyzers;
 /// toggled through <see cref="System.Threading.Interlocked" /> (or observed through
 /// <see cref="System.Threading.Volatile" />), never a plain <c language="csharp">bool</c> field.
 /// <list type="bullet">
-    ///     <item>
-    ///         <description>SQR0015: flags a <c language="csharp">bool</c> field named exactly "_disposed".</description>
-    ///     </item>
-    ///     <item>
-    ///         <description>SQR0016: flags an <c language="csharp">int</c> field named exactly "_disposed" when accessed outside Interlocked/Volatile.</description>
-    ///     </item>
+///     <item>
+///         <description>SQR0015: flags a <c language="csharp">bool</c> field named exactly "_disposed".</description>
+///     </item>
+///     <item>
+///         <description>SQR0016: flags an <c language="csharp">int</c> field named exactly "_disposed" when accessed outside Interlocked/Volatile.</description>
+///     </item>
 /// </list>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
