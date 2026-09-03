@@ -46,6 +46,32 @@ jobs:
             -   name: Pack
                 run: dotnet pack src/squirix.analyzers/Squirix.Analyzers.csproj --configuration Release --no-build --output ./artifacts/packages
 
+    format:
+        name: Format
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            -   name: Set Git Options
+                run: |
+                    git config --global core.autocrlf false
+                    git config --global core.eol lf
+
+            -   name: Checkout
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    persist-credentials: false
+
+            -   name: Setup .NET
+                uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+                with:
+                    global-json-file: global.json
+
+            -   name: Restore
+                run: dotnet restore Squirix.Analyzers.slnx
+
+            -   name: Format Check
+                run: dotnet format Squirix.Analyzers.slnx --verify-no-changes --no-restore
+
     markdownlint:
         name: Markdownlint
         runs-on: ubuntu-latest
