@@ -109,6 +109,11 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
             if (current.SpecialType == SpecialType.System_String)
                 return false;
 
+            // Record types synthesize 'operator =='/ '!=' that still delegate null checks to
+            // object.ReferenceEquals, so 'x == null' and 'x is null' are equivalent for records.
+            if (current.IsRecord)
+                return false;
+
             if (HasEqualityOperatorMembers(current))
                 return true;
 

@@ -124,4 +124,46 @@ public sealed class PreferEqualityOperatorAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task FlagsIsNullPatternOnRecord()
+    {
+        const string source = """
+            record R(string Value);
+
+            class C
+            {
+                void M(R value)
+                {
+                    if (value is null)
+                        return;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, TestContext.Current.CancellationToken);
+
+        Assert.Equal([NullCheckRuleId], diagnostics.Select(static d => d.Id));
+    }
+
+    [Fact]
+    public async Task FlagsIsNotNullPatternOnRecord()
+    {
+        const string source = """
+            record R(string Value);
+
+            class C
+            {
+                void M(R value)
+                {
+                    if (value is not null)
+                        return;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, TestContext.Current.CancellationToken);
+
+        Assert.Equal([NullCheckRuleId], diagnostics.Select(static d => d.Id));
+    }
 }
