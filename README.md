@@ -63,6 +63,10 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0018`](docs/rules/SQR0018.md) | Style | `RequireMultilineIfBodyBracesAnalyzer` | Require braces on multi-line if/else bodies. |
 | [`SQR0019`](docs/rules/SQR0019.md) | Usage | `NoAllocatingThrowsAssertAnalyzer` | Avoid allocating exception assert invocations. |
 | [`SQR0020`](docs/rules/SQR0020.md) | Usage | `MergeDuplicateCatchBlocksAnalyzer` | Merge consecutive catch blocks with identical bodies. |
+| [`SQR0021`](docs/rules/SQR0021.md) | Usage | `UseArgumentExceptionThrowHelperAnalyzer` | Prefer ArgumentException.ThrowIf* over manual guards. |
+| [`SQR0022`](docs/rules/SQR0022.md) | Usage | `UseTimeSpanThrowHelperAnalyzer` | Prefer ArgumentOutOfRangeException.ThrowIf* for TimeSpan guards. |
+| [`SQR0023`](docs/rules/SQR0023.md) | Usage | `CoalesceThrowIfNullAnalyzer` | Prefer ArgumentNullException.ThrowIfNull over null-coalescing throw. |
+| [`SQR0024`](docs/rules/SQR0024.md) | Usage | `CoalesceThrowHelperAnalyzer` | Prefer a throw-helper method over null-coalescing throw. |
 
 ## Building
 
