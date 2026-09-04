@@ -11,11 +11,10 @@ namespace Squirix.Analyzers;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class TooManyMethodsAnalyzer : DiagnosticAnalyzer
 {
+    private const int DefaultMaxMethodsPerType = 20;
     private const string DiagnosticId = "SQR0002";
 
     private const string MaxMethodsPerTypeOptionName = "SQR0002.max_methods_per_type";
-
-    private const int DefaultMaxMethodsPerType = 20;
 
     private static readonly LocalizableString Description = "Types with too many instance/static methods " +
                                                             "(excluding constructors, property/event accessors, configurable threshold, default 20) tend to have too many responsibilities. " +
@@ -24,7 +23,6 @@ public sealed class TooManyMethodsAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString MessageFormat = "Type '{0}' has {1} methods (limit {2}); prefer splitting responsibilities";
     private static readonly LocalizableString Title = "Avoid types with too many methods";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Design", DiagnosticSeverity.Info, true, Description);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

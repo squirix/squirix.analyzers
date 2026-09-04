@@ -9,37 +9,37 @@ public sealed class TypeNamespacePrefixAnalyzerTests : AnalyzerTestBase
     private const string RuleId = "SQR0007";
 
     [Fact]
+    public async Task AllowsNonRepeatingNamespaceSegment()
+    {
+        const string source = """
+                              namespace Acme
+                              {
+                                  class Cache
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task FlagsRepeatingNamespaceSegment()
     {
         const string source = """
-            namespace Acme
-            {
-                class AcmeCache
-                {
-                }
-            }
-            """;
+                              namespace Acme
+                              {
+                                  class AcmeCache
+                                  {
+                                  }
+                              }
+                              """;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
-    }
-
-    [Fact]
-    public async Task AllowsNonRepeatingNamespaceSegment()
-    {
-        const string source = """
-            namespace Acme
-            {
-                class Cache
-                {
-                }
-            }
-            """;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, DefaultCancellationToken);
-
-        Assert.Empty(diagnostics);
     }
 }

@@ -21,9 +21,7 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString MessageFormat = "Named argument '{0}' is redundant; use a positional argument";
 
     private static readonly LocalizableString Title = "Avoid redundant named arguments";
-
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -119,6 +117,17 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
         AnalyzeArgumentList(context, creation.ArgumentList, symbol, static (node, list) => ((ObjectCreationExpressionSyntax)node).WithArgumentList(list));
     }
 
+    private static int FindParameterIndex(ImmutableArray<IParameterSymbol> parameters, string name)
+    {
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            if (string.Equals(parameters[i].Name, name, StringComparison.Ordinal))
+                return i;
+        }
+
+        return -1;
+    }
+
     private static bool HasNamedArgument(ArgumentListSyntax? argumentList)
     {
         if (argumentList is null)
@@ -131,17 +140,6 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
         }
 
         return false;
-    }
-
-    private static int FindParameterIndex(ImmutableArray<IParameterSymbol> parameters, string name)
-    {
-        for (var i = 0; i < parameters.Length; i++)
-        {
-            if (string.Equals(parameters[i].Name, name, StringComparison.Ordinal))
-                return i;
-        }
-
-        return -1;
     }
 
     private static bool RemainsBoundToSameMethod(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex,

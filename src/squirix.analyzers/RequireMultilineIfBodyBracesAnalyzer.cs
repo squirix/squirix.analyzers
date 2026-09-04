@@ -17,8 +17,7 @@ public sealed class RequireMultilineIfBodyBracesAnalyzer : DiagnosticAnalyzer
 {
     private const string DiagnosticId = "SQR0018";
 
-    private static readonly LocalizableString Description =
-        "When an if/else-if/else body is a single embedded statement that spans multiple lines, add braces around the body.";
+    private static readonly LocalizableString Description = "When an if/else-if/else body is a single embedded statement that spans multiple lines, add braces around the body.";
 
     private static readonly LocalizableString MessageFormat = "Add braces to {0} body when the embedded statement spans multiple lines";
     private static readonly LocalizableString Title = "Add braces to multiline embedded if/else body";

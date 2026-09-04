@@ -23,7 +23,6 @@ public sealed class RequireMultilineLoopBodyBracesAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Title = "Add braces to multiline embedded loop body";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
 
-
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
 

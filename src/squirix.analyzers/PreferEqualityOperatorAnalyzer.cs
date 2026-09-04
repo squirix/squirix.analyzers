@@ -41,10 +41,8 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor IsConstantRule = new(IsConstantRuleId, IsConstantTitle, IsConstantMessage, Category, DiagnosticSeverity.Info, true,
         IsConstantDescription);
 
-
     private static readonly DiagnosticDescriptor IsNotConstantRule = new(IsNotConstantRuleId, IsNotConstantTitle, IsNotConstantMessage, Category, DiagnosticSeverity.Info, true,
         IsNotConstantDescription);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [NullCheckRule, IsConstantRule, IsNotConstantRule];
@@ -75,23 +73,6 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
                 break;
             case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
                 ReportNullArms(context, isPattern, nested);
-                break;
-        }
-    }
-
-    private static void ReportNullArms(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
-    {
-        switch (pattern)
-        {
-            case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
-                ReportNullArms(context, isPattern, nested.Left);
-                ReportNullArms(context, isPattern, nested.Right);
-                break;
-            case ParenthesizedPatternSyntax parenthesized:
-                ReportNullArms(context, isPattern, parenthesized.Pattern);
-                break;
-            case ConstantPatternSyntax constantPattern:
-                ReportPattern(context, isPattern, constantPattern, false);
                 break;
         }
     }
@@ -154,6 +135,23 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
     private static bool IsNotANumber(object? value) => value is float.NaN or double.NaN;
 
     private static bool IsNullLiteral(ExpressionSyntax expression) => expression.IsKind(SyntaxKind.NullLiteralExpression);
+
+    private static void ReportNullArms(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
+    {
+        switch (pattern)
+        {
+            case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
+                ReportNullArms(context, isPattern, nested.Left);
+                ReportNullArms(context, isPattern, nested.Right);
+                break;
+            case ParenthesizedPatternSyntax parenthesized:
+                ReportNullArms(context, isPattern, parenthesized.Pattern);
+                break;
+            case ConstantPatternSyntax constantPattern:
+                ReportPattern(context, isPattern, constantPattern, false);
+                break;
+        }
+    }
 
     private static void ReportPattern(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern, bool negated)
     {

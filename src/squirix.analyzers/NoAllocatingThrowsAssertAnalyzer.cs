@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -22,25 +23,22 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 {
     private const string DiagnosticId = "SQR0019";
 
+    private static readonly LocalizableString Description = "Exception asserts that capture the operation in a capturing delegate allocate a new delegate and a display " +
+                                                            "class on every call. A non-capturing lambda has no closure, is cached as a single static delegate, and does " +
+                                                            "not allocate. Supply an already-started operation to an allocation-free assert instead of a capturing lambda or " +
+                                                            "anonymous method.";
+
+    private static readonly LocalizableString MessageFormat =
+        "Do not use {0} with a delegate; use an allocation-free exception assert that takes an already-started operation instead";
+
     private static readonly HashSet<string> ThrowMethodNames =
     [
         "Throws", "ThrowsAny", "ThrowsAsync", "ThrowsAnyAsync",
         "Throw", "ThrowAny", "ThrowExactly", "ThrowAsync",
     ];
 
-    private static readonly LocalizableString Description =
-        "Exception asserts that capture the operation in a capturing delegate allocate a new delegate and a display " +
-        "class on every call. A non-capturing lambda has no closure, is cached as a single static delegate, and does " +
-        "not allocate. Supply an already-started operation to an allocation-free assert instead of a capturing lambda or " +
-        "anonymous method.";
-
-    private static readonly LocalizableString MessageFormat =
-        "Do not use {0} with a delegate; use an allocation-free exception assert that takes an already-started operation instead";
-
     private static readonly LocalizableString Title = "Avoid allocating exception assert invocations";
-
-    private static readonly DiagnosticDescriptor Rule =
-        new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -72,7 +70,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(Rule, node.GetLocation(), $"`{name}`"));
     }
 
-    private static bool CapturesDelegate(InvocationExpressionSyntax invocation, SemanticModel semanticModel, System.Threading.CancellationToken cancellationToken)
+    private static bool CapturesDelegate(InvocationExpressionSyntax invocation, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         foreach (var argument in invocation.ArgumentList.Arguments)
         {
@@ -83,7 +81,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool ContainsCapturingDelegate(ExpressionSyntax expression, SemanticModel semanticModel, System.Threading.CancellationToken cancellationToken)
+    private static bool ContainsCapturingDelegate(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         foreach (var node in EnumerateDelegateNodes(expression))
         {
@@ -94,7 +92,19 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsCapturingDelegate(AnonymousFunctionExpressionSyntax function, SemanticModel semanticModel, System.Threading.CancellationToken cancellationToken)
+    private static IEnumerable<SyntaxNode> EnumerateDelegateNodes(ExpressionSyntax expression)
+    {
+        if (IsDelegateNode(expression))
+            yield return expression;
+
+        foreach (var descendant in expression.DescendantNodes())
+        {
+            if (IsDelegateNode(descendant))
+                yield return descendant;
+        }
+    }
+
+    private static bool IsCapturingDelegate(AnonymousFunctionExpressionSyntax function, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         // Explicitly static lambdas never capture; non-capturing lambdas without the modifier
         // are likewise cached by the compiler, so only true outer-state capture allocates per call.
@@ -115,14 +125,11 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
                     break;
                 }
 
-                if (ancestor is InvocationExpressionSyntax nameofInvocation
-                    && nameofInvocation.Expression is IdentifierNameSyntax nameofName
-                    && nameofName.Identifier.ValueText == "nameof"
-                    && IsWithin(nameofInvocation.ArgumentList, descendant))
-                {
-                    skip = true;
-                    break;
-                }
+                if (ancestor is not InvocationExpressionSyntax { Expression: IdentifierNameSyntax nameofName } nameofInvocation || nameofName.Identifier.ValueText != "nameof" ||
+                    !IsWithin(nameofInvocation.ArgumentList, descendant))
+                    continue;
+                skip = true;
+                break;
             }
 
             if (skip)
@@ -146,11 +153,10 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
                     foreach (var reference in symbol.DeclaringSyntaxReferences)
                     {
                         var syntax = reference.GetSyntax(cancellationToken);
-                        if (function.Span.Contains(syntax.Span))
-                        {
-                            declaredInside = true;
-                            break;
-                        }
+                        if (!function.Span.Contains(syntax.Span))
+                            continue;
+                        declaredInside = true;
+                        break;
                     }
 
                     if (!declaredInside)
@@ -169,7 +175,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
                     break;
 
                 case IMethodSymbol method:
-                    if (!method.IsStatic && method.MethodKind is not (MethodKind.Constructor or MethodKind.StaticConstructor))
+                    if (method is { IsStatic: false, MethodKind: not (MethodKind.Constructor or MethodKind.StaticConstructor) })
                         return true;
                     break;
 
@@ -183,6 +189,9 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    private static bool IsDelegateNode(SyntaxNode node) => node.IsKind(SyntaxKind.SimpleLambdaExpression) || node.IsKind(SyntaxKind.ParenthesizedLambdaExpression) ||
+                                                           node.IsKind(SyntaxKind.AnonymousMethodExpression);
+
     private static bool IsWithin(SyntaxNode ancestor, SyntaxNode descendant)
     {
         for (var current = descendant; current is not null; current = current.Parent)
@@ -193,21 +202,4 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
         return false;
     }
-
-    private static IEnumerable<SyntaxNode> EnumerateDelegateNodes(ExpressionSyntax expression)
-    {
-        if (IsDelegateNode(expression))
-            yield return expression;
-
-        foreach (var descendant in expression.DescendantNodes())
-        {
-            if (IsDelegateNode(descendant))
-                yield return descendant;
-        }
-    }
-
-    private static bool IsDelegateNode(SyntaxNode node) =>
-        node.IsKind(SyntaxKind.SimpleLambdaExpression)
-        || node.IsKind(SyntaxKind.ParenthesizedLambdaExpression)
-        || node.IsKind(SyntaxKind.AnonymousMethodExpression);
 }

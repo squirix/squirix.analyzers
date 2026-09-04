@@ -7,9 +7,8 @@ Design-time Roslyn analyzers for the squirix ecosystem.
 
 ## Purpose
 
-`Squirix.Analyzers` hosts the custom Roslyn diagnostics that enforce squirix's internal coding conventions across its
-repositories: brace style, member-size limits, naming rules, and code-smell guards. They are applied at build time and
-their findings are surfaced as compiler diagnostics (fail the build when `TreatWarningsAsErrors` is active).
+`Squirix.Analyzers` hosts the custom Roslyn diagnostics that enforce squirix's internal coding conventions across its repositories: brace style, member-size limits, naming rules,
+and code-smell guards. They are applied at build time and their findings are surfaced as compiler diagnostics (fail the build when `TreatWarningsAsErrors` is active).
 
 ## Installation
 
@@ -41,32 +40,32 @@ SQR0002.max_methods_per_type = 30
 Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/compliant examples, lives in
 [docs/rules](docs/rules). No rule ships an auto-fix (code fix provider) yet.
 
-| Rule | Category | Analyzer | What it enforces |
-| --- | --- | --- | --- |
-| [`SQR0001`](docs/rules/SQR0001.md) | Style | `OmitOuterLoopBracesAnalyzer` | Outer loop body is only a nested loop: drop braces. |
-| [`SQR0002`](docs/rules/SQR0002.md) | Design | `TooManyMethodsAnalyzer` | Cap instance/static methods per type (default 20). |
-| [`SQR0003`](docs/rules/SQR0003.md) | Design | `TooManyFieldsAnalyzer` | Cap non-literal, non-static-readonly fields (default 15). |
-| [`SQR0004`](docs/rules/SQR0004.md) | Naming | `TypeNameTooLongAnalyzer` | Type name at most 40 characters. |
-| [`SQR0005`](docs/rules/SQR0005.md) | Naming | `MethodNameTooLongAnalyzer` | Method name at most 40 chars (accessors drop prefix). |
-| [`SQR0006`](docs/rules/SQR0006.md) | Naming | `FieldNameTooLongAnalyzer` | Field name at most 40 characters. |
-| [`SQR0007`](docs/rules/SQR0007.md) | Naming | `TypeNamespacePrefixAnalyzer` | Type name must not repeat its namespace segment. |
-| [`SQR0008`](docs/rules/SQR0008.md) | Style | `RequireMultilineLoopBodyBracesAnalyzer` | Require braces on multi-line loop bodies. |
-| [`SQR0009`](docs/rules/SQR0009.md) | Style | `RedundantNamedArgumentAnalyzer` | Prefer positional args; drop names in declaration order. |
-| [`SQR0010`](docs/rules/SQR0010.md) | Style | `OmitSingleStatementBracesAnalyzer` | Omit braces for single-line bodies; keep multi-line. |
-| [`SQR0011`](docs/rules/SQR0011.md) | Style | `RedundantDefaultArgumentAnalyzer` | Omit arguments equal to the parameter default. |
-| [`SQR0012`](docs/rules/SQR0012.md) | Style | `PreferEqualityOperatorAnalyzer` | Prefer ==/!= over is/is-not for null checks. |
-| [`SQR0013`](docs/rules/SQR0013.md) | Style | `PreferEqualityOperatorAnalyzer` | Prefer == over is when comparing to a constant. |
-| [`SQR0014`](docs/rules/SQR0014.md) | Style | `PreferEqualityOperatorAnalyzer` | Prefer != over is-not when comparing to a constant. |
-| [`SQR0015`](docs/rules/SQR0015.md) | Concurrency | `NoBoolDisposedFieldAnalyzer` | Dispose guard must be an int flag via Interlocked. |
-| [`SQR0016`](docs/rules/SQR0016.md) | Concurrency | `NoBoolDisposedFieldAnalyzer` | int dispose flag only via Interlocked/Volatile. |
-| [`SQR0017`](docs/rules/SQR0017.md) | Usage | `NoDirectTestContextCancelTokenAnalyzer` | Don't use TestContext.Current.CancellationToken directly. |
-| [`SQR0018`](docs/rules/SQR0018.md) | Style | `RequireMultilineIfBodyBracesAnalyzer` | Require braces on multi-line if/else bodies. |
-| [`SQR0019`](docs/rules/SQR0019.md) | Usage | `NoAllocatingThrowsAssertAnalyzer` | Avoid allocating exception assert invocations. |
-| [`SQR0020`](docs/rules/SQR0020.md) | Usage | `MergeDuplicateCatchBlocksAnalyzer` | Merge consecutive catch blocks with identical bodies. |
-| [`SQR0021`](docs/rules/SQR0021.md) | Usage | `UseArgumentExceptionThrowHelperAnalyzer` | Prefer ArgumentException.ThrowIf* over manual guards. |
-| [`SQR0022`](docs/rules/SQR0022.md) | Usage | `UseTimeSpanThrowHelperAnalyzer` | Prefer ArgumentOutOfRangeException.ThrowIf* for TimeSpan guards. |
-| [`SQR0023`](docs/rules/SQR0023.md) | Usage | `CoalesceThrowIfNullAnalyzer` | Prefer ArgumentNullException.ThrowIfNull over null-coalescing throw. |
-| [`SQR0024`](docs/rules/SQR0024.md) | Usage | `CoalesceThrowHelperAnalyzer` | Prefer a throw-helper method over null-coalescing throw. |
+| Rule                               | Category    | Analyzer                                  | What it enforces                                                     |
+|------------------------------------|-------------|-------------------------------------------|----------------------------------------------------------------------|
+| [`SQR0001`](docs/rules/SQR0001.md) | Style       | `OmitOuterLoopBracesAnalyzer`             | Outer loop body is only a nested loop: drop braces.                  |
+| [`SQR0002`](docs/rules/SQR0002.md) | Design      | `TooManyMethodsAnalyzer`                  | Cap instance/static methods per type (default 20).                   |
+| [`SQR0003`](docs/rules/SQR0003.md) | Design      | `TooManyFieldsAnalyzer`                   | Cap non-literal, non-static-readonly fields (default 15).            |
+| [`SQR0004`](docs/rules/SQR0004.md) | Naming      | `TypeNameTooLongAnalyzer`                 | Type name at most 40 characters.                                     |
+| [`SQR0005`](docs/rules/SQR0005.md) | Naming      | `MethodNameTooLongAnalyzer`               | Method name at most 40 chars (accessors drop prefix).                |
+| [`SQR0006`](docs/rules/SQR0006.md) | Naming      | `FieldNameTooLongAnalyzer`                | Field name at most 40 characters.                                    |
+| [`SQR0007`](docs/rules/SQR0007.md) | Naming      | `TypeNamespacePrefixAnalyzer`             | Type name must not repeat its namespace segment.                     |
+| [`SQR0008`](docs/rules/SQR0008.md) | Style       | `RequireMultilineLoopBodyBracesAnalyzer`  | Require braces on multi-line loop bodies.                            |
+| [`SQR0009`](docs/rules/SQR0009.md) | Style       | `RedundantNamedArgumentAnalyzer`          | Prefer positional args; drop names in declaration order.             |
+| [`SQR0010`](docs/rules/SQR0010.md) | Style       | `OmitSingleStatementBracesAnalyzer`       | Omit braces for single-line bodies; keep multi-line.                 |
+| [`SQR0011`](docs/rules/SQR0011.md) | Style       | `RedundantDefaultArgumentAnalyzer`        | Omit arguments equal to the parameter default.                       |
+| [`SQR0012`](docs/rules/SQR0012.md) | Style       | `PreferEqualityOperatorAnalyzer`          | Prefer ==/!= over is/is-not for null checks.                         |
+| [`SQR0013`](docs/rules/SQR0013.md) | Style       | `PreferEqualityOperatorAnalyzer`          | Prefer == over is when comparing to a constant.                      |
+| [`SQR0014`](docs/rules/SQR0014.md) | Style       | `PreferEqualityOperatorAnalyzer`          | Prefer != over is-not when comparing to a constant.                  |
+| [`SQR0015`](docs/rules/SQR0015.md) | Concurrency | `NoBoolDisposedFieldAnalyzer`             | Dispose guard must be an int flag via Interlocked.                   |
+| [`SQR0016`](docs/rules/SQR0016.md) | Concurrency | `NoBoolDisposedFieldAnalyzer`             | int dispose flag only via Interlocked/Volatile.                      |
+| [`SQR0017`](docs/rules/SQR0017.md) | Usage       | `NoDirectTestContextCancelTokenAnalyzer`  | Don't use TestContext.Current.CancellationToken directly.            |
+| [`SQR0018`](docs/rules/SQR0018.md) | Style       | `RequireMultilineIfBodyBracesAnalyzer`    | Require braces on multi-line if/else bodies.                         |
+| [`SQR0019`](docs/rules/SQR0019.md) | Usage       | `NoAllocatingThrowsAssertAnalyzer`        | Avoid allocating exception assert invocations.                       |
+| [`SQR0020`](docs/rules/SQR0020.md) | Usage       | `MergeDuplicateCatchBlocksAnalyzer`       | Merge consecutive catch blocks with identical bodies.                |
+| [`SQR0021`](docs/rules/SQR0021.md) | Usage       | `UseArgumentExceptionThrowHelperAnalyzer` | Prefer ArgumentException.ThrowIf* over manual guards.                |
+| [`SQR0022`](docs/rules/SQR0022.md) | Usage       | `UseTimeSpanThrowHelperAnalyzer`          | Prefer ArgumentOutOfRangeException.ThrowIf* for TimeSpan guards.     |
+| [`SQR0023`](docs/rules/SQR0023.md) | Usage       | `CoalesceThrowIfNullAnalyzer`             | Prefer ArgumentNullException.ThrowIfNull over null-coalescing throw. |
+| [`SQR0024`](docs/rules/SQR0024.md) | Usage       | `CoalesceThrowHelperAnalyzer`             | Prefer a throw-helper method over null-coalescing throw.             |
 
 ## Building
 

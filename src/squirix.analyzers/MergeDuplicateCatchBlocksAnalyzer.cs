@@ -26,12 +26,10 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
                                                             "'catch (Exception ex) when (ex is IOException or ObjectDisposedException)', to keep the " +
                                                             "duplicated handler body in one place.";
 
-    private static readonly LocalizableString MessageFormat =
-        "Consecutive catch blocks for the same body should be combined into one 'when' filter pattern; " +
-        "e.g. 'catch (Exception ex) when (ex is {0})'";
+    private static readonly LocalizableString MessageFormat = "Consecutive catch blocks for the same body should be combined into one 'when' filter pattern; " +
+                                                              "e.g. 'catch (Exception ex) when (ex is {0})'";
 
     private static readonly LocalizableString Title = "Merge duplicate catch blocks with identical bodies";
-
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
 
     /// <inheritdoc />
@@ -91,6 +89,8 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    private static bool BodiesAreEquivalent(CatchClauseSyntax left, CatchClauseSyntax right) => left.Block.IsEquivalentTo(right.Block, false);
+
     /// <summary>
     /// A clause can only be offered for merging when it has a declared exception type, no
     /// <c language="csharp">when</c> filter, and does not reference its exception variable in the body.
@@ -106,14 +106,6 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
         return !ExceptionVariableIsReferenced(clause);
     }
 
-    private static string? GetExceptionTypeName(CatchClauseSyntax clause)
-    {
-        var declaration = clause.Declaration;
-        return declaration?.Type.ToString();
-    }
-
-    private static bool BodiesAreEquivalent(CatchClauseSyntax left, CatchClauseSyntax right) => left.Block.IsEquivalentTo(right.Block, false);
-
     private static bool ExceptionVariableIsReferenced(CatchClauseSyntax clause)
     {
         var identifier = clause.Declaration?.Identifier;
@@ -128,5 +120,11 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
         }
 
         return false;
+    }
+
+    private static string? GetExceptionTypeName(CatchClauseSyntax clause)
+    {
+        var declaration = clause.Declaration;
+        return declaration?.Type.ToString();
     }
 }

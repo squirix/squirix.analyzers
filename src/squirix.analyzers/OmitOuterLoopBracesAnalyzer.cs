@@ -21,7 +21,6 @@ public sealed class OmitOuterLoopBracesAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Title = "Omit braces from outer loop that only contains a nested loop";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
 
-
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
 

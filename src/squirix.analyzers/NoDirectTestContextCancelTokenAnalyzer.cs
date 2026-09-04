@@ -20,11 +20,11 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Description = "TestContext.Current.CancellationToken must not be used directly unless the class or one of its " +
                                                             "base classes exposes a shared CancellationToken member. Prefer consuming that shared token from derived tests.";
 
-    private static readonly LocalizableString MessageFormat = "Do not use TestContext.Current.CancellationToken directly; consume the shared CancellationToken exposed by a base class instead";
+    private static readonly LocalizableString MessageFormat =
+        "Do not use TestContext.Current.CancellationToken directly; consume the shared CancellationToken exposed by a base class instead";
 
     private static readonly LocalizableString Title = "Avoid direct use of TestContext.Current.CancellationToken";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -64,17 +64,6 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(Rule, node.GetLocation()));
     }
 
-    private static bool ExposesSharedCancellationToken(INamedTypeSymbol symbol)
-    {
-        for (var current = symbol; current is not null; current = current.BaseType)
-        {
-            if (current.TypeKind == TypeKind.Class && DeclaresCancellationTokenMember(current))
-                return true;
-        }
-
-        return false;
-    }
-
     private static bool DeclaresCancellationTokenMember(INamedTypeSymbol symbol)
     {
         foreach (var member in symbol.GetMembers())
@@ -96,16 +85,15 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsCancellationTokenType(ITypeSymbol? type)
+    private static bool ExposesSharedCancellationToken(INamedTypeSymbol symbol)
     {
-        if (type is not { Name: "CancellationToken" })
-            return false;
+        for (var current = symbol; current is not null; current = current.BaseType)
+        {
+            if (current.TypeKind == TypeKind.Class && DeclaresCancellationTokenMember(current))
+                return true;
+        }
 
-        var threading = type.ContainingNamespace;
-        var system = threading?.ContainingNamespace;
-        return threading is { Name: "Threading" }
-            && system is { Name: "System", IsGlobalNamespace: false }
-            && system.ContainingNamespace.IsGlobalNamespace;
+        return false;
     }
 
     private static TypeDeclarationSyntax? GetEnclosingType(MemberAccessExpressionSyntax node)
@@ -117,6 +105,16 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         }
 
         return null;
+    }
+
+    private static bool IsCancellationTokenType(ITypeSymbol? type)
+    {
+        if (type is not { Name: "CancellationToken" })
+            return false;
+
+        var threading = type.ContainingNamespace;
+        var system = threading?.ContainingNamespace;
+        return threading is { Name: "Threading" } && system is { Name: "System", IsGlobalNamespace: false } && system.ContainingNamespace.IsGlobalNamespace;
     }
 
     private static bool IsTestContextCancellationToken(MemberAccessExpressionSyntax node)

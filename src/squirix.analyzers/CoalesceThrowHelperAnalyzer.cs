@@ -21,18 +21,15 @@ public sealed class CoalesceThrowHelperAnalyzer : DiagnosticAnalyzer
 {
     private const string DiagnosticId = "SQR0024";
 
-    private static readonly LocalizableString Description =
-        "Null-coalescing expressions that throw embed the throwing path in the caller, which makes the caller " +
-        "larger and a worse inlining candidate. Route the throw through a dedicated throw-helper method (a small " +
-        "check plus a non-inlined method that throws) so the caller stays small and inlineable.";
+    private static readonly LocalizableString Description = "Null-coalescing expressions that throw embed the throwing path in the caller, which makes the caller " +
+                                                            "larger and a worse inlining candidate. Route the throw through a dedicated throw-helper method (a small " +
+                                                            "check plus a non-inlined method that throws) so the caller stays small and inlineable.";
 
-    private static readonly LocalizableString MessageFormat =
-        "Route '?? throw' through a throw-helper method instead of embedding the throw in the caller";
+    private static readonly LocalizableString MessageFormat = "Route '?? throw' through a throw-helper method instead of embedding the throw in the caller";
 
     private static readonly LocalizableString Title = "Prefer a throw-helper method over null-coalescing throw";
 
-    private static readonly DiagnosticDescriptor Rule =
-        new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description);
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -56,9 +53,9 @@ public sealed class CoalesceThrowHelperAnalyzer : DiagnosticAnalyzer
             return;
 
         // ArgumentNullException is owned by SQR0023, which names the exact replacement; do not double-report.
-        if (throwExpression.Expression is ObjectCreationExpressionSyntax creation
-            && context.SemanticModel.GetSymbolInfo(creation, context.CancellationToken).Symbol is IMethodSymbol { ContainingType.Name: "ArgumentNullException" } constructor
-            && constructor.ContainingType.ContainingNamespace?.ToDisplayString() == "System")
+        if (throwExpression.Expression is ObjectCreationExpressionSyntax creation &&
+            context.SemanticModel.GetSymbolInfo(creation, context.CancellationToken).Symbol is IMethodSymbol { ContainingType.Name: "ArgumentNullException" } constructor &&
+            constructor.ContainingType.ContainingNamespace?.ToDisplayString() == "System")
         {
             return;
         }
@@ -66,4 +63,3 @@ public sealed class CoalesceThrowHelperAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(Rule, coalesce.OperatorToken.GetLocation()));
     }
 }
-
