@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class OmitSingleStatementBracesAnalyzerTests
+public sealed class OmitSingleStatementBracesAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0010";
 
@@ -28,7 +28,7 @@ public sealed class OmitSingleStatementBracesAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
@@ -52,7 +52,7 @@ public sealed class OmitSingleStatementBracesAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

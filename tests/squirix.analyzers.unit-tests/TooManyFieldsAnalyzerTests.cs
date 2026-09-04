@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class TooManyFieldsAnalyzerTests
+public sealed class TooManyFieldsAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0003";
 
@@ -20,7 +20,7 @@ public sealed class TooManyFieldsAnalyzerTests
         var fields = string.Join("\n", bigFieldLines);
         var source = header + fields + footer;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
@@ -37,7 +37,7 @@ public sealed class TooManyFieldsAnalyzerTests
         var fields = string.Join("\n", smallFieldLines);
         var source = header + fields + footer;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -57,7 +57,7 @@ public sealed class TooManyFieldsAnalyzerTests
         var diagnostics = await AnalyzerRunner.RunAsync(
             new TooManyFieldsAnalyzer(),
             source,
-            TestContext.Current.CancellationToken,
+            DefaultCancellationToken,
             options);
 
         var diagnostic = Assert.Single(diagnostics);

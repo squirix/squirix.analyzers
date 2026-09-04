@@ -4,12 +4,12 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class TypeNamespacePrefixAnalyzerTests
+public sealed class TypeNamespacePrefixAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0007";
 
     [Fact]
-    public async Task FlagsTypeThatRepeatsParentNamespaceSegment()
+    public async Task FlagsRepeatingNamespaceSegment()
     {
         const string source = """
             namespace Acme
@@ -20,14 +20,14 @@ public sealed class TypeNamespacePrefixAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
-    public async Task AllowsTypeThatDoesNotRepeatParentNamespaceSegment()
+    public async Task AllowsNonRepeatingNamespaceSegment()
     {
         const string source = """
             namespace Acme
@@ -38,7 +38,7 @@ public sealed class TypeNamespacePrefixAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

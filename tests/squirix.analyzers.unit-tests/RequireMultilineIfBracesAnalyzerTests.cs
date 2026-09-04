@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class RequireMultilineIfBodyBracesAnalyzerTests
+public sealed class RequireMultilineIfBracesAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0018";
 
@@ -27,7 +27,7 @@ public sealed class RequireMultilineIfBodyBracesAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
@@ -47,7 +47,7 @@ public sealed class RequireMultilineIfBodyBracesAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
