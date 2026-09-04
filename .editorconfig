@@ -15,11 +15,11 @@ tab_width = 4 # visual tab width
 trim_trailing_whitespace = true # strip trailing whitespace
 
 # ===========================================================================
-# C# language style + IDE code-style diagnostics (built into the C# compiler/IDE)
+# C# language style + IDE code-style diagnostics
 # ===========================================================================
 csharp_new_line_before_open_brace = all # place open brace on its own line (Allman)
 csharp_place_expr_method_on_single_line = if_owner_is_single_line # keep expression-bodied method on one line only if owner fits
-csharp_prefer_braces = false # omit braces for single embedded statements (incl nested loops); keep for multi-statement bodies (SQR0008)
+csharp_prefer_braces = false # omit braces for single embedded statements (incl nested loops); keep for multi-statement bodies (SQR0008). when_multiline/SA1519/RCS1001 would force braces
 csharp_prefer_simple_using_statement = true:warning # prefer using declaration over using block
 csharp_prefer_static_local_function = true:error # prefer static local functions
 csharp_space_after_cast = false # no space after a cast
@@ -33,7 +33,7 @@ csharp_style_expression_bodied_properties = when_on_single_line:warning # expres
 csharp_style_inlined_variable_declaration = true:warning # prefer inlined variable declaration
 csharp_style_namespace_declarations = file_scoped # use file-scoped namespaces
 csharp_style_pattern_matching_over_as_with_null_check = true:warning # pattern match over as plus null check
-csharp_style_pattern_matching_over_is_with_cast_check = true:warning # pattern match over is plus cast check
+csharp_style_pattern_matching_over_is_with_cast_check = true:warning # pattern match over is with cast check
 csharp_style_prefer_not_pattern = true:warning # prefer not pattern
 csharp_style_prefer_pattern_matching = true:warning # prefer pattern matching
 csharp_style_prefer_switch_expression = true:warning # prefer switch expression
@@ -65,6 +65,7 @@ dotnet_diagnostic.IDE0028.severity = warning # use collection initializers
 dotnet_diagnostic.IDE0029.severity = warning # simplify null check with coalesce expression
 dotnet_diagnostic.IDE0031.severity = warning # use null propagation (?.)
 dotnet_diagnostic.IDE0041.severity = warning # use is null / is not null check
+dotnet_diagnostic.IDE0045.severity = none # do not convert if statement to switch statement
 dotnet_diagnostic.IDE0055.severity = error # enforce code-style formatting in build
 dotnet_diagnostic.IDE0063.severity = warning # use simple using statement
 dotnet_diagnostic.IDE0066.severity = warning # use switch expression
@@ -88,14 +89,51 @@ dotnet_style_prefer_collection_expression = when_types_exactly_match:warning # u
 dotnet_style_prefer_compound_assignment = true:warning # use compound assignment
 dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning # use is null check over reference equality
 dotnet_style_qualification_for_event = false:warning # do not qualify events with this.
-dotnet_style_qualification_for_field = false:warning # omit redundant this. (IDE0003 warning fails build under TreatWarningsAsErrors)
+dotnet_style_qualification_for_field = false:warning # omit redundant this. (IDE0003 warning fails build under TreatWarningsAsErrors); SA1101 stays none
 dotnet_style_qualification_for_method = false:warning # do not qualify methods with this.
 dotnet_style_qualification_for_property = false:warning # do not qualify properties with this.
 dotnet_style_require_accessibility_modifiers = for_non_interface_members:suggestion # nullable/language enforced via MSBuild too
 
-csharp_indent_case_contents = true # indent case contents
-csharp_indent_case_contents_when_block = false # do not indent case block contents
-csharp_indent_switch_labels = true # indent switch labels
+resharper_arrange_this_qualifier_highlighting = error # legacy alias of arrange_this_qualifier (Rider deprecates redundant_this_qualifier)
+resharper_instance_members_qualify_members = none # do not require this. qualification (Rider)
+
+# ===========================================================================
+# Argument style (positional vs named)
+# ===========================================================================
+# Prefer positional args; in-order named arguments fail the build.
+resharper_arguments_literal = positional # Rider: positional args for literals
+resharper_arguments_other = positional # Rider: positional args for other
+resharper_arguments_string_literal = positional # Rider: positional args for string literals
+resharper_arguments_style_anonymous_function_highlighting = error # flag anonymous-function arg style
+resharper_arguments_style_literal_highlighting = error # flag literal arg style
+resharper_arguments_style_named_expression_highlighting = error # flag named-expression arg style
+resharper_arguments_style_other_highlighting = error # flag other arg style
+resharper_arguments_style_string_literal_highlighting = error # flag string-literal arg style
+resharper_redundant_argument_default_value_highlighting = warning # parameter has same default value as another (Rider UI + SQR011 build gate)
+
+# ===========================================================================
+# Squirix analyzers (SQR*) — this package's own rules
+# ===========================================================================
+dotnet_diagnostic.SQR0001.severity = error # outer for/foreach/while/do must omit braces when body is only a nested loop
+dotnet_diagnostic.SQR0002.severity = error # design/naming limit (SQR0002-SQR0007); threshold via SQR0002.max_methods_per_type (default 20)
+dotnet_diagnostic.SQR0003.severity = error # design/naming limit (SQR0002-SQR0007)
+dotnet_diagnostic.SQR0004.severity = error # design/naming limit (SQR0002-SQR0007)
+dotnet_diagnostic.SQR0005.severity = error # design/naming limit (SQR0002-SQR0007)
+dotnet_diagnostic.SQR0006.severity = error # design/naming limit (SQR0002-SQR0007)
+dotnet_diagnostic.SQR0007.severity = error # design / naming limits (SQR0002-SQR0007)
+dotnet_diagnostic.SQR0008.severity = error # multiline embedded loop bodies (except nested loops) must use braces
+dotnet_diagnostic.SQR0010.severity = error # skips multiline if/else/using/lock embedded bodies (only single-line bodies gated)
+dotnet_diagnostic.SQR0012.severity = error # prefer ==/!= over is/is not patterns for null checks (reverses MA0142/MA0148/MA0149)
+dotnet_diagnostic.SQR0013.severity = error # Squirix design/naming rule
+dotnet_diagnostic.SQR0014.severity = error # Squirix design/naming rule
+dotnet_diagnostic.SQR0017.severity = error # forbid TestContext.Current.CancellationToken; use DefaultCancellationToken from base test classes
+dotnet_diagnostic.SQR0018.severity = error # multiline embedded if/else-if/else bodies (except nested ifs) must use braces
+dotnet_diagnostic.SQR0009.severity = warning # Squirix rule (SQR0009)
+dotnet_diagnostic.SQR0011.severity = warning # Squirix rule (SQR0011)
+dotnet_diagnostic.SQR0021.severity = warning # prefer ArgumentException throw helpers over manual guards
+dotnet_diagnostic.SQR0022.severity = warning # TimeSpan range guards must route the throw through a throw-helper method (BCL ThrowIf* require INumberBase<T>; use a project helper)
+dotnet_diagnostic.SQR0023.severity = warning # prefer ArgumentNullException.ThrowIfNull over null-coalescing throw
+dotnet_diagnostic.SQR0024.severity = warning # prefer a throw-helper method over null-coalescing throw
 
 # ===========================================================================
 # Microsoft code analysis (CA*) — reliability / disposal / performance / usage
@@ -125,30 +163,105 @@ dotnet_diagnostic.RS0030.severity = error # symbol has been banned
 dotnet_diagnostic.RS0031.severity = error # symbol has been banned for use in declarations
 
 # ===========================================================================
-# Squirix analyzers (SQR*) — this package's own rules
-# Severities mirror the analyzer defaults (no Error tier in v0.1).
+# xUnit.net analyzers (https://xunit.net/xunit.analyzers/rules/)
 # ===========================================================================
-dotnet_diagnostic.SQR0001.severity = warning # outer for/foreach/while/do must omit braces when body is only a nested loop
-dotnet_diagnostic.SQR0002.severity = suggestion # design/naming limit
-dotnet_diagnostic.SQR0003.severity = suggestion # design/naming limit
-dotnet_diagnostic.SQR0004.severity = suggestion # type name length limit
-dotnet_diagnostic.SQR0005.severity = suggestion # method name length limit
-dotnet_diagnostic.SQR0006.severity = suggestion # field name length limit
-dotnet_diagnostic.SQR0007.severity = suggestion # type name must not repeat namespace
-dotnet_diagnostic.SQR0008.severity = warning # multiline embedded loop bodies (except nested loops) must use braces
-dotnet_diagnostic.SQR0009.severity = suggestion # redundant named argument
-dotnet_diagnostic.SQR0010.severity = warning # omit braces for single-line bodies
-dotnet_diagnostic.SQR0011.severity = suggestion # redundant default argument value
-dotnet_diagnostic.SQR0012.severity = suggestion # prefer == / != over is / is not for constants
-dotnet_diagnostic.SQR0013.severity = suggestion # prefer == over is for constants
-dotnet_diagnostic.SQR0014.severity = suggestion # prefer != over is not for constants
-dotnet_diagnostic.SQR0015.severity = warning # bool dispose guard must be int via Interlocked
-dotnet_diagnostic.SQR0016.severity = warning # int dispose flag only via Interlocked/Volatile
-dotnet_diagnostic.SQR0017.severity = warning # forbid TestContext.Current.CancellationToken direct use
-dotnet_diagnostic.SQR0018.severity = warning # multiline embedded if/else bodies must use braces
-dotnet_diagnostic.SQR0019.severity = warning # forbid allocating xUnit Assert.Throws*
-dotnet_diagnostic.SQR0020.severity = warning # merge duplicate catch blocks with identical bodies
-dotnet_diagnostic.SQR0021.severity = suggestion # prefer ArgumentException throw helpers over manual guards
-dotnet_diagnostic.SQR0022.severity = suggestion # prefer ArgumentOutOfRangeException throw helpers for TimeSpan guards
-dotnet_diagnostic.SQR0023.severity = suggestion # prefer ArgumentNullException.ThrowIfNull over null-coalescing throw
-dotnet_diagnostic.SQR0024.severity = suggestion # prefer a throw-helper method over null-coalescing throw
+# Promote Info/Hidden xUnit rules to warning.
+# Default-Error rules are omitted: they already fail the build.
+dotnet_diagnostic.xUnit1004.severity = warning # test methods should not be skipped
+dotnet_diagnostic.xUnit1033.severity = warning # class fixture should add constructor argument of type T
+dotnet_diagnostic.xUnit1042.severity = warning # MemberData returns untyped data rows
+dotnet_diagnostic.xUnit1044.severity = warning # avoid TheoryData type args that are not serializable
+dotnet_diagnostic.xUnit1045.severity = warning # avoid TheoryData type args that might not be serializable
+dotnet_diagnostic.xUnit1046.severity = warning # avoid TheoryDataRow args that are not serializable
+dotnet_diagnostic.xUnit1047.severity = warning # avoid TheoryDataRow args that might not be serializable
+dotnet_diagnostic.xUnit1050.severity = warning # ClassData returns untyped data rows
+dotnet_diagnostic.xUnit2001.severity = warning # do not use invalid equality check
+dotnet_diagnostic.xUnit2022.severity = warning # boolean assertions should not be negated
+dotnet_diagnostic.xUnit2023.severity = warning # do not use collection methods for single-item collections
+dotnet_diagnostic.xUnit2024.severity = warning # do not use boolean asserts for simple equality
+dotnet_diagnostic.xUnit2025.severity = warning # boolean assertion can be simplified
+dotnet_diagnostic.xUnit2032.severity = warning # assignable-from type assertions are confusingly named
+dotnet_diagnostic.xUnit2033.severity = warning # use assertion return value instead of re-deriving it
+
+# ===========================================================================
+# Rider / ReSharper inspection severities (UI hints; do not fail dotnet build)
+# ===========================================================================
+resharper_arrange_redundant_parentheses_highlighting = none # do not flag redundant parentheses
+resharper_bad_parens_line_breaks_highlighting = warning # flag bad parenthesis line breaks
+resharper_braces_for_dowhile = not_required # do not require braces for do-while
+resharper_braces_for_fixed = not_required # do not require braces for fixed
+resharper_braces_for_for = not_required # do not require braces for for
+resharper_braces_for_foreach = not_required # do not require braces for foreach
+resharper_braces_for_ifelse = not_required # align with csharp_prefer_braces=false (omit braces for single embedded statements)
+resharper_braces_for_lock = not_required # do not require braces for lock
+resharper_braces_for_using = not_required # do not require braces for using
+resharper_braces_for_while = not_required # do not require braces for while
+resharper_braces_redundant = false # do not enable: would strip single-statement else, breaking SA1520
+resharper_convert_if_statement_to_return_statement_highlighting = none # do not suggest if-to-return
+resharper_convert_if_statement_to_switch_statement_highlighting = none # do not suggest if-to-switch
+resharper_convert_switch_statement_to_switch_expression_highlighting = warning # suggest switch-to-expression
+resharper_convert_to_primary_constructor_highlighting = none # primary constructors are not used in squirix
+resharper_enforce_if_statement_braces_highlighting = none # do not enforce if braces
+resharper_foreach_can_be_converted_to_query_using_another_get_enumerator_highlighting = none # do not suggest foreach-to-query
+resharper_foreach_can_be_partly_converted_to_query_using_another_get_enumerator_highlighting = none # do not suggest partial foreach-to-query
+resharper_for_can_be_converted_to_foreach_highlighting = none # do not suggest for-to-foreach
+resharper_invert_if_highlighting = warning # suggest invert if
+resharper_lambda_expression_can_be_made_static_highlighting = error # suggest static lambda
+resharper_lambda_expression_must_be_static_highlighting = error # require static lambda
+resharper_lambda_should_not_capture_context_highlighting = error # alloc-free delegates: static + RequireStaticDelegate
+resharper_loop_can_be_converted_to_query_highlighting = none # do not suggest loop-to-query
+resharper_loop_can_be_partly_converted_to_query_highlighting = none # do not suggest partial loop-to-query
+resharper_member_can_be_private_global_highlighting = warning # suggest member can be private (global)
+resharper_member_can_be_private_local_highlighting = warning # suggest member can be private (local)
+resharper_redundant_empty_switch_section_highlighting = none # do not flag redundant empty switch
+resharper_redundant_suppress_nullable_warning_expression_highlighting = warning # flag redundant nullable suppress
+resharper_remove_redundant_braces_highlighting = none # do not remove redundant braces
+resharper_suggest_var_or_type_built_in_types_highlighting = warning # align Rider var-for-built-in-types with csharp_style_var_for_built_in_types
+resharper_switch_statement_handles_some_known_enum_values_with_default_highlighting = warning # flag switch missing enum cases with default
+resharper_switch_statement_missing_some_enum_cases_no_default_highlighting = warning # flag switch missing enum cases no default
+resharper_use_argument_exception_throw_if_method_highlighting = error # prefer ArgumentException.ThrowIfNullOrEmpty/ThrowIfNullOrWhiteSpace over manual if+throw
+resharper_use_throw_if_null_method_highlighting = error # prefer ArgumentNullException.ThrowIfNull over manual if+throw
+resharper_use_utf8_string_literal_highlighting = none # do not suggest utf8 literals
+resharper_xmldoc_indent_text = zero_indent # no extra indent in XML doc
+
+# ===========================================================================
+# Visual Studio formatting keys (Rider understands them too)
+# ===========================================================================
+csharp_indent_case_contents_when_block = false # do not indent case block contents (VS default is true)
+
+# ===========================================================================
+# Rider / ReSharper C# formatting
+# ===========================================================================
+csharp_place_attribute_on_same_line = false # attributes on separate lines
+csharp_place_field_attribute_on_same_line = false # attributes on separate lines (SA1134); cleanup must not merge [ThreadStatic] onto field
+resharper_csharp_indent_nested_fixed_stmt = false # do not indent nested fixed
+resharper_csharp_indent_nested_for_stmt = true # indent nested for
+resharper_csharp_indent_nested_foreach_stmt = true # keep nested brace-less loops indented (Rider default false flattens them, trips Sonar S3973); using/lock/fixed chains stay flat
+resharper_csharp_indent_nested_lock_stmt = false # do not indent nested lock
+resharper_csharp_indent_nested_usings_stmt = false # do not indent nested using
+resharper_csharp_indent_nested_while_stmt = true # indent nested while
+resharper_csharp_keep_blank_lines_in_code = 1 # collapse consecutive blank lines (default is often 2)
+resharper_csharp_keep_blank_lines_in_declarations = 1 # collapse consecutive blank lines in declarations
+resharper_csharp_keep_existing_attribute_arrangement = false # reformat attribute arrangement
+resharper_csharp_keep_existing_expr_member_arrangement = false # reformat expression-member arrangement
+resharper_csharp_keep_existing_linebreaks = false # reformat line breaks
+resharper_csharp_new_line_before_while = true # new line before while in do-while
+resharper_csharp_place_constructor_initializer_on_same_line = false # constructor initializer on own line
+resharper_csharp_place_expr_method_on_single_line = always # expression-bodied methods on one line
+resharper_csharp_place_simple_embedded_statement_on_same_line = never # embedded statement on own line
+resharper_csharp_place_type_constraints_on_same_line = false # type constraints on own line
+resharper_csharp_wrap_after_declaration_lpar = false # no wrap after declaration lpar
+resharper_csharp_wrap_after_invocation_lpar = false # no wrap after invocation lpar
+resharper_csharp_wrap_arguments_style = wrap_if_long # wrap arguments if long
+resharper_csharp_wrap_array_initializer_style = wrap_if_long # wrap array initializer if long
+resharper_csharp_wrap_before_arrow_with_expressions = false # no wrap before arrow with expressions
+resharper_csharp_wrap_before_declaration_rpar = false # no wrap before declaration rpar
+resharper_csharp_wrap_before_first_method_call = false # no wrap before first method call
+resharper_csharp_wrap_before_invocation_rpar = false # no wrap before invocation rpar
+resharper_csharp_wrap_before_linq_expression = false # no wrap before LINQ expression
+resharper_csharp_wrap_chained_method_calls = wrap_if_long # wrap chained calls if long
+resharper_csharp_wrap_linq_expressions = wrap_if_long # wrap LINQ expressions if long
+resharper_csharp_wrap_multiple_type_parameter_constraints_style = chop_always # always chop multiple constraints
+resharper_csharp_wrap_object_and_collection_initializer_style = wrap_if_long # wrap initializer if long
+resharper_csharp_wrap_parameters_style = wrap_if_long # wrap parameters if long
+resharper_csharp_wrap_ternary_expr_style = wrap_if_long # wrap ternary if long
