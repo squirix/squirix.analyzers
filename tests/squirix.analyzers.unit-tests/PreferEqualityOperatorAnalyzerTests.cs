@@ -170,4 +170,104 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(NullCheckRuleId, diagnostic.Id);
     }
+
+    [Fact]
+    public async Task FlagsIsNullForUnconstrainedTypeParameter()
+    {
+        const string source = """
+            class C
+            {
+                bool M<T>(T? value)
+                {
+                    return value is null;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task AllowsIsNullWithStructConstraint()
+    {
+        const string source = """
+            class C
+            {
+                bool M<T>(T value) where T : struct
+                {
+                    return value is null;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task FlagsNullArmInOrPattern()
+    {
+        const string source = """
+            class C
+            {
+                string M(string? name)
+                {
+                    if (name is null or { Length: 0 })
+                        return string.Empty;
+
+                    return name;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task FlagsIsNullOnInterfaceType()
+    {
+        const string source = """
+            interface IFoo
+            {
+            }
+
+            class C
+            {
+                bool M(IFoo? value)
+                {
+                    return value is null;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task AllowsOrPatternWithoutNullArm()
+    {
+        const string source = """
+            class C
+            {
+                bool M(string value)
+                {
+                    return value is { Length: 0 } or { Length: 1 };
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
 }

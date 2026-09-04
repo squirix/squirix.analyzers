@@ -73,6 +73,26 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
             case UnaryPatternSyntax unaryPattern when unaryPattern.IsKind(SyntaxKind.NotPattern):
                 ReportPattern(context, isPattern, unaryPattern.Pattern, true);
                 break;
+            case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
+                ReportNullArms(context, isPattern, nested);
+                break;
+        }
+    }
+
+    private static void ReportNullArms(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
+    {
+        switch (pattern)
+        {
+            case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
+                ReportNullArms(context, isPattern, nested.Left);
+                ReportNullArms(context, isPattern, nested.Right);
+                break;
+            case ParenthesizedPatternSyntax parenthesized:
+                ReportNullArms(context, isPattern, parenthesized.Pattern);
+                break;
+            case ConstantPatternSyntax constantPattern:
+                ReportPattern(context, isPattern, constantPattern, false);
+                break;
         }
     }
 
@@ -82,7 +102,15 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         if (type == null)
             return false;
 
-        return type.SpecialType != SpecialType.System_Object && type.TypeKind is not (TypeKind.Interface or TypeKind.TypeParameter or TypeKind.Dynamic);
+        // Interfaces accept '== null': no user-defined operator is visible through an interface static type,
+        // so overload resolution always picks the built-in reference equality, exactly matching 'is null'.
+        // Only 'object' (no sharper type available) and 'dynamic' (runtime binding) stay excluded.
+        // Unconstrained (or reference-constrained) type parameters accept '== null'; value-type-constrained
+        // ones do not, since the comparison would always be false.
+        if (type.TypeKind == TypeKind.TypeParameter)
+            return !type.IsValueType;
+
+        return type.SpecialType != SpecialType.System_Object && type.TypeKind != TypeKind.Dynamic;
     }
 
     private static bool HasEqualityOperatorMembers(ITypeSymbol type)
@@ -168,6 +196,9 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
 
         if (HasUserDefinedEqualityOperator(type))
             return false;
+
+        if (type.TypeKind == TypeKind.TypeParameter)
+            return !type.IsValueType;
 
         return type.IsReferenceType || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
     }
