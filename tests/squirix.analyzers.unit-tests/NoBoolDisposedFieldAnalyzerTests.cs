@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class NoBoolDisposedFieldAnalyzerTests
+public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
 {
     private const string BoolRuleId = "SQR0015";
     private const string IntRuleId = "SQR0016";
@@ -19,7 +19,7 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(BoolRuleId, diagnostic.Id);
@@ -44,13 +44,13 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task FlagsIntDisposedFieldAccessedWithoutInterlockedOrVolatile()
+    public async Task FlagsBareIntDisposedField()
     {
         const string source = """
             class C
@@ -66,7 +66,7 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Equal(2, diagnostics.Length);
         Assert.Equal(IntRuleId, diagnostics[0].Id);
@@ -74,7 +74,7 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
     }
 
     [Fact]
-    public async Task AllowsIntDisposedFieldAccessedThroughInterlockedAndVolatile()
+    public async Task AllowsIntFlagViaInterlockedAndVolatile()
     {
         const string source = """
             using System.Threading;
@@ -92,13 +92,13 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task AllowsIntDisposedFieldNestedInInterlockedArgument()
+    public async Task AllowsIntFlagNestedInInterlockedCall()
     {
         const string source = """
             using System.Threading;
@@ -116,7 +116,7 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class UseTimeSpanThrowHelperAnalyzerTests
+public sealed class UseTimeSpanThrowHelperAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0022";
 
@@ -22,14 +22,14 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
-    public async Task FlagsLessThanOrEqualZeroGuardWithBracedBody()
+    public async Task FlagsLessOrEqualZeroGuardBracedBody()
     {
         const string source = """
             class C
@@ -44,7 +44,7 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
@@ -64,13 +64,13 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task AllowsTimeSpanGuardThrowingOtherExceptionType()
+    public async Task AllowsTimeSpanGuardOtherException()
     {
         const string source = """
             class C
@@ -83,7 +83,7 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -102,7 +102,7 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -121,7 +121,7 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
@@ -151,13 +151,13 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task MessageDoesNotNameUncompilableBclHelpers()
+    public async Task MessageOmitsUncompilableBclHelpers()
     {
         const string source = """
             class C
@@ -170,7 +170,7 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.DoesNotContain("ArgumentOutOfRangeException.ThrowIf", diagnostic.GetMessage());

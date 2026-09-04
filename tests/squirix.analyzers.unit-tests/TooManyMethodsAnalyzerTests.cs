@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class TooManyMethodsAnalyzerTests
+public sealed class TooManyMethodsAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0002";
 
@@ -20,7 +20,7 @@ public sealed class TooManyMethodsAnalyzerTests
         var methods = string.Join("\n", methodLines);
         var source = header + methods + footer;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
@@ -37,7 +37,7 @@ public sealed class TooManyMethodsAnalyzerTests
         var methods = string.Join("\n", smallMethodLines);
         var source = header + methods + footer;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -57,7 +57,7 @@ public sealed class TooManyMethodsAnalyzerTests
         var diagnostics = await AnalyzerRunner.RunAsync(
             new TooManyMethodsAnalyzer(),
             source,
-            TestContext.Current.CancellationToken,
+            DefaultCancellationToken,
             options);
 
         var diagnostic = Assert.Single(diagnostics);
@@ -75,7 +75,7 @@ public sealed class TooManyMethodsAnalyzerTests
         var methods = string.Join("\n", staticMethodLines);
         var source = header + methods + footer;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
@@ -92,7 +92,7 @@ public sealed class TooManyMethodsAnalyzerTests
         var methods = string.Join("\n", constMethodLines);
         var source = header + methods + footer;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

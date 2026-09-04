@@ -4,12 +4,12 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class CoalesceThrowIfNullAnalyzerTests
+public sealed class CoalesceThrowIfNullAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0023";
 
     [Fact]
-    public async Task FlagsCoalesceThrowingArgumentNullException()
+    public async Task FlagsCoalesceThrowingNullException()
     {
         const string source = """
             class C
@@ -23,7 +23,7 @@ public sealed class CoalesceThrowIfNullAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
@@ -44,7 +44,7 @@ public sealed class CoalesceThrowIfNullAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -64,7 +64,7 @@ public sealed class CoalesceThrowIfNullAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -85,13 +85,13 @@ public sealed class CoalesceThrowIfNullAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task FlagsGloballyQualifiedArgumentNullException()
+    public async Task FlagsGloballyQualifiedNullException()
     {
         const string source = """
             class C
@@ -105,7 +105,7 @@ public sealed class CoalesceThrowIfNullAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
