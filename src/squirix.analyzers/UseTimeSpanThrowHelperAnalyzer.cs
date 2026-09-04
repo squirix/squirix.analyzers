@@ -9,11 +9,13 @@ namespace Squirix.Analyzers;
 
 /// <summary>
 /// Flags <c language="csharp">if</c> guards that compare a value against <c language="csharp">TimeSpan.Zero</c> and
-/// throw <c language="csharp">ArgumentOutOfRangeException</c>, which read more clearly as one of the
-/// <c language="csharp">ArgumentOutOfRangeException.ThrowIf*</c> helpers (SQR0022). Numeric-constant comparisons
-/// are CA1512 territory and are intentionally not flagged here; only <c language="csharp">TimeSpan.Zero</c>
-/// comparisons, which CA1512 does not recognize, are considered. <c language="csharp">switch</c> arms cannot use a
-/// throw helper and are never flagged.
+/// throw <c language="csharp">ArgumentOutOfRangeException</c> (SQR0022). The throwing path belongs in a
+/// throw-helper method that the caller invokes instead of an inline <c language="csharp">throw</c>.
+/// The BCL <c language="csharp">ArgumentOutOfRangeException.ThrowIf*</c> helpers cannot be named here because they
+/// require <c language="csharp">INumberBase&lt;T&gt;</c>, which <c language="csharp">TimeSpan</c> does not implement.
+/// Numeric-constant comparisons are CA1512 territory and are intentionally not flagged here; only
+/// <c language="csharp">TimeSpan.Zero</c> comparisons, which CA1512 does not recognize, are considered.
+/// <c language="csharp">switch</c> arms cannot use a throw helper and are never flagged.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
@@ -21,14 +23,14 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
     private const string DiagnosticId = "SQR0022";
 
     private static readonly LocalizableString Description =
-        "Guards that compare a value against TimeSpan.Zero and throw ArgumentOutOfRangeException read more clearly " +
-        "as ArgumentOutOfRangeException.ThrowIfNegative, ThrowIfNegativeOrZero, ThrowIfZero, ThrowIfGreaterThan, " +
-        "ThrowIfGreaterThanOrEqual, or ThrowIfNotEqual. The helper keeps the throwing path out of the caller, which " +
-        "keeps the caller small and inlineable.";
+        "Guards that compare a value against TimeSpan.Zero and throw ArgumentOutOfRangeException should route the " +
+        "throw through a throw-helper method instead of an inline 'if' check with 'throw'. The helper keeps the " +
+        "throwing path out of the caller, which keeps the caller small and inlineable.";
 
-    private static readonly LocalizableString MessageFormat = "Use '{0}' instead of an 'if' check with 'throw'";
+    private static readonly LocalizableString MessageFormat =
+        "Route this TimeSpan range guard through a throw-helper method instead of an 'if' check with 'throw'";
 
-    private static readonly LocalizableString Title = "Prefer ArgumentOutOfRangeException throw helpers for TimeSpan guards";
+    private static readonly LocalizableString Title = "Prefer a throw-helper method for TimeSpan range guards";
 
     private static readonly DiagnosticDescriptor Rule =
         new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description);
@@ -55,20 +57,19 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
         if (ifStatement.Else != null)
             return;
 
-        var helperName = GetThrowHelperName(context, ifStatement.Condition);
-        if (helperName == null)
+        if (!IsTimeSpanRangeGuard(context, ifStatement.Condition))
             return;
 
         if (!ThrowsArgumentOutOfRange(context, ifStatement.Statement))
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, ifStatement.IfKeyword.GetLocation(), helperName));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, ifStatement.IfKeyword.GetLocation()));
     }
 
-    private static string? GetThrowHelperName(SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
+    private static bool IsTimeSpanRangeGuard(SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
     {
         if (condition is not BinaryExpressionSyntax binary)
-            return null;
+            return false;
 
         // Normalize so the TimeSpan.Zero operand is always on the right.
         var left = binary.Left;
@@ -80,35 +81,23 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
         }
         else if (!IsTimeSpanZero(context, binary.Right))
         {
-            return null;
+            return false;
         }
 
         if (kind == SyntaxKind.None)
-            return null;
+            return false;
 
-        // 'ThrowIf*' has no 'TimeSpan?' overload: a lifted 'TimeSpan?' comparison is valid
-        // but the suggested replacement would not compile, so only flag plain TimeSpan.
+        // Only plain TimeSpan is flagged. The BCL throw helpers require INumberBase<T>,
+        // which TimeSpan does not implement, so a lifted 'TimeSpan?' comparison has no
+        // helper-shaped fix either.
         var operandType = context.SemanticModel.GetTypeInfo(left, context.CancellationToken).Type;
         if (operandType == null)
-            return null;
+            return false;
 
         if (operandType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
-            return null;
+            return false;
 
-        if (operandType.ToDisplayString() != "System.TimeSpan")
-            return null;
-
-        var valueText = left.ToString();
-        return kind switch
-        {
-            SyntaxKind.LessThanExpression => "ArgumentOutOfRangeException.ThrowIfNegative(" + valueText + ")",
-            SyntaxKind.LessThanOrEqualExpression => "ArgumentOutOfRangeException.ThrowIfNegativeOrZero(" + valueText + ")",
-            SyntaxKind.EqualsExpression => "ArgumentOutOfRangeException.ThrowIfZero(" + valueText + ")",
-            SyntaxKind.GreaterThanExpression => "ArgumentOutOfRangeException.ThrowIfGreaterThan(" + valueText + ", System.TimeSpan.Zero)",
-            SyntaxKind.GreaterThanOrEqualExpression => "ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(" + valueText + ", System.TimeSpan.Zero)",
-            SyntaxKind.NotEqualsExpression => "ArgumentOutOfRangeException.ThrowIfNotEqual(" + valueText + ", System.TimeSpan.Zero)",
-            _ => null,
-        };
+        return operandType.ToDisplayString() == "System.TimeSpan";
     }
 
     private static SyntaxKind Flip(SyntaxKind kind)
@@ -146,20 +135,21 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
     private static bool ThrowsArgumentOutOfRange(SyntaxNodeAnalysisContext context, StatementSyntax statement)
     {
         ThrowStatementSyntax? throwStatement;
-        if (statement is BlockSyntax block)
+        switch (statement)
         {
-            if (block.Statements.Count != 1 || block.Statements[0] is not ThrowStatementSyntax single)
-                return false;
+            case BlockSyntax block:
+            {
+                if (block.Statements is not [ThrowStatementSyntax single])
+                    return false;
 
-            throwStatement = single;
-        }
-        else if (statement is ThrowStatementSyntax direct)
-        {
-            throwStatement = direct;
-        }
-        else
-        {
-            return false;
+                throwStatement = single;
+                break;
+            }
+            case ThrowStatementSyntax direct:
+                throwStatement = direct;
+                break;
+            default:
+                return false;
         }
 
         if (throwStatement.Expression is not ObjectCreationExpressionSyntax creation)
@@ -172,4 +162,3 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
         return containingType?.Name == "ArgumentOutOfRangeException" && containingType.ContainingNamespace?.ToDisplayString() == "System";
     }
 }
-

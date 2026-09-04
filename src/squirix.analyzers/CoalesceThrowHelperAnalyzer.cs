@@ -57,8 +57,7 @@ public sealed class CoalesceThrowHelperAnalyzer : DiagnosticAnalyzer
 
         // ArgumentNullException is owned by SQR0023, which names the exact replacement; do not double-report.
         if (throwExpression.Expression is ObjectCreationExpressionSyntax creation
-            && context.SemanticModel.GetSymbolInfo(creation, context.CancellationToken).Symbol is IMethodSymbol constructor
-            && constructor.ContainingType?.Name == "ArgumentNullException"
+            && context.SemanticModel.GetSymbolInfo(creation, context.CancellationToken).Symbol is IMethodSymbol { ContainingType.Name: "ArgumentNullException" } constructor
             && constructor.ContainingType.ContainingNamespace?.ToDisplayString() == "System")
         {
             return;

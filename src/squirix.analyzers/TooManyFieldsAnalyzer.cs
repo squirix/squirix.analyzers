@@ -81,9 +81,6 @@ public sealed class TooManyFieldsAnalyzer : DiagnosticAnalyzer
         if (field.IsConst)
             return false;
 
-        if (field is { IsStatic: true, IsReadOnly: true })
-            return false;
-
-        return true;
+        return field is not { IsStatic: true, IsReadOnly: true };
     }
 }
