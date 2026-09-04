@@ -133,4 +133,29 @@ public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task FlagsBaseNonTokenThreadingType()
+    {
+        const string source = """
+            class Base
+            {
+                protected System.Threading.SemaphoreSlim Semaphore
+                    => null!;
+            }
+
+            class Derived : Base
+            {
+                void M()
+                {
+                    var token = TestContext.Current.CancellationToken;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
+    }
 }

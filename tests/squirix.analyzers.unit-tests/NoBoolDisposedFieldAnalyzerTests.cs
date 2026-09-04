@@ -120,4 +120,50 @@ public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task AllowsQualifiedInterlockedVolatile()
+    {
+        const string source = """
+            class C
+            {
+                private int _disposed;
+
+                void Dispose()
+                {
+                    System.Threading.Interlocked.Exchange(ref _disposed, 1);
+                }
+
+                bool IsDisposed => System.Threading.Volatile.Read(ref _disposed) != 0;
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task AllowsNameofDisposedField()
+    {
+        const string source = """
+            using System.Threading;
+
+            class C
+            {
+                private int _disposed;
+
+                void Dispose()
+                {
+                    Interlocked.Exchange(ref _disposed, 1);
+                }
+
+                string Name => nameof(_disposed);
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
 }
