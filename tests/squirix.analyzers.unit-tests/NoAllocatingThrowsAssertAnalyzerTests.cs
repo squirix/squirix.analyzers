@@ -1,11 +1,10 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class NoAllocatingThrowsAssertAnalyzerTests
+public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0019";
 
@@ -32,13 +31,14 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
-    public async Task FlagsFluentAssertionsThrowWithDelegateArgument()
+    public async Task FlagsFluentThrowWithDelegateArgument()
     {
         const string source = """
             class C
@@ -55,7 +55,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         _ = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostics[0].Id);
@@ -81,7 +81,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         _ = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostics[0].Id);
@@ -106,13 +106,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task AllowsStaticLambdaWithoutCaptureAllocation()
+    public async Task AllowsStaticLambdaWithoutCapture()
     {
         const string source = """
             namespace Other
@@ -134,7 +134,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -156,13 +156,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task FlagsFullyQualifiedNamespaceThrowsWithDelegateArgument()
+    public async Task FlagsQualifiedThrowsWithDelegateArgument()
     {
         const string source = """
             namespace Fully.Qualified.Tests
@@ -184,7 +184,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         _ = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostics[0].Id);
@@ -207,7 +207,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

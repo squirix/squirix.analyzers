@@ -1,11 +1,10 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class OmitOuterLoopBracesAnalyzerTests
+public sealed class OmitOuterLoopBracesAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0001";
 
@@ -28,9 +27,10 @@ public sealed class OmitOuterLoopBracesAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class OmitOuterLoopBracesAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

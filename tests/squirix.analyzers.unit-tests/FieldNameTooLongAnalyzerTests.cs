@@ -1,11 +1,10 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class FieldNameTooLongAnalyzerTests
+public sealed class FieldNameTooLongAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0006";
 
@@ -19,9 +18,10 @@ public sealed class FieldNameTooLongAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new FieldNameTooLongAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new FieldNameTooLongAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class FieldNameTooLongAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new FieldNameTooLongAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new FieldNameTooLongAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

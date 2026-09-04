@@ -183,10 +183,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             return true;
 
         var constant = context.SemanticModel.GetConstantValue(expression, context.CancellationToken);
-        if (!constant.HasValue)
-            return false;
-
-        return EqualsNormalized(constant.Value, defaultValue);
+        return constant.HasValue && EqualsNormalized(constant.Value, defaultValue);
     }
 
     private static bool EqualsNormalized(object? left, object? right)
@@ -257,9 +254,9 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
     private static bool HasOptionalAttribute(IParameterSymbol parameter)
     {
         var attributes = parameter.GetAttributes();
-        for (var i = 0; i < attributes.Length; i++)
+        foreach (var attribute in attributes)
         {
-            var attr = attributes[i].AttributeClass;
+            var attr = attribute.AttributeClass;
             if (attr?.Name is "OptionalAttribute" && attr.ContainingNamespace?.ToDisplayString() is "System.Runtime.InteropServices")
             {
                 return true;

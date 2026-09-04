@@ -21,7 +21,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\squirix.analyzers\Squirix.Analyzers.csproj"/>
+        <ProjectReference Include="..\..\src\squirix.analyzers\Squirix.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
     </ItemGroup>
 
     <ItemGroup>

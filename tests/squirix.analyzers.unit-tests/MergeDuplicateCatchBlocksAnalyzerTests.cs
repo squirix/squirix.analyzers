@@ -1,16 +1,15 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class MergeDuplicateCatchBlocksAnalyzerTests
+public sealed class MergeDuplicateCatchBlocksAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0020";
 
     [Fact]
-    public async Task FlagsConsecutiveCatchBlocksWithIdenticalBodies()
+    public async Task FlagsConsecutiveIdenticalCatchBlocks()
     {
         const string source = """
             class C
@@ -41,9 +40,10 @@ public sealed class MergeDuplicateCatchBlocksAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public sealed class MergeDuplicateCatchBlocksAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

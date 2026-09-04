@@ -40,7 +40,7 @@ internal static class AnalyzerHelpers
     /// </summary>
     internal static int GetIntOption(SymbolAnalysisContext context, ISymbol symbol, string optionName, int defaultValue)
     {
-        var tree = AnalyzerHelpers.GetBestLocation(symbol)?.SourceTree;
+        var tree = GetBestLocation(symbol)?.SourceTree;
         if (tree is null)
             return defaultValue;
 

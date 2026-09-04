@@ -1,11 +1,10 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class RedundantDefaultArgumentAnalyzerTests
+public sealed class RedundantDefaultArgumentAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0011";
 
@@ -26,13 +25,14 @@ public sealed class RedundantDefaultArgumentAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
-    public async Task AllowsArgumentDifferentFromParameterDefault()
+    public async Task AllowsArgumentNotEqualToDefault()
     {
         const string source = """
             class C
@@ -48,7 +48,7 @@ public sealed class RedundantDefaultArgumentAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }

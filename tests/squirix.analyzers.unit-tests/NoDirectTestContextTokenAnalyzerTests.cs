@@ -1,16 +1,15 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class NoDirectTestContextCancelTokenAnalyzerTests
+public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0017";
 
     [Fact]
-    public async Task FlagsDirectTestContextCancellationTokenUse()
+    public async Task FlagsDirectTestContextTokenUse()
     {
         const string source = """
             class C
@@ -22,13 +21,14 @@ public sealed class NoDirectTestContextCancelTokenAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
-    public async Task AllowsUseWhenTypeDeclaresDefaultCancellationToken()
+    public async Task AllowsTypeDeclaredCancellationToken()
     {
         const string source = """
             class C
@@ -43,13 +43,13 @@ public sealed class NoDirectTestContextCancelTokenAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task AllowsUseWhenDeclaringSharedTokenOfAnyName()
+    public async Task AllowsDeclaredSharedTokenOfAnyName()
     {
         const string source = """
             class C
@@ -64,7 +64,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -82,7 +82,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -104,9 +104,10 @@ public sealed class NoDirectTestContextCancelTokenAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -128,7 +129,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
