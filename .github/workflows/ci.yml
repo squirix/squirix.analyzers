@@ -2,8 +2,9 @@ name: CI
 
 on:
     push:
-        branches: [main]
+        branches: [main, develop]
     pull_request:
+        branches: [main, develop]
 
 jobs:
     build:
@@ -86,3 +87,32 @@ jobs:
                 uses: DavidAnson/markdownlint-cli2-action@v19
                 with:
                     globs: '**/*.md'
+
+    ci-success:
+        name: CI success
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        needs: [build, format, markdownlint]
+        if: always()
+        steps:
+            -   name: Verify Required Checks
+                run: |
+                    fail=0
+                    for result in "$RESULT_BUILD" "$RESULT_FORMAT" "$RESULT_MARKDOWNLINT"; do
+                        case "$result" in
+                            success|skipped) ;;
+                            *)
+                                echo "Required check result: $result" >&2
+                                fail=1
+                                ;;
+                        esac
+                    done
+                    if [ "$fail" -ne 0 ]; then
+                        echo "CI success: required checks failed" >&2
+                        exit 1
+                    fi
+                    echo "CI success: all required checks passed"
+                env:
+                    RESULT_BUILD: ${{ needs.build.result }}
+                    RESULT_FORMAT: ${{ needs.format.result }}
+                    RESULT_MARKDOWNLINT: ${{ needs.markdownlint.result }}
