@@ -22,18 +22,15 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
 {
     private const string DiagnosticId = "SQR0022";
 
-    private static readonly LocalizableString Description =
-        "Guards that compare a value against TimeSpan.Zero and throw ArgumentOutOfRangeException should route the " +
-        "throw through a throw-helper method instead of an inline 'if' check with 'throw'. The helper keeps the " +
-        "throwing path out of the caller, which keeps the caller small and inlineable.";
+    private static readonly LocalizableString Description = "Guards that compare a value against TimeSpan.Zero and throw ArgumentOutOfRangeException should route the " +
+                                                            "throw through a throw-helper method instead of an inline 'if' check with 'throw'. The helper keeps the " +
+                                                            "throwing path out of the caller, which keeps the caller small and inlineable.";
 
-    private static readonly LocalizableString MessageFormat =
-        "Route this TimeSpan range guard through a throw-helper method instead of an 'if' check with 'throw'";
+    private static readonly LocalizableString MessageFormat = "Route this TimeSpan range guard through a throw-helper method instead of an 'if' check with 'throw'";
 
     private static readonly LocalizableString Title = "Prefer a throw-helper method for TimeSpan range guards";
 
-    private static readonly DiagnosticDescriptor Rule =
-        new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description);
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -64,6 +61,20 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(Rule, ifStatement.IfKeyword.GetLocation()));
+    }
+
+    private static SyntaxKind Flip(SyntaxKind kind)
+    {
+        return kind switch
+        {
+            SyntaxKind.LessThanExpression => SyntaxKind.GreaterThanExpression,
+            SyntaxKind.LessThanOrEqualExpression => SyntaxKind.GreaterThanOrEqualExpression,
+            SyntaxKind.GreaterThanExpression => SyntaxKind.LessThanExpression,
+            SyntaxKind.GreaterThanOrEqualExpression => SyntaxKind.LessThanOrEqualExpression,
+            SyntaxKind.EqualsExpression => kind,
+            SyntaxKind.NotEqualsExpression => kind,
+            _ => SyntaxKind.None,
+        };
     }
 
     private static bool IsTimeSpanRangeGuard(SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
@@ -98,20 +109,6 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
             return false;
 
         return operandType.ToDisplayString() == "System.TimeSpan";
-    }
-
-    private static SyntaxKind Flip(SyntaxKind kind)
-    {
-        return kind switch
-        {
-            SyntaxKind.LessThanExpression => SyntaxKind.GreaterThanExpression,
-            SyntaxKind.LessThanOrEqualExpression => SyntaxKind.GreaterThanOrEqualExpression,
-            SyntaxKind.GreaterThanExpression => SyntaxKind.LessThanExpression,
-            SyntaxKind.GreaterThanOrEqualExpression => SyntaxKind.LessThanOrEqualExpression,
-            SyntaxKind.EqualsExpression => kind,
-            SyntaxKind.NotEqualsExpression => kind,
-            _ => SyntaxKind.None,
-        };
     }
 
     private static bool IsTimeSpanZero(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)

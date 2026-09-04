@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -31,7 +32,6 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         "A plain bool _disposed field is not thread-safe. Squirix requires an int flag mutated via System.Threading.Interlocked and observed via System.Threading.Volatile.";
 
     private static readonly LocalizableString BoolMessage = "Field '{0}' is a bool dispose guard; use 'private int {0};' toggled with Interlocked.Exchange";
-
     private static readonly LocalizableString BoolTitle = "Dispose guard must be an int flag toggled with Interlocked";
 
     private static readonly LocalizableString IntDescription =
@@ -43,9 +43,7 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString IntTitle = "Dispose guard must be accessed through Interlocked or Volatile";
     private static readonly DiagnosticDescriptor BoolRule = new(BoolRuleId, BoolTitle, BoolMessage, Category, DiagnosticSeverity.Warning, true, BoolDescription);
 
-
     private static readonly DiagnosticDescriptor IntRule = new(IntRuleId, IntTitle, IntMessage, Category, DiagnosticSeverity.Warning, true, IntDescription);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [BoolRule, IntRule];
@@ -82,7 +80,10 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         if (symbol.Type.SpecialType != SpecialType.System_Int32)
             return;
 
-        if (IsGuardedByInterlockedOrVolatile(context.Node))
+        if (IsInsideNameofOperator(context.Node))
+            return;
+
+        if (IsGuardedByInterlockedOrVolatile(context.Node, context.SemanticModel, context.CancellationToken))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(IntRule, context.Node.GetLocation(), symbol.Name));
@@ -105,7 +106,7 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDisposedFieldName(string name) => name.Equals("_disposed", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsGuardedByInterlockedOrVolatile(SyntaxNode node)
+    private static bool IsGuardedByInterlockedOrVolatile(SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         // An int dispose flag is guarded when it appears anywhere inside an Interlocked/Volatile
         // invocation's argument list, even if it is nested within another call
@@ -116,23 +117,57 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
             if (current is StatementSyntax)
                 break;
 
-            if (current is InvocationExpressionSyntax invocation && IsInterlockedOrVolatileInvocation(invocation, node))
+            if (current is InvocationExpressionSyntax invocation && IsInterlockedOrVolatileInvocation(invocation, node, semanticModel, cancellationToken))
                 return true;
         }
 
         return false;
     }
 
-    private static bool IsInterlockedOrVolatileInvocation(InvocationExpressionSyntax invocation, SyntaxNode node)
+    private static bool IsInsideNameofOperator(SyntaxNode node)
     {
+        // nameof(_disposed) does not read the field at runtime; it only produces its name.
+        for (var current = node.Parent; current is not null; current = current.Parent)
+        {
+            if (current is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } ancestor && IsWithin(ancestor.ArgumentList, node))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsInterlockedOrVolatileInvocation(InvocationExpressionSyntax invocation, SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
+    {
+        if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol { ContainingType: not null } method)
+        {
+            var containing = method.ContainingType;
+            var isGuardType = containing.Name is "Interlocked" or "Volatile" && containing.ContainingNamespace is { Name: "Threading", ContainingNamespace.Name: "System" };
+            if (!isGuardType)
+                return false;
+
+            foreach (var argument in invocation.ArgumentList.Arguments)
+            {
+                if (IsWithin(argument.Expression, node))
+                    return true;
+            }
+
+            return false;
+        }
+
+        // Fallback for unresolved symbols: exact match on the rightmost receiver name.
+        // Handles fully qualified 'System.Threading.Interlocked.Exchange' (receiver is a
+        // MemberAccess ending in 'Interlocked') and rejects 'InterlockedFoo.Exchange'.
         if (invocation.Expression is not MemberAccessExpressionSyntax member)
             return false;
 
-        if (member.Expression is not IdentifierNameSyntax receiver)
-            return false;
+        var receiverName = member.Expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
+            _ => null,
+        };
 
-        var receiverName = receiver.Identifier.ValueText;
-        if (!receiverName.StartsWith("Interlocked", StringComparison.OrdinalIgnoreCase) && !receiverName.StartsWith("Volatile", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(receiverName, "Interlocked", StringComparison.Ordinal) && !string.Equals(receiverName, "Volatile", StringComparison.Ordinal))
             return false;
 
         foreach (var argument in invocation.ArgumentList.Arguments)

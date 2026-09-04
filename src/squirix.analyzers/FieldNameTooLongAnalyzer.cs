@@ -19,7 +19,6 @@ public sealed class FieldNameTooLongAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Title = "Avoid fields with name too long";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description);
 
-
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
 

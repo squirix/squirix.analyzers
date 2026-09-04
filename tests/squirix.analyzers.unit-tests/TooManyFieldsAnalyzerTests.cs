@@ -10,6 +10,22 @@ public sealed class TooManyFieldsAnalyzerTests : AnalyzerTestBase
     private const string RuleId = "SQR0003";
 
     [Fact]
+    public async Task DoesNotFlagTypeWithinLimit()
+    {
+        const string header = "class Small\n{\n";
+        const string footer = "\n}\n";
+        var smallFieldLines = new string[3];
+        for (var i = 0; i < smallFieldLines.Length; i++)
+            smallFieldLines[i] = $"    private int _f{i + 1:00};";
+        var fields = string.Join("\n", smallFieldLines);
+        var source = header + fields + footer;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task FlagsTypeWithMoreThanFifteenFields()
     {
         const string header = "class Big\n{\n";
@@ -27,22 +43,6 @@ public sealed class TooManyFieldsAnalyzerTests : AnalyzerTestBase
     }
 
     [Fact]
-    public async Task DoesNotFlagTypeWithinLimit()
-    {
-        const string header = "class Small\n{\n";
-        const string footer = "\n}\n";
-        var smallFieldLines = new string[3];
-        for (var i = 0; i < smallFieldLines.Length; i++)
-            smallFieldLines[i] = $"    private int _f{i + 1:00};";
-        var fields = string.Join("\n", smallFieldLines);
-        var source = header + fields + footer;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, DefaultCancellationToken);
-
-        Assert.Empty(diagnostics);
-    }
-
-    [Fact]
     public async Task UsesConfigurableThreshold()
     {
         const string header = "class Big\n{\n";
@@ -54,11 +54,7 @@ public sealed class TooManyFieldsAnalyzerTests : AnalyzerTestBase
         var source = header + fields + footer;
         var options = ImmutableDictionary.Create<string, string>().Add("SQR0003.max_fields_per_type", "3");
 
-        var diagnostics = await AnalyzerRunner.RunAsync(
-            new TooManyFieldsAnalyzer(),
-            source,
-            DefaultCancellationToken,
-            options);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, DefaultCancellationToken, options);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);

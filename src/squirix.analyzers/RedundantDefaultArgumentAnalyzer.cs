@@ -20,10 +20,8 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Description = "Omit arguments that equal the parameter default; the default may change at the declaration.";
 
     private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value";
-
     private static readonly LocalizableString Title = "Avoid redundant default argument values";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -92,7 +90,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
                 continue;
 
             var argument = argumentList.Arguments[i];
-            if (!ArgumentEqualsDefault(context, argument.Expression, defaultValue))
+            if (!ArgumentEqualsDefault(context, argument.Expression, parameter, defaultValue))
                 continue;
 
             // Named args can always be dropped. Positional args only when every later
@@ -149,38 +147,13 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         AnalyzeArgumentList(context, creation.ArgumentList, method, static (node, list) => ((ObjectCreationExpressionSyntax)node).WithArgumentList(list));
     }
 
-    private static bool HasRedundantDefaultCandidate(ArgumentListSyntax? argumentList)
+    private static bool ArgumentEqualsDefault(SyntaxNodeAnalysisContext context, ExpressionSyntax expression, IParameterSymbol parameter, object? defaultValue)
     {
-        if (argumentList is null)
-            return false;
-
-        foreach (var argument in argumentList.Arguments)
-        {
-            if (argument.NameColon != null)
-                return true;
-
-            switch (argument.Expression.Kind())
-            {
-                case SyntaxKind.DefaultLiteralExpression:
-                case SyntaxKind.DefaultExpression:
-                case SyntaxKind.NullLiteralExpression:
-                case SyntaxKind.NumericLiteralExpression:
-                case SyntaxKind.StringLiteralExpression:
-                case SyntaxKind.CharacterLiteralExpression:
-                case SyntaxKind.TrueLiteralExpression:
-                case SyntaxKind.FalseLiteralExpression:
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool ArgumentEqualsDefault(SyntaxNodeAnalysisContext context, ExpressionSyntax expression, object? defaultValue)
-    {
-        // default / default(T) matches any default value including null.
+        // 'default' / 'default(T)' equals the parameter default only when the parameter
+        // default itself is the default value of the parameter type (e.g. null for
+        // reference types, 0 for int). 'M(default)' with 'void M(int x = 5)' must not flag.
         if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) || expression.IsKind(SyntaxKind.DefaultExpression))
-            return true;
+            return IsDefaultValueOfParameterType(defaultValue, parameter.Type);
 
         var constant = context.SemanticModel.GetConstantValue(expression, context.CancellationToken);
         return constant.HasValue && EqualsNormalized(constant.Value, defaultValue);
@@ -266,6 +239,48 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    private static bool HasRedundantDefaultCandidate(ArgumentListSyntax? argumentList)
+    {
+        if (argumentList is null)
+            return false;
+
+        foreach (var argument in argumentList.Arguments)
+        {
+            if (argument.NameColon != null)
+                return true;
+
+            switch (argument.Expression.Kind())
+            {
+                case SyntaxKind.DefaultLiteralExpression:
+                case SyntaxKind.DefaultExpression:
+                case SyntaxKind.NullLiteralExpression:
+                case SyntaxKind.NumericLiteralExpression:
+                case SyntaxKind.StringLiteralExpression:
+                case SyntaxKind.CharacterLiteralExpression:
+                case SyntaxKind.TrueLiteralExpression:
+                case SyntaxKind.FalseLiteralExpression:
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsDefaultValueOfParameterType(object? defaultValue, ITypeSymbol parameterType)
+    {
+        if (parameterType.IsReferenceType || parameterType is IPointerTypeSymbol)
+            return defaultValue is null;
+
+        if (parameterType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            return defaultValue is null;
+
+        var typeDefault = GetValueTypeDefault(parameterType);
+        if (typeDefault is null)
+            return false;
+
+        return EqualsNormalized(typeDefault, defaultValue);
+    }
+
     private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList, IMethodSymbol method)
     {
@@ -290,7 +305,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             if (parameter.IsParams || !parameter.IsOptional || !TryGetParameterDefault(parameter, out var defaultValue))
                 return false;
 
-            if (!ArgumentEqualsDefault(context, argumentList.Arguments[i].Expression, defaultValue))
+            if (!ArgumentEqualsDefault(context, argumentList.Arguments[i].Expression, parameter, defaultValue))
                 return false;
         }
 
