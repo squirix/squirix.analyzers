@@ -26,7 +26,8 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
             {
                 void M()
                 {
-                    Other.Assert.Throws<System.InvalidOperationException>(() => { });
+                    var x = 0;
+                    Other.Assert.Throws<System.InvalidOperationException>(() => { x++; });
                 }
             }
             """;
@@ -45,7 +46,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
             {
                 void M(System.Action action)
                 {
-                    action.Should().Throw<System.InvalidOperationException>(() => { });
+                    action.Should().Throw<System.InvalidOperationException>(() => action());
                 }
             }
 
@@ -76,7 +77,8 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
             {
                 void M()
                 {
-                    AssertThrows.ThrowExactly(typeof(System.InvalidOperationException), () => { });
+                    var x = 0;
+                    AssertThrows.ThrowExactly(typeof(System.InvalidOperationException), () => { x++; });
                 }
             }
             """;
@@ -140,6 +142,66 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
     }
 
     [Fact]
+    public async Task AllowsNonCapturingLambdaWithoutStatic()
+    {
+        const string source = """
+            namespace Other
+            {
+                static class Assert
+                {
+                    public static void Throws<T>(System.Action action) where T : System.Exception
+                    {
+                    }
+                }
+            }
+
+            class C
+            {
+                void M()
+                {
+                    Other.Assert.Throws<System.InvalidOperationException>(() => StaticHelper());
+                }
+
+                static void StaticHelper()
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task AllowsEmptyLambdaWithoutCapture()
+    {
+        const string source = """
+            namespace Other
+            {
+                static class Assert
+                {
+                    public static void Throws<T>(System.Action action) where T : System.Exception
+                    {
+                    }
+                }
+            }
+
+            class C
+            {
+                void M()
+                {
+                    Other.Assert.Throws<System.InvalidOperationException>(() => { });
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task AllowsUnrelatedMethod()
     {
         const string source = """
@@ -179,7 +241,8 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
             {
                 void M()
                 {
-                    Fully.Qualified.Tests.AssertHelpers.Throws<System.InvalidOperationException>(() => { });
+                    var x = 0;
+                    Fully.Qualified.Tests.AssertHelpers.Throws<System.InvalidOperationException>(() => { x++; });
                 }
             }
             """;

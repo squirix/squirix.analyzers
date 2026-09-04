@@ -98,7 +98,10 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
 
     private static bool IsCancellationTokenType(ITypeSymbol? type)
     {
-        var threading = type?.ContainingNamespace;
+        if (type is not { Name: "CancellationToken" })
+            return false;
+
+        var threading = type.ContainingNamespace;
         var system = threading?.ContainingNamespace;
         return threading is { Name: "Threading" }
             && system is { Name: "System", IsGlobalNamespace: false }

@@ -92,7 +92,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
                 continue;
 
             var argument = argumentList.Arguments[i];
-            if (!ArgumentEqualsDefault(context, argument.Expression, defaultValue))
+            if (!ArgumentEqualsDefault(context, argument.Expression, parameter, defaultValue))
                 continue;
 
             // Named args can always be dropped. Positional args only when every later
@@ -176,14 +176,31 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool ArgumentEqualsDefault(SyntaxNodeAnalysisContext context, ExpressionSyntax expression, object? defaultValue)
+    private static bool ArgumentEqualsDefault(SyntaxNodeAnalysisContext context, ExpressionSyntax expression, IParameterSymbol parameter, object? defaultValue)
     {
-        // default / default(T) matches any default value including null.
+        // 'default' / 'default(T)' equals the parameter default only when the parameter
+        // default itself is the default value of the parameter type (e.g. null for
+        // reference types, 0 for int). 'M(default)' with 'void M(int x = 5)' must not flag.
         if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) || expression.IsKind(SyntaxKind.DefaultExpression))
-            return true;
+            return IsDefaultValueOfParameterType(defaultValue, parameter.Type);
 
         var constant = context.SemanticModel.GetConstantValue(expression, context.CancellationToken);
         return constant.HasValue && EqualsNormalized(constant.Value, defaultValue);
+    }
+
+    private static bool IsDefaultValueOfParameterType(object? defaultValue, ITypeSymbol parameterType)
+    {
+        if (parameterType.IsReferenceType || parameterType is IPointerTypeSymbol)
+            return defaultValue is null;
+
+        if (parameterType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            return defaultValue is null;
+
+        var typeDefault = GetValueTypeDefault(parameterType);
+        if (typeDefault is null)
+            return false;
+
+        return EqualsNormalized(typeDefault, defaultValue);
     }
 
     private static bool EqualsNormalized(object? left, object? right)
@@ -290,7 +307,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             if (parameter.IsParams || !parameter.IsOptional || !TryGetParameterDefault(parameter, out var defaultValue))
                 return false;
 
-            if (!ArgumentEqualsDefault(context, argumentList.Arguments[i].Expression, defaultValue))
+            if (!ArgumentEqualsDefault(context, argumentList.Arguments[i].Expression, parameter, defaultValue))
                 return false;
         }
 
