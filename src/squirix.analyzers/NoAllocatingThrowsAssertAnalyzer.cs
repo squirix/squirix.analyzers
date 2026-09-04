@@ -74,9 +74,6 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
     private static bool CapturesDelegate(InvocationExpressionSyntax invocation)
     {
-        if (invocation.ArgumentList is null)
-            return false;
-
         foreach (var argument in invocation.ArgumentList.Arguments)
         {
             if (ContainsCapturingDelegate(argument.Expression))
@@ -96,9 +93,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
                 // not allocate. Capturing (non-static) lambdas and anonymous methods allocate a new delegate, plus a
                 // display class when they capture state, on every call.
                 case AnonymousMethodExpressionSyntax:
-                    return true;
                 case SimpleLambdaExpressionSyntax { Modifiers: var simpleModifiers } when !simpleModifiers.Any(SyntaxKind.StaticKeyword):
-                    return true;
                 case ParenthesizedLambdaExpressionSyntax { Modifiers: var parenthesizedModifiers } when !parenthesizedModifiers.Any(SyntaxKind.StaticKeyword):
                     return true;
             }

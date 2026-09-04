@@ -69,7 +69,7 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
         if (condition is not InvocationExpressionSyntax invocation)
             return null;
 
-        if (invocation.ArgumentList?.Arguments.Count != 1)
+        if (invocation.ArgumentList.Arguments.Count != 1)
             return null;
 
         // Resolve semantically so unrelated 'IsNullOrEmpty' helpers, extension methods,
@@ -92,20 +92,21 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
     private static bool ThrowsPlainArgumentException(SyntaxNodeAnalysisContext context, StatementSyntax statement, ExpressionSyntax condition)
     {
         ThrowStatementSyntax? throwStatement;
-        if (statement is BlockSyntax block)
+        switch (statement)
         {
-            if (block.Statements.Count != 1 || block.Statements[0] is not ThrowStatementSyntax single)
-                return false;
+            case BlockSyntax block:
+            {
+                if (block.Statements is not [ThrowStatementSyntax single])
+                    return false;
 
-            throwStatement = single;
-        }
-        else if (statement is ThrowStatementSyntax direct)
-        {
-            throwStatement = direct;
-        }
-        else
-        {
-            return false;
+                throwStatement = single;
+                break;
+            }
+            case ThrowStatementSyntax direct:
+                throwStatement = direct;
+                break;
+            default:
+                return false;
         }
 
         if (throwStatement.Expression is not ObjectCreationExpressionSyntax creation)
@@ -124,32 +125,22 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
 
         // The thrown ParamName must match the guarded variable; otherwise replacing the
         // guard with ThrowIfNullOrEmpty/ThrowIfNullOrWhiteSpace would change ParamName.
-        if (condition is InvocationExpressionSyntax guardInvocation
-            && guardInvocation.ArgumentList?.Arguments.Count == 1
-            && creation.ArgumentList != null
-            && constructor.Parameters.Length >= 2)
+        if (condition is not InvocationExpressionSyntax syntax || syntax.ArgumentList.Arguments.Count != 1 || creation.ArgumentList == null || constructor.Parameters.Length < 2)
+            return true;
+        var index = -1;
+        for (var i = 0; i < constructor.Parameters.Length; i++)
         {
-            var paramNameIndex = -1;
-            for (var i = 0; i < constructor.Parameters.Length; i++)
-            {
-                if (constructor.Parameters[i].Name == "paramName")
-                {
-                    paramNameIndex = i;
-                    break;
-                }
-            }
-
-            if (paramNameIndex >= 0 && creation.ArgumentList.Arguments.Count > paramNameIndex)
-            {
-                var guardedName = GetSimpleName(guardInvocation.ArgumentList.Arguments[0].Expression);
-                var thrownName = GetParamNameValue(creation.ArgumentList.Arguments[paramNameIndex].Expression);
-                if (guardedName != null && thrownName != null
-                    && !string.Equals(guardedName, thrownName, StringComparison.Ordinal))
-                    return false;
-            }
+            if (constructor.Parameters[i].Name != "paramName")
+                continue;
+            index = i;
+            break;
         }
 
-        return true;
+        if (index < 0 || creation.ArgumentList.Arguments.Count <= index)
+            return true;
+        var guardedName = GetSimpleName(syntax.ArgumentList.Arguments[0].Expression);
+        var thrownName = GetParamNameValue(creation.ArgumentList.Arguments[index].Expression);
+        return guardedName == null || thrownName == null || string.Equals(guardedName, thrownName, StringComparison.Ordinal);
     }
 
     private static string? GetSimpleName(ExpressionSyntax expression)
@@ -164,18 +155,14 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
 
     private static string? GetParamNameValue(ExpressionSyntax expression)
     {
-        // nameof(x) / nameof(Foo.Bar)
-        if (expression is InvocationExpressionSyntax nameofInvocation
-            && nameofInvocation.Expression is IdentifierNameSyntax nameofId
-            && nameofId.Identifier.ValueText == "nameof"
-            && nameofInvocation.ArgumentList?.Arguments.Count == 1)
-            return GetSimpleName(nameofInvocation.ArgumentList.Arguments[0].Expression);
-
-        // "name" literal
-        if (expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
-            return literal.Token.ValueText;
-
-        return null;
+        return expression switch
+        {
+            // nameof(x) / nameof(Foo.Bar)
+            InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" }, ArgumentList.Arguments.Count: 1 } syntax => GetSimpleName(
+                syntax.ArgumentList.Arguments[0].Expression),
+            // "name" literal
+            LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) => literal.Token.ValueText,
+            _ => null,
+        };
     }
 }
-

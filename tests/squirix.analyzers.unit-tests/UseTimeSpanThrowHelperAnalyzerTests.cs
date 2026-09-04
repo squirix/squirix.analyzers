@@ -153,4 +153,24 @@ public sealed class UseTimeSpanThrowHelperAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task MessageDoesNotNameUncompilableBclHelpers()
+    {
+        const string source = """
+            class C
+            {
+                void M(System.TimeSpan value)
+                {
+                    if (value <= System.TimeSpan.Zero)
+                        throw new System.ArgumentOutOfRangeException(nameof(value), value, "Must be positive.");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseTimeSpanThrowHelperAnalyzer(), source, TestContext.Current.CancellationToken);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.DoesNotContain("ArgumentOutOfRangeException.ThrowIf", diagnostic.GetMessage());
+    }
 }

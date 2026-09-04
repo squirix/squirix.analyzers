@@ -70,12 +70,13 @@ public sealed class RequireMultilineIfBodyBracesAnalyzer : DiagnosticAnalyzer
 
     private static void CheckBranch(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind)
     {
-        if (body is BlockSyntax)
-            return;
-
-        // A nested `if` without braces is analyzed on its own node; report the brace at its leaf statement.
-        if (body is IfStatementSyntax)
-            return;
+        switch (body)
+        {
+            case BlockSyntax:
+            // A nested `if` without braces is analyzed on its own node; report the brace at its leaf statement.
+            case IfStatementSyntax:
+                return;
+        }
 
         if (!LoopStatementSyntaxHelpers.SpansMultipleLines(body))
             return;

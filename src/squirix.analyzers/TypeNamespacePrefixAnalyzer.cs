@@ -68,10 +68,7 @@ public sealed class TypeNamespacePrefixAnalyzer : DiagnosticAnalyzer
         if (!typeName.StartsWith(segment, StringComparison.Ordinal))
             return false;
 
-        if (typeName.Length == segment.Length)
-            return true;
-
-        return char.IsUpper(typeName[segment.Length]);
+        return typeName.Length == segment.Length || char.IsUpper(typeName[segment.Length]);
     }
 
     private static bool TryGetImmediateNamespaceSegment(INamespaceSymbol? ns, out string segment)

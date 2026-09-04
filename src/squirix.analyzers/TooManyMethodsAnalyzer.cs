@@ -84,17 +84,20 @@ public sealed class TooManyMethodsAnalyzer : DiagnosticAnalyzer
 
         foreach (var member in type.GetMembers())
         {
-            if (member is IFieldSymbol field)
+            switch (member)
             {
-                hasField = true;
-                if (!field.IsConst && !AnalyzerHelpers.IsCompilerOrGenerated(field))
-                    allFieldsAreConstants = false;
+                case IFieldSymbol field:
+                {
+                    hasField = true;
+                    if (!field.IsConst && !AnalyzerHelpers.IsCompilerOrGenerated(field))
+                        allFieldsAreConstants = false;
 
-                continue;
+                    continue;
+                }
+                case IMethodSymbol method when ShouldCountMethod(method):
+                    methodCount++;
+                    break;
             }
-
-            if (member is IMethodSymbol method && ShouldCountMethod(method))
-                methodCount++;
         }
 
         // Only stateless types whose every field is a constant are exempt (per the rule description).

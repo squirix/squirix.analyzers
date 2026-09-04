@@ -79,16 +79,18 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
     {
         foreach (var member in symbol.GetMembers())
         {
-            if (member is IPropertySymbol property)
+            switch (member)
             {
-                if (IsCancellationTokenType(property.Type))
+                case IPropertySymbol property:
+                {
+                    if (IsCancellationTokenType(property.Type))
+                        return true;
+
+                    continue;
+                }
+                case IFieldSymbol field when IsCancellationTokenType(field.Type):
                     return true;
-
-                continue;
             }
-
-            if (member is IFieldSymbol field && IsCancellationTokenType(field.Type))
-                return true;
         }
 
         return false;
