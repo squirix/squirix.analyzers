@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
@@ -27,7 +26,8 @@ public sealed class PreferEqualityOperatorAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([NullCheckRuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(NullCheckRuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -65,7 +65,8 @@ public sealed class PreferEqualityOperatorAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([IsConstantRuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(IsConstantRuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -103,7 +104,8 @@ public sealed class PreferEqualityOperatorAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([IsNotConstantRuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(IsNotConstantRuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -143,7 +145,8 @@ public sealed class PreferEqualityOperatorAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([NullCheckRuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(NullCheckRuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -164,6 +167,7 @@ public sealed class PreferEqualityOperatorAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([NullCheckRuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(NullCheckRuleId, diagnostic.Id);
     }
 }

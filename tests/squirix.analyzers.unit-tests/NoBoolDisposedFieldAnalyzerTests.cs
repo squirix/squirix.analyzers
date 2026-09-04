@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
@@ -22,7 +21,8 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([BoolRuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(BoolRuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -68,7 +68,9 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([IntRuleId, IntRuleId], diagnostics.Select(static d => d.Id));
+        Assert.Equal(2, diagnostics.Length);
+        Assert.Equal(IntRuleId, diagnostics[0].Id);
+        Assert.Equal(IntRuleId, diagnostics[1].Id);
     }
 
     [Fact]

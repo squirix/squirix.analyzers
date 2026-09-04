@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
@@ -20,7 +19,8 @@ public sealed class TypeNameTooLongAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new TypeNameTooLongAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]

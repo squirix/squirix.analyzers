@@ -1,0 +1,5 @@
+// Documentation Comment ID strings (ECMA format). Partial names are ignored silently.
+T:System.Linq.Enumerable;LINQ is banned in this repository. Use explicit loops instead.
+T:System.Linq.EnumerableQuery`1;LINQ is banned in this repository. Use explicit loops instead.
+T:System.Linq.ParallelEnumerable;LINQ is banned in this repository. Use explicit loops instead.
+N:System.Xml.Linq;System.Xml.Linq (LINQ-to-XML) is banned. Use explicit loops instead.
