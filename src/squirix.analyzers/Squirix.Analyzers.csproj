@@ -23,6 +23,7 @@
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <PackageTags>roslyn;analyzers;code-analysis;csharp;dotnet;squirix</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageIcon>icon.png</PackageIcon>
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
         <EmbedUntrackedSources>true</EmbedUntrackedSources>
         <DebugType>portable</DebugType>
@@ -38,6 +39,7 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" PrivateAssets="all"/>
         <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400" PrivateAssets="all"/>
         <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+        <None Include="..\..\icon.png" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
