@@ -21,10 +21,8 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
         "Omit braces when a control-flow body is a single single-line statement. Keep braces for multiline bodies and for if/else chains with a multi-statement branch.";
 
     private static readonly LocalizableString MessageFormat = "Omit braces from '{0}' when the body is a single single-line statement";
-
     private static readonly LocalizableString Title = "Omit braces from single-line single-statement body";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

@@ -20,10 +20,8 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Description = "Omit arguments that equal the parameter default; the default may change at the declaration.";
 
     private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value";
-
     private static readonly LocalizableString Title = "Avoid redundant default argument values";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -149,33 +147,6 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         AnalyzeArgumentList(context, creation.ArgumentList, method, static (node, list) => ((ObjectCreationExpressionSyntax)node).WithArgumentList(list));
     }
 
-    private static bool HasRedundantDefaultCandidate(ArgumentListSyntax? argumentList)
-    {
-        if (argumentList is null)
-            return false;
-
-        foreach (var argument in argumentList.Arguments)
-        {
-            if (argument.NameColon != null)
-                return true;
-
-            switch (argument.Expression.Kind())
-            {
-                case SyntaxKind.DefaultLiteralExpression:
-                case SyntaxKind.DefaultExpression:
-                case SyntaxKind.NullLiteralExpression:
-                case SyntaxKind.NumericLiteralExpression:
-                case SyntaxKind.StringLiteralExpression:
-                case SyntaxKind.CharacterLiteralExpression:
-                case SyntaxKind.TrueLiteralExpression:
-                case SyntaxKind.FalseLiteralExpression:
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
     private static bool ArgumentEqualsDefault(SyntaxNodeAnalysisContext context, ExpressionSyntax expression, IParameterSymbol parameter, object? defaultValue)
     {
         // 'default' / 'default(T)' equals the parameter default only when the parameter
@@ -186,21 +157,6 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
         var constant = context.SemanticModel.GetConstantValue(expression, context.CancellationToken);
         return constant.HasValue && EqualsNormalized(constant.Value, defaultValue);
-    }
-
-    private static bool IsDefaultValueOfParameterType(object? defaultValue, ITypeSymbol parameterType)
-    {
-        if (parameterType.IsReferenceType || parameterType is IPointerTypeSymbol)
-            return defaultValue is null;
-
-        if (parameterType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
-            return defaultValue is null;
-
-        var typeDefault = GetValueTypeDefault(parameterType);
-        if (typeDefault is null)
-            return false;
-
-        return EqualsNormalized(typeDefault, defaultValue);
     }
 
     private static bool EqualsNormalized(object? left, object? right)
@@ -281,6 +237,48 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         }
 
         return false;
+    }
+
+    private static bool HasRedundantDefaultCandidate(ArgumentListSyntax? argumentList)
+    {
+        if (argumentList is null)
+            return false;
+
+        foreach (var argument in argumentList.Arguments)
+        {
+            if (argument.NameColon != null)
+                return true;
+
+            switch (argument.Expression.Kind())
+            {
+                case SyntaxKind.DefaultLiteralExpression:
+                case SyntaxKind.DefaultExpression:
+                case SyntaxKind.NullLiteralExpression:
+                case SyntaxKind.NumericLiteralExpression:
+                case SyntaxKind.StringLiteralExpression:
+                case SyntaxKind.CharacterLiteralExpression:
+                case SyntaxKind.TrueLiteralExpression:
+                case SyntaxKind.FalseLiteralExpression:
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsDefaultValueOfParameterType(object? defaultValue, ITypeSymbol parameterType)
+    {
+        if (parameterType.IsReferenceType || parameterType is IPointerTypeSymbol)
+            return defaultValue is null;
+
+        if (parameterType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            return defaultValue is null;
+
+        var typeDefault = GetValueTypeDefault(parameterType);
+        if (typeDefault is null)
+            return false;
+
+        return EqualsNormalized(typeDefault, defaultValue);
     }
 
     private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex,

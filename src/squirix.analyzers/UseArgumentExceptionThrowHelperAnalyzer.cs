@@ -20,17 +20,15 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
 {
     private const string DiagnosticId = "SQR0021";
 
-    private static readonly LocalizableString Description =
-        "Guards that check string.IsNullOrWhiteSpace or string.IsNullOrEmpty and throw ArgumentException read more " +
-        "clearly as ArgumentException.ThrowIfNullOrWhiteSpace or ArgumentException.ThrowIfNullOrEmpty. The helper " +
-        "keeps the throwing path out of the caller, which keeps the caller small and inlineable.";
+    private static readonly LocalizableString Description = "Guards that check string.IsNullOrWhiteSpace or string.IsNullOrEmpty and throw ArgumentException read more " +
+                                                            "clearly as ArgumentException.ThrowIfNullOrWhiteSpace or ArgumentException.ThrowIfNullOrEmpty. The helper " +
+                                                            "keeps the throwing path out of the caller, which keeps the caller small and inlineable.";
 
     private static readonly LocalizableString MessageFormat = "Use '{0}' instead of an 'if' check with 'throw'";
 
     private static readonly LocalizableString Title = "Prefer ArgumentException throw helpers over manual guards";
 
-    private static readonly DiagnosticDescriptor Rule =
-        new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description);
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -62,6 +60,29 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(Rule, ifStatement.IfKeyword.GetLocation(), helperName));
+    }
+
+    private static string? GetParamNameValue(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            // nameof(x) / nameof(Foo.Bar)
+            InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" }, ArgumentList.Arguments.Count: 1 } syntax => GetSimpleName(
+                syntax.ArgumentList.Arguments[0].Expression),
+            // "name" literal
+            LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) => literal.Token.ValueText,
+            _ => null,
+        };
+    }
+
+    private static string? GetSimpleName(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
+            _ => null,
+        };
     }
 
     private static string? GetThrowHelperName(SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
@@ -141,28 +162,5 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
         var guardedName = GetSimpleName(syntax.ArgumentList.Arguments[0].Expression);
         var thrownName = GetParamNameValue(creation.ArgumentList.Arguments[index].Expression);
         return guardedName == null || thrownName == null || string.Equals(guardedName, thrownName, StringComparison.Ordinal);
-    }
-
-    private static string? GetSimpleName(ExpressionSyntax expression)
-    {
-        return expression switch
-        {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
-            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
-            _ => null,
-        };
-    }
-
-    private static string? GetParamNameValue(ExpressionSyntax expression)
-    {
-        return expression switch
-        {
-            // nameof(x) / nameof(Foo.Bar)
-            InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" }, ArgumentList.Arguments.Count: 1 } syntax => GetSimpleName(
-                syntax.ArgumentList.Arguments[0].Expression),
-            // "name" literal
-            LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) => literal.Token.ValueText,
-            _ => null,
-        };
     }
 }

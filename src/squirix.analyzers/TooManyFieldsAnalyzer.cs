@@ -13,18 +13,17 @@ namespace Squirix.Analyzers;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class TooManyFieldsAnalyzer : DiagnosticAnalyzer
 {
+    private const int DefaultMaxFieldsPerType = 15;
     private const string DiagnosticId = "SQR0003";
 
     private const string MaxFieldsPerTypeOptionName = "SQR0003.max_fields_per_type";
 
-    private const int DefaultMaxFieldsPerType = 15;
-
-    private static readonly LocalizableString Description = "Types with too many non-literal, non-static-readonly fields (configurable threshold, default 15) tend to hold too much state.";
+    private static readonly LocalizableString Description =
+        "Types with too many non-literal, non-static-readonly fields (configurable threshold, default 15) tend to hold too much state.";
 
     private static readonly LocalizableString MessageFormat = "Type '{0}' has {1} fields (limit {2}); prefer splitting state or introducing collaborators";
     private static readonly LocalizableString Title = "Avoid types with too many fields";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Design", DiagnosticSeverity.Info, true, Description);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

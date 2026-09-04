@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Immutable;
-using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -32,7 +32,6 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         "A plain bool _disposed field is not thread-safe. Squirix requires an int flag mutated via System.Threading.Interlocked and observed via System.Threading.Volatile.";
 
     private static readonly LocalizableString BoolMessage = "Field '{0}' is a bool dispose guard; use 'private int {0};' toggled with Interlocked.Exchange";
-
     private static readonly LocalizableString BoolTitle = "Dispose guard must be an int flag toggled with Interlocked";
 
     private static readonly LocalizableString IntDescription =
@@ -107,7 +106,7 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDisposedFieldName(string name) => name.Equals("_disposed", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsGuardedByInterlockedOrVolatile(SyntaxNode node, SemanticModel semanticModel, System.Threading.CancellationToken cancellationToken)
+    private static bool IsGuardedByInterlockedOrVolatile(SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         // An int dispose flag is guarded when it appears anywhere inside an Interlocked/Volatile
         // invocation's argument list, even if it is nested within another call
@@ -130,18 +129,14 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         // nameof(_disposed) does not read the field at runtime; it only produces its name.
         for (var current = node.Parent; current is not null; current = current.Parent)
         {
-            if (current is InvocationExpressionSyntax ancestor
-                && ancestor.Expression is IdentifierNameSyntax name
-                && name.Identifier.ValueText == "nameof"
-                && IsWithin(ancestor.ArgumentList, node))
+            if (current is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } ancestor && IsWithin(ancestor.ArgumentList, node))
                 return true;
         }
 
         return false;
     }
 
-    private static bool IsInterlockedOrVolatileInvocation(InvocationExpressionSyntax invocation, SyntaxNode node, SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
+    private static bool IsInterlockedOrVolatileInvocation(InvocationExpressionSyntax invocation, SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol { ContainingType: not null } method)
         {
