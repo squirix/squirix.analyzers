@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
@@ -15,12 +14,16 @@ public sealed class TooManyFieldsAnalyzerTests
     {
         const string header = "class Big\n{\n";
         const string footer = "\n}\n";
-        var fields = string.Join("\n", Enumerable.Range(1, 16).Select(static i => $"    private int _f{i:00};"));
+        var bigFieldLines = new string[16];
+        for (var i = 0; i < bigFieldLines.Length; i++)
+            bigFieldLines[i] = $"    private int _f{i + 1:00};";
+        var fields = string.Join("\n", bigFieldLines);
         var source = header + fields + footer;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -28,7 +31,10 @@ public sealed class TooManyFieldsAnalyzerTests
     {
         const string header = "class Small\n{\n";
         const string footer = "\n}\n";
-        var fields = string.Join("\n", Enumerable.Range(1, 3).Select(static i => $"    private int _f{i:00};"));
+        var smallFieldLines = new string[3];
+        for (var i = 0; i < smallFieldLines.Length; i++)
+            smallFieldLines[i] = $"    private int _f{i + 1:00};";
+        var fields = string.Join("\n", smallFieldLines);
         var source = header + fields + footer;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, TestContext.Current.CancellationToken);
@@ -41,7 +47,10 @@ public sealed class TooManyFieldsAnalyzerTests
     {
         const string header = "class Big\n{\n";
         const string footer = "\n}\n";
-        var fields = string.Join("\n", Enumerable.Range(1, 5).Select(static i => $"    private int _f{i:00};"));
+        var limitedFieldLines = new string[5];
+        for (var i = 0; i < limitedFieldLines.Length; i++)
+            limitedFieldLines[i] = $"    private int _f{i + 1:00};";
+        var fields = string.Join("\n", limitedFieldLines);
         var source = header + fields + footer;
         var options = ImmutableDictionary.Create<string, string>().Add("SQR0003.max_fields_per_type", "3");
 
@@ -51,6 +60,7 @@ public sealed class TooManyFieldsAnalyzerTests
             TestContext.Current.CancellationToken,
             options);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 }

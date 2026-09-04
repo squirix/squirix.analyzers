@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
@@ -19,9 +19,14 @@ internal static class AnalyzerRunner
         ImmutableDictionary<string, string>? analyzerOptions = null)
     {
         var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
-        var references = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(static a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
-            .Select(static a => MetadataReference.CreateFromFile(a.Location));
+        var references = new List<MetadataReference>();
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location))
+                continue;
+
+            references.Add(MetadataReference.CreateFromFile(assembly.Location));
+        }
         var compilation = CSharpCompilation.Create(
             "Squirix.Analyzers.UnitTests",
             new[] { tree },
@@ -34,7 +39,17 @@ internal static class AnalyzerRunner
 
         var withAnalyzers = compilation.WithAnalyzers([analyzer], options);
         var allDiagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync(cancellationToken);
-        var supportedIds = analyzer.SupportedDiagnostics.Select(static d => d.Id).ToHashSet();
-        return [.. allDiagnostics.Where(d => supportedIds.Contains(d.Id))];
+        var supportedIds = new HashSet<string>();
+        foreach (var supported in analyzer.SupportedDiagnostics)
+            _ = supportedIds.Add(supported.Id);
+
+        var filtered = new List<Diagnostic>();
+        foreach (var diagnostic in allDiagnostics)
+        {
+            if (supportedIds.Contains(diagnostic.Id))
+                filtered.Add(diagnostic);
+        }
+
+        return [.. filtered];
     }
 }

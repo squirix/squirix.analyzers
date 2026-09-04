@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
@@ -26,7 +25,8 @@ public sealed class CoalesceThrowIfNullAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 
     [Fact]
@@ -107,6 +107,7 @@ public sealed class CoalesceThrowIfNullAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowIfNullAnalyzer(), source, TestContext.Current.CancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
     }
 }

@@ -25,6 +25,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <Content Include="..\xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
