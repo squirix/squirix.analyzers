@@ -49,12 +49,12 @@ jobs:
             -   name: Build
                 env:
                     PACKAGE_VERSION: ${{ steps.version.outputs.package-version }}
-                run: dotnet build src/squirix.analyzers/Squirix.Analyzers.csproj --configuration Release -p:Version="$PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true
+                run: dotnet build src/squirix.analyzers/squirix.analyzers.csproj --configuration Release -p:Version="$PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true
 
             -   name: Pack
                 env:
                     PACKAGE_VERSION: ${{ steps.version.outputs.package-version }}
-                run: dotnet pack src/squirix.analyzers/Squirix.Analyzers.csproj --configuration Release --no-build --output ./artifacts/packages -p:Version="$PACKAGE_VERSION"
+                run: dotnet pack src/squirix.analyzers/squirix.analyzers.csproj --configuration Release --no-build --output ./artifacts/packages -p:Version="$PACKAGE_VERSION"
 
             -   name: NuGet login (OIDC to temp API key)
                 id: login
