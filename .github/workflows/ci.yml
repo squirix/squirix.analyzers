@@ -84,7 +84,7 @@ jobs:
                     persist-credentials: false
 
             -   name: Markdownlint
-                uses: DavidAnson/markdownlint-cli2-action@v19
+                uses: DavidAnson/markdownlint-cli2-action@v24
                 with:
                     globs: '**/*.md'
 
