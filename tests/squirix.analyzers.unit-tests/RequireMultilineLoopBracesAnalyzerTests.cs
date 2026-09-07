@@ -4,12 +4,12 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class OmitOuterLoopBracesAnalyzerTests : AnalyzerTestBase
+public sealed class RequireMultilineLoopBracesAnalyzerTests : AnalyzerTestBase
 {
-    private const string RuleId = "SQR0001";
+    private const string RuleId = "SQR0008";
 
     [Fact]
-    public async Task DoesNotFlagOuterLoopWithNonLoopBody()
+    public async Task AllowsSingleLineEmbeddedLoopBody()
     {
         const string source = """
                               class C
@@ -18,20 +18,18 @@ public sealed class OmitOuterLoopBracesAnalyzerTests : AnalyzerTestBase
                                   {
                                       int i = 0;
                                       while (i < 10)
-                                      {
                                           i++;
-                                      }
                                   }
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineLoopBodyBracesAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task FlagsOuterLoopContainingOnlyNestedLoop()
+    public async Task FlagsMultilineEmbeddedLoopBody()
     {
         const string source = """
                               class C
@@ -40,16 +38,17 @@ public sealed class OmitOuterLoopBracesAnalyzerTests : AnalyzerTestBase
                                   {
                                       int i = 0;
                                       while (i < 10)
-                                      {
-                                          for (int j = 0; j < 10; j++)
-                                          {
-                                          }
-                                      }
+                                          DoSomething(
+                                              i);
+                                  }
+
+                                  void DoSomething(int value)
+                                  {
                                   }
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineLoopBodyBracesAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);

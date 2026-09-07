@@ -17,11 +17,15 @@
         <PackageReference Include="xunit.v3" Version="4.0.0"/>
         <PackageReference Include="xunit.v3.assert" Version="4.0.0"/>
         <PackageReference Include="xunit.analyzers" Version="2.0.0" PrivateAssets="all"/>
-        <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0"/>
+        <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\squirix.analyzers\Squirix.Analyzers.csproj"/>
+        <ProjectReference Include="..\..\src\squirix.analyzers\Squirix.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
     </ItemGroup>
 
     <ItemGroup>

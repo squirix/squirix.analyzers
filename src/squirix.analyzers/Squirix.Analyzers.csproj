@@ -14,7 +14,7 @@
         <!-- Pack as a Roslyn analyzer NuGet package. -->
         <IsPackable>true</IsPackable>
         <PackageId>squirix.analyzers</PackageId>
-        <Version>0.1.2</Version>
+        <Version>0.1.4</Version>
         <Authors>Squirix Team</Authors>
         <Description>Design-time Roslyn analyzers that enforce squirix's internal coding conventions: brace style, member-size limits, naming rules, and code-smell guards.</Description>
         <RepositoryUrl>https://github.com/squirix/Squirix.Analyzers</RepositoryUrl>
@@ -34,9 +34,14 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" PrivateAssets="all"/>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" PrivateAssets="all"/>
         <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400" PrivateAssets="all"/>
         <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
     </ItemGroup>
 
     <Target Name="_IncludeAnalyzerInPackage">

@@ -41,10 +41,8 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor IsConstantRule = new(IsConstantRuleId, IsConstantTitle, IsConstantMessage, Category, DiagnosticSeverity.Info, true,
         IsConstantDescription);
 
-
     private static readonly DiagnosticDescriptor IsNotConstantRule = new(IsNotConstantRuleId, IsNotConstantTitle, IsNotConstantMessage, Category, DiagnosticSeverity.Info, true,
         IsNotConstantDescription);
-
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [NullCheckRule, IsConstantRule, IsNotConstantRule];
@@ -73,6 +71,9 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
             case UnaryPatternSyntax unaryPattern when unaryPattern.IsKind(SyntaxKind.NotPattern):
                 ReportPattern(context, isPattern, unaryPattern.Pattern, true);
                 break;
+            case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
+                ReportNullArms(context, isPattern, nested);
+                break;
         }
     }
 
@@ -82,7 +83,15 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         if (type == null)
             return false;
 
-        return type.SpecialType != SpecialType.System_Object && type.TypeKind is not (TypeKind.Interface or TypeKind.TypeParameter or TypeKind.Dynamic);
+        // Interfaces accept '== null': no user-defined operator is visible through an interface static type,
+        // so overload resolution always picks the built-in reference equality, exactly matching 'is null'.
+        // Only 'object' (no sharper type available) and 'dynamic' (runtime binding) stay excluded.
+        // Unconstrained (or reference-constrained) type parameters accept '== null'; value-type-constrained
+        // ones do not, since the comparison would always be false.
+        if (type.TypeKind == TypeKind.TypeParameter)
+            return !type.IsValueType;
+
+        return type.SpecialType != SpecialType.System_Object && type.TypeKind != TypeKind.Dynamic;
     }
 
     private static bool HasEqualityOperatorMembers(ITypeSymbol type)
@@ -109,6 +118,11 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
             if (current.SpecialType == SpecialType.System_String)
                 return false;
 
+            // Record types synthesize 'operator =='/ '!=' that still delegate null checks to
+            // object.ReferenceEquals, so 'x == null' and 'x is null' are equivalent for records.
+            if (current.IsRecord)
+                return false;
+
             if (HasEqualityOperatorMembers(current))
                 return true;
 
@@ -121,6 +135,23 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
     private static bool IsNotANumber(object? value) => value is float.NaN or double.NaN;
 
     private static bool IsNullLiteral(ExpressionSyntax expression) => expression.IsKind(SyntaxKind.NullLiteralExpression);
+
+    private static void ReportNullArms(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
+    {
+        switch (pattern)
+        {
+            case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
+                ReportNullArms(context, isPattern, nested.Left);
+                ReportNullArms(context, isPattern, nested.Right);
+                break;
+            case ParenthesizedPatternSyntax parenthesized:
+                ReportNullArms(context, isPattern, parenthesized.Pattern);
+                break;
+            case ConstantPatternSyntax constantPattern:
+                ReportPattern(context, isPattern, constantPattern, false);
+                break;
+        }
+    }
 
     private static void ReportPattern(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern, bool negated)
     {
@@ -163,6 +194,9 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
 
         if (HasUserDefinedEqualityOperator(type))
             return false;
+
+        if (type.TypeKind == TypeKind.TypeParameter)
+            return !type.IsValueType;
 
         return type.IsReferenceType || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
     }

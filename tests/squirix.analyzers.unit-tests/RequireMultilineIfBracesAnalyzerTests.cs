@@ -4,12 +4,12 @@ using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class OmitSingleStatementBracesAnalyzerTests : AnalyzerTestBase
+public sealed class RequireMultilineIfBracesAnalyzerTests : AnalyzerTestBase
 {
-    private const string RuleId = "SQR0010";
+    private const string RuleId = "SQR0018";
 
     [Fact]
-    public async Task DoesNotFlagUnbracedIfBody()
+    public async Task AllowsSingleLineEmbeddedIfBody()
     {
         const string source = """
                               class C
@@ -17,22 +17,18 @@ public sealed class OmitSingleStatementBracesAnalyzerTests : AnalyzerTestBase
                                   void M(bool flag)
                                   {
                                       if (flag)
-                                          Call();
-                                  }
-
-                                  void Call()
-                                  {
+                                          flag = false;
                                   }
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task FlagsSingleLineBracedIfBody()
+    public async Task FlagsMultilineEmbeddedIfBody()
     {
         const string source = """
                               class C
@@ -40,18 +36,17 @@ public sealed class OmitSingleStatementBracesAnalyzerTests : AnalyzerTestBase
                                   void M(bool flag)
                                   {
                                       if (flag)
-                                      {
-                                          Call();
-                                      }
+                                          DoSomething(
+                                              flag);
                                   }
 
-                                  void Call()
+                                  void DoSomething(bool value)
                                   {
                                   }
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, DefaultCancellationToken);
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);

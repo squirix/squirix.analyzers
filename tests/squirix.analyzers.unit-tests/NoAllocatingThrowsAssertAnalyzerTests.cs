@@ -1,140 +1,143 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
 using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class NoAllocatingThrowsAssertAnalyzerTests
+public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
 {
     private const string RuleId = "SQR0019";
 
     [Fact]
-    public async Task FlagsAnyThrowsMethodWithDelegateArgument()
+    public async Task AllowsBareThrowsCallWithoutMemberAccess()
     {
         const string source = """
-            namespace Other
-            {
-                static class Assert
-                {
-                    public static void Throws<T>(System.Action action) where T : System.Exception
-                    {
-                    }
-                }
-            }
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      Throws<System.InvalidOperationException>(() => { });
+                                  }
 
-            class C
-            {
-                void M()
-                {
-                    Other.Assert.Throws<System.InvalidOperationException>(() => { });
-                }
-            }
-            """;
+                                  static void Throws<T>(System.Action action) where T : System.Exception
+                                  {
+                                  }
+                              }
+                              """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Equal([RuleId], diagnostics.Select(static d => d.Id));
+        Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task FlagsFluentAssertionsThrowWithDelegateArgument()
+    public async Task AllowsEmptyLambdaWithoutCapture()
     {
         const string source = """
-            class C
-            {
-                void M(System.Action action)
-                {
-                    action.Should().Throw<System.InvalidOperationException>(() => { });
-                }
-            }
+                              namespace Other
+                              {
+                                  static class Assert
+                                  {
+                                      public static void Throws<T>(System.Action action) where T : System.Exception
+                                      {
+                                      }
+                                  }
+                              }
 
-            static class ShouldExtensions
-            {
-                public static T Should<T>(this T value) => value;
-            }
-            """;
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      Other.Assert.Throws<System.InvalidOperationException>(() => { });
+                                  }
+                              }
+                              """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostics[0].Id);
+        Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task FlagsThrowExactlyWithDelegateArgument()
+    public async Task AllowsNonCapturingLambdaWithoutStatic()
     {
         const string source = """
-            static class AssertThrows
-            {
-                public static void ThrowExactly(System.Type type, System.Action action)
-                {
-                }
-            }
+                              namespace Other
+                              {
+                                  static class Assert
+                                  {
+                                      public static void Throws<T>(System.Action action) where T : System.Exception
+                                      {
+                                      }
+                                  }
+                              }
 
-            class C
-            {
-                void M()
-                {
-                    AssertThrows.ThrowExactly(typeof(System.InvalidOperationException), () => { });
-                }
-            }
-            """;
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      Other.Assert.Throws<System.InvalidOperationException>(() => StaticHelper());
+                                  }
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+                                  static void StaticHelper()
+                                  {
+                                  }
+                              }
+                              """;
 
-        Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostics[0].Id);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task AllowsStaticLambdaWithoutCapture()
+    {
+        const string source = """
+                              namespace Other
+                              {
+                                  static class Assert
+                                  {
+                                      public static void Throws<T>(System.Action action) where T : System.Exception
+                                      {
+                                      }
+                                  }
+                              }
+
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      Other.Assert.Throws<System.InvalidOperationException>(static () => { });
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
     }
 
     [Fact]
     public async Task AllowsThrowMethodWithoutDelegateArgument()
     {
         const string source = """
-            class C
-            {
-                void M()
-                {
-                    ThrowExactly(System.InvalidOperationException, MyFunc);
-                }
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      ThrowExactly(System.InvalidOperationException, MyFunc);
+                                  }
 
-                static void ThrowExactly(System.Type type, System.Func<object?> action)
-                {
-                }
+                                  static void ThrowExactly(System.Type type, System.Func<object?> action)
+                                  {
+                                  }
 
-                static object? MyFunc() => null;
-            }
-            """;
+                                  static object? MyFunc() => null;
+                              }
+                              """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
-
-        Assert.Empty(diagnostics);
-    }
-
-    [Fact]
-    public async Task AllowsStaticLambdaWithoutCaptureAllocation()
-    {
-        const string source = """
-            namespace Other
-            {
-                static class Assert
-                {
-                    public static void Throws<T>(System.Action action) where T : System.Exception
-                    {
-                    }
-                }
-            }
-
-            class C
-            {
-                void M()
-                {
-                    Other.Assert.Throws<System.InvalidOperationException>(static () => { });
-                }
-            }
-            """;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
@@ -143,72 +146,132 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
     public async Task AllowsUnrelatedMethod()
     {
         const string source = """
-            class C
-            {
-                void M()
-                {
-                    DoWork();
-                }
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      DoWork();
+                                  }
 
-                void DoWork()
-                {
-                }
-            }
-            """;
+                                  void DoWork()
+                                  {
+                                  }
+                              }
+                              """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public async Task FlagsFullyQualifiedNamespaceThrowsWithDelegateArgument()
+    public async Task FlagsAnyThrowsMethodWithDelegateArgument()
     {
         const string source = """
-            namespace Fully.Qualified.Tests
-            {
-                static class AssertHelpers
-                {
-                    public static void Throws<T>(System.Action action) where T : System.Exception
-                    {
-                    }
-                }
-            }
+                              namespace Other
+                              {
+                                  static class Assert
+                                  {
+                                      public static void Throws<T>(System.Action action) where T : System.Exception
+                                      {
+                                      }
+                                  }
+                              }
 
-            class C
-            {
-                void M()
-                {
-                    Fully.Qualified.Tests.AssertHelpers.Throws<System.InvalidOperationException>(() => { });
-                }
-            }
-            """;
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var x = 0;
+                                      Other.Assert.Throws<System.InvalidOperationException>(() => { x++; });
+                                  }
+                              }
+                              """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Single(diagnostics);
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task FlagsFluentThrowWithDelegateArgument()
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M(System.Action action)
+                                  {
+                                      action.Should().Throw<System.InvalidOperationException>(() => action());
+                                  }
+                              }
+
+                              static class ShouldExtensions
+                              {
+                                  public static T Should<T>(this T value) => value;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+
+        _ = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostics[0].Id);
     }
 
     [Fact]
-    public async Task AllowsBareThrowsCallWithoutMemberAccess()
+    public async Task FlagsQualifiedThrowsWithDelegateArgument()
     {
         const string source = """
-            class C
-            {
-                void M()
-                {
-                    Throws<System.InvalidOperationException>(() => { });
-                }
+                              namespace Fully.Qualified.Tests
+                              {
+                                  static class AssertHelpers
+                                  {
+                                      public static void Throws<T>(System.Action action) where T : System.Exception
+                                      {
+                                      }
+                                  }
+                              }
 
-                static void Throws<T>(System.Action action) where T : System.Exception
-                {
-                }
-            }
-            """;
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var x = 0;
+                                      Fully.Qualified.Tests.AssertHelpers.Throws<System.InvalidOperationException>(() => { x++; });
+                                  }
+                              }
+                              """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, TestContext.Current.CancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostics[0].Id);
+    }
+
+    [Fact]
+    public async Task FlagsThrowExactlyWithDelegateArgument()
+    {
+        const string source = """
+                              static class AssertThrows
+                              {
+                                  public static void ThrowExactly(System.Type type, System.Action action)
+                                  {
+                                  }
+                              }
+
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var x = 0;
+                                      AssertThrows.ThrowExactly(typeof(System.InvalidOperationException), () => { x++; });
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+
+        _ = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostics[0].Id);
     }
 }

@@ -20,7 +20,6 @@ public sealed class TypeNamespacePrefixAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Title = "Avoid type names that repeat the parent namespace segment";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description);
 
-
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
 
@@ -68,10 +67,7 @@ public sealed class TypeNamespacePrefixAnalyzer : DiagnosticAnalyzer
         if (!typeName.StartsWith(segment, StringComparison.Ordinal))
             return false;
 
-        if (typeName.Length == segment.Length)
-            return true;
-
-        return char.IsUpper(typeName[segment.Length]);
+        return typeName.Length == segment.Length || char.IsUpper(typeName[segment.Length]);
     }
 
     private static bool TryGetImmediateNamespaceSegment(INamespaceSymbol? ns, out string segment)
