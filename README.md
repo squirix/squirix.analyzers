@@ -74,7 +74,7 @@ Requires the .NET SDK. The analyzer target is `netstandard2.1`; the unit-test pr
 ```bash
 dotnet build Squirix.Analyzers.slnx -c Release
 dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj -c Release
-dotnet pack src/squirix.analyzers/Squirix.Analyzers.csproj -c Release -o ./artifacts
+dotnet pack src/squirix.analyzers/squirix.analyzers.csproj -c Release -o ./artifacts
 ```
 
 The packed analyzer is emitted under `artifacts/squirix.analyzers.<version>.nupkg`.

@@ -3,7 +3,7 @@
         <Platform Name="Any CPU"/>
     </Configurations>
     <Folder Name="/src/">
-        <Project Path="src/squirix.analyzers/Squirix.Analyzers.csproj"/>
+        <Project Path="src/squirix.analyzers/squirix.analyzers.csproj"/>
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj"/>

@@ -45,7 +45,7 @@ jobs:
                 run: dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
 
             -   name: Pack
-                run: dotnet pack src/squirix.analyzers/Squirix.Analyzers.csproj --configuration Release --no-build --output ./artifacts/packages
+                run: dotnet pack src/squirix.analyzers/squirix.analyzers.csproj --configuration Release --no-build --output ./artifacts/packages
 
     format:
         name: Format
