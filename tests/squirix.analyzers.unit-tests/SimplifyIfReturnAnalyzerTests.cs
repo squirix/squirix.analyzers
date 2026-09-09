@@ -212,4 +212,27 @@ public sealed class SimplifyIfReturnAnalyzerTests : AnalyzerTestBase
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task AllowsRefReturns()
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int[] _data = new int[1];
+
+                                  public ref int GetItem(int index)
+                                  {
+                                      if (index < 0)
+                                          return ref _data[0];
+
+                                      return ref _data[index];
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
 }

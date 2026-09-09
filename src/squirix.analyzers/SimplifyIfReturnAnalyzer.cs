@@ -15,8 +15,8 @@ namespace Squirix.Analyzers;
 /// <c language="csharp">return condition ? first : second;</c> or
 /// <c language="csharp">return condition ? throw new ArgumentException(...) : second;</c> (SQR0026).
 /// Only value-returning <c language="csharp">return</c> statements and <c language="csharp">throw</c> statements
-/// with an explicit expression are considered, and at least one side must be a <c language="csharp">return</c>,
-/// so the rewrite never changes behavior.
+/// with an explicit expression are considered, at least one side must be a <c language="csharp">return</c>,
+/// and <c language="csharp">ref</c> returns are never flagged, so the rewrite never changes behavior.
 /// This rule backports the newer <c>IDE0046</c> detections for SDK 10-era compilers, which stay silent on
 /// several of these shapes (for example an <c language="csharp">if</c> return followed by a ternary return or
 /// a trailing <c language="csharp">throw</c>).
@@ -96,7 +96,9 @@ public sealed class SimplifyIfReturnAnalyzer : DiagnosticAnalyzer
             inner = block.Statements[0];
         }
 
-        if (inner is ReturnStatementSyntax valueReturn && valueReturn.Expression != null)
+        if (inner is ReturnStatementSyntax valueReturn &&
+            valueReturn.Expression is { } returned &&
+            returned is not RefExpressionSyntax)
         {
             isReturn = true;
             return true;

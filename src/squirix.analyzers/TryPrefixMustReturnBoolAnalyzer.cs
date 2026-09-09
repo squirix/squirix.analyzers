@@ -18,7 +18,7 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Method '{0}' has 'Try' prefix but returns '{1}', expected bool, Task<bool>, or ValueTask<bool>";
 
-    private static readonly LocalizableString Title = "Try-prefixed method must return bool";
+    private static readonly LocalizableString Title = "Try-prefixed method must return a Boolean result";
 
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Warning, true, Description);
 
