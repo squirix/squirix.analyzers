@@ -8,6 +8,7 @@ namespace Squirix.Analyzers;
 /// <summary>
 /// Flags methods prefixed with "Try" that do not return <c>bool</c>, <c>Task&lt;bool&gt;</c>,
 /// or <c>ValueTask&lt;bool&gt;</c> (SQR0025).
+/// Override methods are ignored: their names are dictated by the base declaration, which is flagged instead.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
@@ -40,6 +41,9 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
     {
         var method = (IMethodSymbol)context.Symbol;
         if (AnalyzerHelpers.IsCompilerOrGenerated(method))
+            return;
+
+        if (method.IsOverride)
             return;
 
         var name = method.Name;
