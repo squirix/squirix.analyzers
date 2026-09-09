@@ -147,4 +147,26 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
     }
+
+    [Fact]
+    public async Task FlagsBaseButSkipsOverride()
+    {
+        const string source = """
+                              abstract class B
+                              {
+                                  public abstract System.Threading.Tasks.Task<int> TryGetAsync();
+                              }
+
+                              sealed class C : B
+                              {
+                                  public override System.Threading.Tasks.Task<int> TryGetAsync() => System.Threading.Tasks.Task.FromResult(0);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
+        Assert.Equal(3, diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1);
+    }
 }
