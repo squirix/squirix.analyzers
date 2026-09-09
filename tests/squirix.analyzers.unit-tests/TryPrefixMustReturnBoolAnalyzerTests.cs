@@ -85,4 +85,66 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(RuleId, diagnostic.Id);
     }
+
+    [Fact]
+    public async Task AllowsTryMethodReturningTaskOfBool()
+    {
+        const string source = """
+                              class C
+                              {
+                                  public System.Threading.Tasks.Task<bool> TryPingAsync() => System.Threading.Tasks.Task.FromResult(true);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task AllowsTryMethodReturningValueTaskBool()
+    {
+        const string source = """
+                              class C
+                              {
+                                  public System.Threading.Tasks.ValueTask<bool> TryPingAsync() => new System.Threading.Tasks.ValueTask<bool>(true);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task FlagsTryMethodReturningBareTask()
+    {
+        const string source = """
+                              class C
+                              {
+                                  public System.Threading.Tasks.Task TryPingAsync() => System.Threading.Tasks.Task.CompletedTask;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task FlagsTryMethodReturningTaskOfInt()
+    {
+        const string source = """
+                              class C
+                              {
+                                  public System.Threading.Tasks.Task<int> TryGetAsync() => System.Threading.Tasks.Task.FromResult(0);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(RuleId, diagnostic.Id);
+    }
 }
