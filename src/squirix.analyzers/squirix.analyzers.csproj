@@ -50,6 +50,10 @@
         <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
+    </ItemGroup>
+
     <Target Name="_IncludeAnalyzerInPackage">
         <ItemGroup>
             <TfmSpecificPackageFile Include="$(TargetDir)\$(AssemblyName).dll"
