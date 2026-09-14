@@ -72,7 +72,7 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 Requires the .NET SDK. The analyzer target is `netstandard2.1`; the unit-test project targets `net10.0`.
 
 ```bash
-dotnet build Squirix.Analyzers.slnx -c Release
+dotnet build squirix.analyzers.slnx -c Release
 dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj -c Release
 dotnet pack src/squirix.analyzers/squirix.analyzers.csproj -c Release -o ./artifacts
 ```
