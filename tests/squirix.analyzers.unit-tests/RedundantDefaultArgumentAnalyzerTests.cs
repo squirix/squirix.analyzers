@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class RedundantDefaultArgumentAnalyzerTests : AnalyzerTestBase
+public sealed class RedundantDefaultArgumentAnalyzerTests
 {
     private const string RuleId = "SQR0011";
 
-    [Fact]
-    public async Task AllowsArgumentNotEqualToDefault()
+    [Test]
+    public async Task AllowsArgumentNotEqualToDefault(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -25,13 +25,13 @@ public sealed class RedundantDefaultArgumentAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsDefaultForNonNullDefault()
+    [Test]
+    public async Task AllowsDefaultForNonNullDefault(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -47,13 +47,13 @@ public sealed class RedundantDefaultArgumentAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsDefaultWhenNotEqual()
+    [Test]
+    public async Task AllowsDefaultWhenNotEqual(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -69,13 +69,13 @@ public sealed class RedundantDefaultArgumentAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsArgumentEqualToParameterDefault()
+    [Test]
+    public async Task FlagsArgumentEqualToParameterDefault(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -91,14 +91,14 @@ public sealed class RedundantDefaultArgumentAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsDefaultForNullDefault()
+    [Test]
+    public async Task FlagsDefaultForNullDefault(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -114,14 +114,14 @@ public sealed class RedundantDefaultArgumentAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsDefaultLiteralWhenEqualToDefault()
+    [Test]
+    public async Task FlagsDefaultLiteralWhenEqualToDefault(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -137,9 +137,9 @@ public sealed class RedundantDefaultArgumentAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

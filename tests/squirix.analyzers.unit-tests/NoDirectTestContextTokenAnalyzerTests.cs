@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
+public sealed class NoDirectTestContextTokenAnalyzerTests
 {
     private const string RuleId = "SQR0017";
 
-    [Fact]
-    public async Task AllowsDeclaredSharedTokenOfAnyName()
+    [Test]
+    public async Task AllowsDeclaredSharedTokenOfAnyName(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -24,18 +24,18 @@ public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsTypeDeclaredCancellationToken()
+    [Test]
+    public async Task AllowsTypeDeclaredCancellationToken(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
                               {
-                                  private System.Threading.CancellationToken DefaultCancellationToken
+                                  private System.Threading.CancellationToken cancellationToken
                                       => System.Threading.CancellationToken.None;
 
                                   void M()
@@ -45,13 +45,13 @@ public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsUseWhenBaseClassExposesSharedToken()
+    [Test]
+    public async Task AllowsUseWhenBaseClassExposesSharedToken(CancellationToken cancellationToken)
     {
         const string source = """
                               class Base
@@ -69,13 +69,13 @@ public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task DoesNotFlagPreviousUseInsideStaticClass()
+    [Test]
+    public async Task DoesNotFlagPreviousUseInsideStaticClass(CancellationToken cancellationToken)
     {
         const string source = """
                               static class C
@@ -87,13 +87,13 @@ public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsBaseNonTokenThreadingType()
+    [Test]
+    public async Task FlagsBaseNonTokenThreadingType(CancellationToken cancellationToken)
     {
         const string source = """
                               class Base
@@ -111,14 +111,14 @@ public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsDirectTestContextTokenUse()
+    [Test]
+    public async Task FlagsDirectTestContextTokenUse(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -130,14 +130,14 @@ public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsUseWhenBaseClassDoesNotExposeToken()
+    [Test]
+    public async Task FlagsUseWhenBaseClassDoesNotExposeToken(CancellationToken cancellationToken)
     {
         const string source = """
                               class Base
@@ -153,9 +153,9 @@ public sealed class NoDirectTestContextTokenAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

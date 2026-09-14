@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
+public sealed class UseArgumentExceptionHelperAnalyzerTests
 {
     private const string RuleId = "SQR0021";
 
-    [Fact]
-    public async Task AllowsAlreadyUsingThrowHelper()
+    [Test]
+    public async Task AllowsAlreadyUsingThrowHelper(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -21,13 +21,13 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsGuardThrowingOtherExceptionType()
+    [Test]
+    public async Task AllowsGuardThrowingOtherExceptionType(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -40,13 +40,13 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsMismatchedParamName()
+    [Test]
+    public async Task AllowsMismatchedParamName(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -59,13 +59,13 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsNonStringArgumentCheck()
+    [Test]
+    public async Task AllowsNonStringArgumentCheck(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -78,13 +78,13 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsUnrelatedIsNullOrEmptyHelper()
+    [Test]
+    public async Task AllowsUnrelatedIsNullOrEmptyHelper(CancellationToken cancellationToken)
     {
         const string source = """
                               static class Helpers
@@ -102,13 +102,13 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsUserDefinedArgumentException()
+    [Test]
+    public async Task AllowsUserDefinedArgumentException(CancellationToken cancellationToken)
     {
         const string source = """
                               namespace Other
@@ -129,13 +129,13 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsGloballyQualifiedForms()
+    [Test]
+    public async Task FlagsGloballyQualifiedForms(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -148,14 +148,14 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsIsNullOrEmptyGuardWithBracedBody()
+    [Test]
+    public async Task FlagsIsNullOrEmptyGuardWithBracedBody(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -170,14 +170,14 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsNullOrWhitespaceGuard()
+    [Test]
+    public async Task FlagsNullOrWhitespaceGuard(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -190,9 +190,9 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

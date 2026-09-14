@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class MethodNameTooLongAnalyzerTests : AnalyzerTestBase
+public sealed class MethodNameTooLongAnalyzerTests
 {
     private const string RuleId = "SQR0005";
 
-    [Fact]
-    public async Task AllowsShortMethodName()
+    [Test]
+    public async Task AllowsShortMethodName(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -20,13 +20,13 @@ public sealed class MethodNameTooLongAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new MethodNameTooLongAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new MethodNameTooLongAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsOverLongMethodName()
+    [Test]
+    public async Task FlagsOverLongMethodName(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -37,9 +37,9 @@ public sealed class MethodNameTooLongAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new MethodNameTooLongAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new MethodNameTooLongAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

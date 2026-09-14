@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
+public sealed class TryPrefixMustReturnBoolAnalyzerTests
 {
     private const string RuleId = "SQR0025";
 
-    [Fact]
-    public async Task AllowsTryMethodReturningBool()
+    [Test]
+    public async Task AllowsTryMethodReturningBool(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -18,13 +18,13 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsNonTryMethodReturningNonBool()
+    [Test]
+    public async Task AllowsNonTryMethodReturningNonBool(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -33,13 +33,13 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsTryMethodReturningInt()
+    [Test]
+    public async Task FlagsTryMethodReturningInt(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -48,14 +48,14 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsTryMethodReturningString()
+    [Test]
+    public async Task FlagsTryMethodReturningString(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -64,14 +64,14 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsTryMethodReturningVoid()
+    [Test]
+    public async Task FlagsTryMethodReturningVoid(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -80,14 +80,14 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task AllowsTryMethodReturningTaskOfBool()
+    [Test]
+    public async Task AllowsTryMethodReturningTaskOfBool(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -96,13 +96,13 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsTryMethodReturningValueTaskBool()
+    [Test]
+    public async Task AllowsTryMethodReturningValueTaskBool(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -111,13 +111,13 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsTryMethodReturningBareTask()
+    [Test]
+    public async Task FlagsTryMethodReturningBareTask(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -126,14 +126,14 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsTryMethodReturningTaskOfInt()
+    [Test]
+    public async Task FlagsTryMethodReturningTaskOfInt(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -142,14 +142,14 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsBaseButSkipsOverride()
+    [Test]
+    public async Task FlagsBaseButSkipsOverride(CancellationToken cancellationToken)
     {
         const string source = """
                               abstract class B
@@ -163,10 +163,10 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
-        Assert.Equal(3, diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+        _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1).IsEqualTo(3);
     }
 }

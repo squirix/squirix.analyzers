@@ -20,7 +20,6 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString MessageFormat = "Method '{0}' has 'Try' prefix but returns '{1}', expected bool, Task<bool>, or ValueTask<bool>";
 
     private static readonly LocalizableString Title = "Try-prefixed method must return a Boolean result";
-
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Warning, true, Description);
 
     /// <inheritdoc />
@@ -60,6 +59,9 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, method.ReturnType.Name));
     }
 
+    private static bool IsSystemThreadingTasks(INamespaceSymbol? ns) => ns is { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace.Name: "System" } } &&
+                                                                        ns.ContainingNamespace?.ContainingNamespace?.ContainingNamespace?.IsGlobalNamespace == true;
+
     /// <summary>
     /// Accepts <c>bool</c> directly or wrapped in a single <c>Task&lt;bool&gt;</c> or
     /// <c>ValueTask&lt;bool&gt;</c> from <c>System.Threading.Tasks</c>.
@@ -69,7 +71,7 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (type.SpecialType == SpecialType.System_Boolean)
             return true;
 
-        if (type is not INamedTypeSymbol named || named.Arity != 1)
+        if (type is not INamedTypeSymbol { Arity: 1 } named)
             return false;
 
         if (named.Name != "Task" && named.Name != "ValueTask")
@@ -78,12 +80,6 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (!IsSystemThreadingTasks(named.ContainingNamespace))
             return false;
 
-        return named.TypeArguments is [var result] && result.SpecialType == SpecialType.System_Boolean;
+        return named.TypeArguments is [{ SpecialType: SpecialType.System_Boolean }];
     }
-
-    private static bool IsSystemThreadingTasks(INamespaceSymbol? ns) =>
-        ns?.Name == "Tasks" &&
-        ns?.ContainingNamespace?.Name == "Threading" &&
-        ns?.ContainingNamespace?.ContainingNamespace?.Name == "System" &&
-        ns?.ContainingNamespace?.ContainingNamespace?.ContainingNamespace?.IsGlobalNamespace == true;
 }

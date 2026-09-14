@@ -10,7 +10,7 @@ namespace Squirix.Analyzers;
 /// <summary>
 /// Forbids direct use of <c language="csharp">TestContext.Current.CancellationToken</c> inside non-static classes.
 /// A class may use it directly only when itself or one of its base classes exposes a shared
-/// <c language="csharp">CancellationToken</c> member, so derived tests do not sprinkle the xUnit static everywhere.
+/// <c language="csharp">CancellationToken</c> member, so derived tests do not access TestContext directly everywhere.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer

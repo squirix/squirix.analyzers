@@ -32,7 +32,6 @@ public sealed class SimplifyIfReturnAnalyzer : DiagnosticAnalyzer
                                                             "conditional return, for example 'return condition ? first : second;'.";
 
     private static readonly LocalizableString MessageFormat = "Simplify this 'if' and the following statement into one conditional return";
-
     private static readonly LocalizableString Title = "Simplify if-return to conditional return";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
 
@@ -96,15 +95,13 @@ public sealed class SimplifyIfReturnAnalyzer : DiagnosticAnalyzer
             inner = block.Statements[0];
         }
 
-        if (inner is ReturnStatementSyntax valueReturn &&
-            valueReturn.Expression is { } returned &&
-            returned is not RefExpressionSyntax)
+        if (inner is ReturnStatementSyntax { Expression: not null and not RefExpressionSyntax })
         {
             isReturn = true;
             return true;
         }
 
-        if (inner is ThrowStatementSyntax valueThrow && valueThrow.Expression != null)
+        if (inner is ThrowStatementSyntax { Expression: not null })
         {
             isReturn = false;
             return true;

@@ -12,8 +12,11 @@ namespace Squirix.Analyzers.UnitTests.Support;
 /// <summary>Compiles C# source and returns the findings of a single analyzer.</summary>
 internal static class AnalyzerRunner
 {
-    public static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default,
-        ImmutableDictionary<string, string>? analyzerOptions = null)
+    public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
+        RunAsync(analyzer, source, null, cancellationToken);
+
+    public static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions = null,
+        CancellationToken cancellationToken = default)
     {
         var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
         var references = new List<MetadataReference>();
