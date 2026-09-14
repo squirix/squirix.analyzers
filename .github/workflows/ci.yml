@@ -36,10 +36,10 @@ jobs:
                         ${{ runner.os }}-dotnet10-nuget-
 
             -   name: Restore
-                run: dotnet restore Squirix.Analyzers.slnx
+                run: dotnet restore squirix.analyzers.slnx
 
             -   name: Build
-                run: dotnet build Squirix.Analyzers.slnx --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
+                run: dotnet build squirix.analyzers.slnx --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
 
             -   name: Test
                 run: dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
@@ -68,10 +68,10 @@ jobs:
                     global-json-file: global.json
 
             -   name: Restore
-                run: dotnet restore Squirix.Analyzers.slnx
+                run: dotnet restore squirix.analyzers.slnx
 
             -   name: Format Check
-                run: dotnet format Squirix.Analyzers.slnx --verify-no-changes --no-restore
+                run: dotnet format squirix.analyzers.slnx --verify-no-changes --no-restore
 
     markdownlint:
         name: Markdownlint
