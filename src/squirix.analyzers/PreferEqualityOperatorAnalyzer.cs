@@ -138,18 +138,23 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
 
     private static void ReportNullArms(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
     {
-        switch (pattern)
+        while (true)
         {
-            case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
-                ReportNullArms(context, isPattern, nested.Left);
-                ReportNullArms(context, isPattern, nested.Right);
-                break;
-            case ParenthesizedPatternSyntax parenthesized:
-                ReportNullArms(context, isPattern, parenthesized.Pattern);
-                break;
-            case ConstantPatternSyntax constantPattern:
-                ReportPattern(context, isPattern, constantPattern, false);
-                break;
+            switch (pattern)
+            {
+                case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
+                    ReportNullArms(context, isPattern, nested.Left);
+                    pattern = nested.Right;
+                    continue;
+                case ParenthesizedPatternSyntax parenthesized:
+                    pattern = parenthesized.Pattern;
+                    continue;
+                case ConstantPatternSyntax constantPattern:
+                    ReportPattern(context, isPattern, constantPattern, false);
+                    break;
+            }
+
+            break;
         }
     }
 

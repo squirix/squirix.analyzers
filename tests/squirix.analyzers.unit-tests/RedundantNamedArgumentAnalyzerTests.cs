@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class RedundantNamedArgumentAnalyzerTests : AnalyzerTestBase
+public sealed class RedundantNamedArgumentAnalyzerTests
 {
     private const string RuleId = "SQR0009";
 
-    [Fact]
-    public async Task AllowsOutOfOrderNamedArgument()
+    [Test]
+    public async Task AllowsOutOfOrderNamedArgument(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -25,13 +25,13 @@ public sealed class RedundantNamedArgumentAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantNamedArgumentAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantNamedArgumentAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsInOrderNamedArgument()
+    [Test]
+    public async Task FlagsInOrderNamedArgument(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -47,9 +47,9 @@ public sealed class RedundantNamedArgumentAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantNamedArgumentAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantNamedArgumentAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

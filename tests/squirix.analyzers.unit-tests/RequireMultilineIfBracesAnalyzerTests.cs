@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class RequireMultilineIfBracesAnalyzerTests : AnalyzerTestBase
+public sealed class RequireMultilineIfBracesAnalyzerTests
 {
     private const string RuleId = "SQR0018";
 
-    [Fact]
-    public async Task AllowsSingleLineEmbeddedIfBody()
+    [Test]
+    public async Task AllowsSingleLineEmbeddedIfBody(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -22,13 +22,13 @@ public sealed class RequireMultilineIfBracesAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsMultilineEmbeddedIfBody()
+    [Test]
+    public async Task FlagsMultilineEmbeddedIfBody(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -46,9 +46,9 @@ public sealed class RequireMultilineIfBracesAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

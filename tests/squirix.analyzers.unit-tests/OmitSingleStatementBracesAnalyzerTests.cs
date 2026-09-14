@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class OmitSingleStatementBracesAnalyzerTests : AnalyzerTestBase
+public sealed class OmitSingleStatementBracesAnalyzerTests
 {
     private const string RuleId = "SQR0010";
 
-    [Fact]
-    public async Task DoesNotFlagUnbracedIfBody()
+    [Test]
+    public async Task DoesNotFlagUnbracedIfBody(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -26,13 +26,13 @@ public sealed class OmitSingleStatementBracesAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsSingleLineBracedIfBody()
+    [Test]
+    public async Task FlagsSingleLineBracedIfBody(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -51,9 +51,9 @@ public sealed class OmitSingleStatementBracesAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

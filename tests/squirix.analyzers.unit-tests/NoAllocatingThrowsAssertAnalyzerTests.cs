@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
+public sealed class NoAllocatingThrowsAssertAnalyzerTests
 {
     private const string RuleId = "SQR0019";
 
-    [Fact]
-    public async Task AllowsBareThrowsCallWithoutMemberAccess()
+    [Test]
+    public async Task AllowsBareThrowsCallWithoutMemberAccess(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -25,13 +25,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsEmptyLambdaWithoutCapture()
+    [Test]
+    public async Task AllowsEmptyLambdaWithoutCapture(CancellationToken cancellationToken)
     {
         const string source = """
                               namespace Other
@@ -53,13 +53,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsNonCapturingLambdaWithoutStatic()
+    [Test]
+    public async Task AllowsNonCapturingLambdaWithoutStatic(CancellationToken cancellationToken)
     {
         const string source = """
                               namespace Other
@@ -85,13 +85,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsStaticLambdaWithoutCapture()
+    [Test]
+    public async Task AllowsStaticLambdaWithoutCapture(CancellationToken cancellationToken)
     {
         const string source = """
                               namespace Other
@@ -113,13 +113,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsThrowMethodWithoutDelegateArgument()
+    [Test]
+    public async Task AllowsThrowMethodWithoutDelegateArgument(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -137,13 +137,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsUnrelatedMethod()
+    [Test]
+    public async Task AllowsUnrelatedMethod(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -159,13 +159,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsAnyThrowsMethodWithDelegateArgument()
+    [Test]
+    public async Task FlagsAnyThrowsMethodWithDelegateArgument(CancellationToken cancellationToken)
     {
         const string source = """
                               namespace Other
@@ -188,14 +188,14 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsFluentThrowWithDelegateArgument()
+    [Test]
+    public async Task FlagsFluentThrowWithDelegateArgument(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -212,14 +212,14 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        _ = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostics[0].Id);
+        _ = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsQualifiedThrowsWithDelegateArgument()
+    [Test]
+    public async Task FlagsQualifiedThrowsWithDelegateArgument(CancellationToken cancellationToken)
     {
         const string source = """
                               namespace Fully.Qualified.Tests
@@ -242,14 +242,14 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        _ = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostics[0].Id);
+        _ = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsThrowExactlyWithDelegateArgument()
+    [Test]
+    public async Task FlagsThrowExactlyWithDelegateArgument(CancellationToken cancellationToken)
     {
         const string source = """
                               static class AssertThrows
@@ -269,9 +269,9 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoAllocatingThrowsAssertAnalyzer(), source, cancellationToken);
 
-        _ = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostics[0].Id);
+        _ = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(RuleId);
     }
 }

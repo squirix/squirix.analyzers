@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using Microsoft.CodeAnalysis;
@@ -20,8 +21,21 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Description = "Omit arguments that equal the parameter default; the default may change at the declaration.";
 
     private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value";
+
     private static readonly LocalizableString Title = "Avoid redundant default argument values";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
+
+    private static readonly HashSet<SyntaxKind> RedundantDefaultCandidateKinds =
+    [
+        SyntaxKind.DefaultLiteralExpression,
+        SyntaxKind.DefaultExpression,
+        SyntaxKind.NullLiteralExpression,
+        SyntaxKind.NumericLiteralExpression,
+        SyntaxKind.StringLiteralExpression,
+        SyntaxKind.CharacterLiteralExpression,
+        SyntaxKind.TrueLiteralExpression,
+        SyntaxKind.FalseLiteralExpression,
+    ];
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -249,18 +263,8 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             if (argument.NameColon != null)
                 return true;
 
-            switch (argument.Expression.Kind())
-            {
-                case SyntaxKind.DefaultLiteralExpression:
-                case SyntaxKind.DefaultExpression:
-                case SyntaxKind.NullLiteralExpression:
-                case SyntaxKind.NumericLiteralExpression:
-                case SyntaxKind.StringLiteralExpression:
-                case SyntaxKind.CharacterLiteralExpression:
-                case SyntaxKind.TrueLiteralExpression:
-                case SyntaxKind.FalseLiteralExpression:
-                    return true;
-            }
+            if (RedundantDefaultCandidateKinds.Contains(argument.Expression.Kind()))
+                return true;
         }
 
         return false;
@@ -268,10 +272,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDefaultValueOfParameterType(object? defaultValue, ITypeSymbol parameterType)
     {
-        if (parameterType.IsReferenceType || parameterType is IPointerTypeSymbol)
-            return defaultValue is null;
-
-        if (parameterType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        if (parameterType.IsReferenceType || parameterType is IPointerTypeSymbol || parameterType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
             return defaultValue is null;
 
         var typeDefault = GetValueTypeDefault(parameterType);

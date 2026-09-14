@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class CoalesceThrowHelperAnalyzerTests : AnalyzerTestBase
+public sealed class CoalesceThrowHelperAnalyzerTests
 {
     private const string RuleId = "SQR0024";
 
-    [Fact]
-    public async Task AllowsCoalesceThrowingNullException()
+    [Test]
+    public async Task AllowsCoalesceThrowingNullException(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -23,13 +23,13 @@ public sealed class CoalesceThrowHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsCoalesceWithFallbackValue()
+    [Test]
+    public async Task AllowsCoalesceWithFallbackValue(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -43,13 +43,13 @@ public sealed class CoalesceThrowHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsGloballyQualifiedNullException()
+    [Test]
+    public async Task AllowsGloballyQualifiedNullException(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -63,13 +63,13 @@ public sealed class CoalesceThrowHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsCoalesceThrowingArgumentException()
+    [Test]
+    public async Task FlagsCoalesceThrowingArgumentException(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -81,14 +81,14 @@ public sealed class CoalesceThrowHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task FlagsCoalesceThrowingInvalidOperation()
+    [Test]
+    public async Task FlagsCoalesceThrowingInvalidOperation(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -102,9 +102,9 @@ public sealed class CoalesceThrowHelperAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new CoalesceThrowHelperAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

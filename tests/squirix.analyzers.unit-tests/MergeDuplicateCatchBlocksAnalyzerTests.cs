@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class MergeDuplicateCatchBlocksAnalyzerTests : AnalyzerTestBase
+public sealed class MergeDuplicateCatchBlocksAnalyzerTests
 {
     private const string RuleId = "SQR0020";
 
-    [Fact]
-    public async Task AllowsCatchBlocksWithDifferentBodies()
+    [Test]
+    public async Task AllowsCatchBlocksWithDifferentBodies(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -44,13 +44,13 @@ public sealed class MergeDuplicateCatchBlocksAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsConsecutiveIdenticalCatchBlocks()
+    [Test]
+    public async Task FlagsConsecutiveIdenticalCatchBlocks(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -81,9 +81,9 @@ public sealed class MergeDuplicateCatchBlocksAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }
