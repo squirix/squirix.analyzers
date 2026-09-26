@@ -13,7 +13,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0"/>
-        <PackageReference Include="TUnit" Version="1.69.16"/>
+        <PackageReference Include="TUnit" Version="1.69.21"/>
     </ItemGroup>
 
     <ItemGroup>
