@@ -42,7 +42,7 @@ jobs:
                 run: dotnet build squirix.analyzers.slnx --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
 
             -   name: Test
-                run: dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
+                run: dotnet test --project tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
 
             -   name: Pack
                 run: dotnet pack src/squirix.analyzers/squirix.analyzers.csproj --configuration Release --no-build --output ./artifacts/packages
@@ -132,7 +132,7 @@ jobs:
                 run: dotnet build squirix.analyzers.slnx --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
 
             -   name: Test
-                run: dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
+                run: dotnet test --project tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
 
     ci-success:
         name: CI success
