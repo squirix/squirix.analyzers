@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace Squirix.Analyzers;
 
@@ -146,21 +147,27 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
 
         // The thrown ParamName must match the guarded variable; otherwise replacing the
         // guard with ThrowIfNullOrEmpty/ThrowIfNullOrWhiteSpace would change ParamName.
-        if (condition is not InvocationExpressionSyntax syntax || syntax.ArgumentList.Arguments.Count != 1 || creation.ArgumentList == null || constructor.Parameters.Length < 2)
+        if (condition is not InvocationExpressionSyntax syntax || syntax.ArgumentList.Arguments.Count != 1 || constructor.Parameters.Length < 2)
             return true;
-        var index = -1;
-        for (var i = 0; i < constructor.Parameters.Length; i++)
+
+        // Bind arguments to constructor parameters so named and reordered arguments are matched by
+        // parameter, not by position.
+        if (context.SemanticModel.GetOperation(creation, context.CancellationToken) is not IObjectCreationOperation operation)
+            return true;
+
+        ExpressionSyntax? paramNameExpression = null;
+        foreach (var argument in operation.Arguments)
         {
-            if (constructor.Parameters[i].Name != "paramName")
+            if (argument.Parameter?.Name != "paramName" || argument.Value.Syntax is not ExpressionSyntax expression)
                 continue;
-            index = i;
+            paramNameExpression = expression;
             break;
         }
 
-        if (index < 0 || creation.ArgumentList.Arguments.Count <= index)
+        if (paramNameExpression == null)
             return true;
         var guardedName = GetSimpleName(syntax.ArgumentList.Arguments[0].Expression);
-        var thrownName = GetParamNameValue(creation.ArgumentList.Arguments[index].Expression);
+        var thrownName = GetParamNameValue(paramNameExpression);
         return guardedName == null || thrownName == null || string.Equals(guardedName, thrownName, StringComparison.Ordinal);
     }
 }
