@@ -1,3 +1,12 @@
+## Release 0.1.7
+
+### New Rules
+
+ Rule ID | Category | Severity | Notes
+---------|----------|----------|-------
+ SQR0025 | Naming   | Warning  |
+ SQR0026 | Style    | Warning  |
+
 ## Release 0.1.4
 
 ### New Rules
