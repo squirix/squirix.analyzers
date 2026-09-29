@@ -178,6 +178,63 @@ public sealed class GrpcDisposeHttpClientAnalyzerTests
                                  """, cancellationToken);
 
     [Test]
+    public async Task AllowsSameSymbolFlagInLambda(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System;
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               class C
+                               {
+                                   void M()
+                                   {
+                                       var options = new GrpcChannelOptions { HttpHandler = new SocketsHttpHandler() };
+                                       Action configure = () => options.DisposeHttpClient = true;
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsWhenLambdaSetsOtherOptionsFlag(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                                 using System;
+                                 using System.Net.Http;
+                                 using Grpc.Net.Client;
+
+                                 class C
+                                 {
+                                     void M()
+                                     {
+                                         var options = new GrpcChannelOptions { HttpHandler = new SocketsHttpHandler() };
+                                         Action configure = () =>
+                                         {
+                                             var options = new GrpcChannelOptions();
+                                             options.DisposeHttpClient = true;
+                                         };
+                                     }
+                                 }
+                                 """, cancellationToken);
+
+    [Test]
+    public async Task FlagsWhenLocalFuncSetsOtherFlag(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                                 using System.Net.Http;
+                                 using Grpc.Net.Client;
+
+                                 class C
+                                 {
+                                     void M()
+                                     {
+                                         var options = new GrpcChannelOptions();
+                                         options.HttpHandler = new SocketsHttpHandler();
+
+                                         void Local()
+                                         {
+                                             var options = new GrpcChannelOptions();
+                                             options.DisposeHttpClient = true;
+                                         }
+                                     }
+                                 }
+                                 """, cancellationToken);
+
+    [Test]
     public async Task FlagsWhenFlagSetOnOtherOptions(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
                                  using System.Net.Http;
                                  using Grpc.Net.Client;

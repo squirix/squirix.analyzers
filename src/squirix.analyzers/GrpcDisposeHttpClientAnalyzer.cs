@@ -60,7 +60,7 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
         if (!IsOwnedDisposable(assignment.Right, semanticModel, cancellationToken))
             return;
 
-        if (IsDisposeFlagSet(assignment, owner))
+        if (IsDisposeFlagSet(assignment, owner, semanticModel, cancellationToken))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(Rule, assignment.GetLocation(), propertyName));
@@ -73,20 +73,21 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
         _ => null,
     };
 
-    private static ExpressionSyntax? GetOwnerOfCreation(BaseObjectCreationExpressionSyntax creation) => creation.Parent switch
-    {
-        EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax declarator } => SyntaxFactory.IdentifierName(declarator.Identifier),
-        AssignmentExpressionSyntax assignment when assignment.Right == creation => assignment.Left,
-        _ => null,
-    };
+    private static ISymbol? GetOwnerSymbolOfCreation(BaseObjectCreationExpressionSyntax creation, SemanticModel semanticModel, CancellationToken cancellationToken) =>
+        creation.Parent switch
+        {
+            EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax declarator } => semanticModel.GetDeclaredSymbol(declarator, cancellationToken),
+            AssignmentExpressionSyntax assignment when assignment.Right == creation => semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol,
+            _ => null,
+        };
 
-    private static bool HasDisposeFlagAssignment(SyntaxNode scope, ExpressionSyntax owner)
+    private static bool HasDisposeFlagAssignment(SyntaxNode scope, ISymbol owner, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         foreach (var node in scope.DescendantNodes())
         {
             if (node is AssignmentExpressionSyntax { Left: MemberAccessExpressionSyntax member }
                 && member.Name.Identifier.ValueText == DisposeFlagName
-                && SyntaxFactory.AreEquivalent(member.Expression, owner))
+                && SymbolEqualityComparer.Default.Equals(semanticModel.GetSymbolInfo(member.Expression, cancellationToken).Symbol, owner))
                 return true;
         }
 
@@ -121,16 +122,16 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsDisposeFlagSet(AssignmentExpressionSyntax assignment, OptionsOwner owner)
+    private static bool IsDisposeFlagSet(AssignmentExpressionSyntax assignment, OptionsOwner owner, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         if (owner.Creation is { Initializer: { } initializer } && InitializerSetsDisposeFlag(initializer))
             return true;
 
-        if (owner.Expression == null)
+        if (owner.Symbol == null)
             return false;
 
         var scope = assignment.FirstAncestorOrSelf<MemberDeclarationSyntax>();
-        return scope != null && HasDisposeFlagAssignment(scope, owner.Expression);
+        return scope != null && HasDisposeFlagAssignment(scope, owner.Symbol, semanticModel, cancellationToken);
     }
 
     private static bool IsOptionsType(ITypeSymbol? type) =>
@@ -166,7 +167,7 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
             if (!IsOptionsType(semanticModel.GetTypeInfo(creation, cancellationToken).Type))
                 return false;
 
-            owner = new OptionsOwner(creation, GetOwnerOfCreation(creation));
+            owner = new OptionsOwner(creation, GetOwnerSymbolOfCreation(creation, semanticModel, cancellationToken));
             return true;
         }
 
@@ -176,7 +177,7 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
         if (!IsOptionsType(semanticModel.GetTypeInfo(member.Expression, cancellationToken).Type))
             return false;
 
-        owner = new OptionsOwner(null, member.Expression);
+        owner = new OptionsOwner(null, semanticModel.GetSymbolInfo(member.Expression, cancellationToken).Symbol);
         return true;
     }
 
@@ -190,14 +191,14 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
 
     private readonly struct OptionsOwner
     {
-        public OptionsOwner(BaseObjectCreationExpressionSyntax? creation, ExpressionSyntax? expression)
+        public OptionsOwner(BaseObjectCreationExpressionSyntax? creation, ISymbol? symbol)
         {
             Creation = creation;
-            Expression = expression;
+            Symbol = symbol;
         }
 
         public BaseObjectCreationExpressionSyntax? Creation { get; }
 
-        public ExpressionSyntax? Expression { get; }
+        public ISymbol? Symbol { get; }
     }
 }
