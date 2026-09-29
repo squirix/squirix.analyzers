@@ -62,6 +62,54 @@ public sealed class CoalesceThrowIfNullAnalyzer : DiagnosticAnalyzer
         if (containingType?.Name != "ArgumentNullException" || containingType.ContainingNamespace?.ToDisplayString() != "System")
             return;
 
+        if (!IsPlainParameterGuard(context, coalesce, creation))
+            return;
+
+        if (!IsHoistableValue(coalesce))
+            return;
+
         context.ReportDiagnostic(Diagnostic.Create(Rule, coalesce.OperatorToken.GetLocation()));
+    }
+
+    /// <summary>
+    /// True when the left side is a parameter and the exception carries only the matching parameter name, so the
+    /// rewrite to <c language="csharp">ThrowIfNull</c> preserves the exception exactly.
+    /// </summary>
+    private static bool IsPlainParameterGuard(SyntaxNodeAnalysisContext context, BinaryExpressionSyntax coalesce, ObjectCreationExpressionSyntax creation)
+    {
+        if (coalesce.Left is not IdentifierNameSyntax identifier)
+            return false;
+
+        if (context.SemanticModel.GetSymbolInfo(identifier, context.CancellationToken).Symbol is not IParameterSymbol)
+            return false;
+
+        var arguments = creation.ArgumentList?.Arguments;
+        if (arguments is not { Count: 1 } || creation.Initializer != null)
+            return false;
+
+        var argument = arguments.Value[0];
+        if (argument.NameColon != null)
+            return false;
+
+        var name = context.SemanticModel.GetConstantValue(argument.Expression, context.CancellationToken);
+        return name.HasValue && name.Value is string text && text == identifier.Identifier.ValueText;
+    }
+
+    /// <summary>
+    /// True when the coalesce is the whole value of a simple assignment statement or local declaration inside a
+    /// block, so the guard can move to a preceding statement.
+    /// </summary>
+    private static bool IsHoistableValue(BinaryExpressionSyntax coalesce)
+    {
+        SyntaxNode value = coalesce;
+        while (value.Parent is ParenthesizedExpressionSyntax parenthesized)
+            value = parenthesized;
+
+        return value.Parent switch
+        {
+            AssignmentExpressionSyntax assignment when assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) && assignment.Right == value => assignment.Parent is ExpressionStatementSyntax { Parent: BlockSyntax },
+            EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax { Parent: LocalDeclarationStatementSyntax { Parent: BlockSyntax } } } } => true,
+            _ => false,
+        };
     }
 }

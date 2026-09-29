@@ -110,6 +110,17 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
 
     private static bool HasUserDefinedEqualityOperator(ITypeSymbol type)
     {
+        if (type is ITypeParameterSymbol typeParameter)
+        {
+            foreach (var constraint in typeParameter.ConstraintTypes)
+            {
+                if (HasUserDefinedEqualityOperator(constraint))
+                    return true;
+            }
+
+            return false;
+        }
+
         var current = type;
         while (current != null && current.SpecialType != SpecialType.System_Object && current.TypeKind != TypeKind.Interface)
         {
@@ -132,24 +143,63 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    private static bool IsBuiltInValueEqualityType(SpecialType specialType) =>
+        specialType is SpecialType.System_Boolean
+            or SpecialType.System_Char
+            or SpecialType.System_SByte
+            or SpecialType.System_Byte
+            or SpecialType.System_Int16
+            or SpecialType.System_UInt16
+            or SpecialType.System_Int32
+            or SpecialType.System_UInt32
+            or SpecialType.System_Int64
+            or SpecialType.System_UInt64
+            or SpecialType.System_Single
+            or SpecialType.System_Double
+            or SpecialType.System_Decimal
+            or SpecialType.System_String;
+
     private static bool IsNotANumber(object? value) => value is float.NaN or double.NaN;
 
     private static bool IsNullLiteral(ExpressionSyntax expression) => expression.IsKind(SyntaxKind.NullLiteralExpression);
 
+    private static bool IsValueEqualityConstantComparison(SyntaxNodeAnalysisContext context, ExpressionSyntax input, ExpressionSyntax constantExpression)
+    {
+        var inputType = context.SemanticModel.GetTypeInfo(input, context.CancellationToken).Type;
+        var constantType = context.SemanticModel.GetTypeInfo(constantExpression, context.CancellationToken).Type;
+        if (inputType == null || constantType == null)
+            return false;
+
+        if (inputType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T && inputType is INamedTypeSymbol { TypeArguments.Length: 1 } nullable)
+            inputType = nullable.TypeArguments[0];
+
+        // Enum inputs qualify only when the constant is of the same enum; every other constant kind
+        // (for example the literal 0) keeps its pattern form.
+        if (inputType.TypeKind == TypeKind.Enum)
+            return SymbolEqualityComparer.Default.Equals(inputType, constantType);
+
+        return IsBuiltInValueEqualityType(inputType.SpecialType) && IsBuiltInValueEqualityType(constantType.SpecialType);
+    }
+
     private static void ReportNullArms(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
     {
-        switch (pattern)
+        while (true)
         {
-            case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
-                ReportNullArms(context, isPattern, nested.Left);
-                ReportNullArms(context, isPattern, nested.Right);
-                break;
-            case ParenthesizedPatternSyntax parenthesized:
-                ReportNullArms(context, isPattern, parenthesized.Pattern);
-                break;
-            case ConstantPatternSyntax constantPattern:
-                ReportPattern(context, isPattern, constantPattern, false);
-                break;
+            switch (pattern)
+            {
+                case BinaryPatternSyntax nested when nested.IsKind(SyntaxKind.OrPattern):
+                    ReportNullArms(context, isPattern, nested.Left);
+                    pattern = nested.Right;
+                    continue;
+                case ParenthesizedPatternSyntax parenthesized:
+                    pattern = parenthesized.Pattern;
+                    continue;
+                case ConstantPatternSyntax constantPattern when IsNullLiteral(constantPattern.Expression):
+                    ReportPattern(context, isPattern, constantPattern, false);
+                    break;
+            }
+
+            break;
         }
     }
 
@@ -171,6 +221,9 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         }
 
         if (!CanUseEqualityOperator(context, isPattern.Expression))
+            return;
+
+        if (!IsValueEqualityConstantComparison(context, isPattern.Expression, constantPattern.Expression))
             return;
 
         var constant = context.SemanticModel.GetConstantValue(constantPattern.Expression, context.CancellationToken);

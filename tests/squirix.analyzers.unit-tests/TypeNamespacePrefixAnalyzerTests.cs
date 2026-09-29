@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class TypeNamespacePrefixAnalyzerTests : AnalyzerTestBase
+public sealed class TypeNamespacePrefixAnalyzerTests
 {
     private const string RuleId = "SQR0007";
 
-    [Fact]
-    public async Task AllowsNonRepeatingNamespaceSegment()
+    [Test]
+    public async Task AllowsNonRepeatingNamespaceSegment(CancellationToken cancellationToken)
     {
         const string source = """
                               namespace Acme
@@ -20,13 +20,13 @@ public sealed class TypeNamespacePrefixAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsRepeatingNamespaceSegment()
+    [Test]
+    public async Task FlagsRepeatingNamespaceSegment(CancellationToken cancellationToken)
     {
         const string source = """
                               namespace Acme
@@ -37,9 +37,9 @@ public sealed class TypeNamespacePrefixAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNamespacePrefixAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

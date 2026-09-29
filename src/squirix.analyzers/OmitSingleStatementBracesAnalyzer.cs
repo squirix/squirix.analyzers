@@ -58,20 +58,21 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
         if (ifStatement.Parent is ElseClauseSyntax)
             return;
 
-        if (!ChainAllowsOmittingBraces(ifStatement))
+        if (!ChainAllowsOmittingBraces(ifStatement, IsFollowedByElse(ifStatement)))
             return;
 
+        var followedByElse = IsFollowedByElse(ifStatement);
         var current = ifStatement;
         while (true)
         {
-            ReportIfBlock(context, current.Statement, "if");
+            ReportIfBlock(context, current.Statement, "if", current.Else != null || followedByElse);
 
             if (current.Else == null)
                 return;
 
             if (current.Else.Statement is not IfStatementSyntax elseIf)
             {
-                ReportIfBlock(context, current.Else.Statement, "else");
+                ReportIfBlock(context, current.Else.Statement, "else", followedByElse);
                 return;
             }
 
@@ -97,6 +98,9 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
         if (LoopStatementSyntaxHelpers.IsLoopStatement(only))
             return;
 
+        if (!CanRemoveBraces(block, IsFollowedByElse(context.Node)))
+            return;
+
         if (LoopStatementSyntaxHelpers.SpansMultipleLines(only))
             return;
 
@@ -110,39 +114,42 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
         ReportSimpleEmbedded(context, statement.Statement, "using");
     }
 
-    private static bool ChainAllowsOmittingBraces(IfStatementSyntax ifStatement)
+    private static bool ChainAllowsOmittingBraces(IfStatementSyntax ifStatement, bool followedByElse)
     {
         // All branches must be single-line single statements so stripping braces cannot
         // leave a multiline braced sibling next to an unbraced branch (SA1520).
         var current = ifStatement;
         while (true)
         {
-            if (!IsOmittableSingleLineBody(current.Statement))
+            if (!IsOmittableSingleLineBody(current.Statement, current.Else != null || followedByElse))
                 return false;
 
             if (current.Else == null)
                 return true;
 
             if (current.Else.Statement is not IfStatementSyntax elseIf)
-                return IsOmittableSingleLineBody(current.Else.Statement);
+                return IsOmittableSingleLineBody(current.Else.Statement, followedByElse);
 
             current = elseIf;
         }
     }
 
-    private static bool IsOmittableSingleLineBody(StatementSyntax statement)
+    private static bool IsOmittableSingleLineBody(StatementSyntax statement, bool followedByElse)
     {
         if (statement is not BlockSyntax block)
             return !LoopStatementSyntaxHelpers.SpansMultipleLines(statement);
         if (block.Statements.Count != 1)
             return false;
 
-        return !LoopStatementSyntaxHelpers.SpansMultipleLines(block.Statements[0]);
+        return CanRemoveBraces(block, followedByElse) && !LoopStatementSyntaxHelpers.SpansMultipleLines(block.Statements[0]);
     }
 
-    private static void ReportIfBlock(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind)
+    private static void ReportIfBlock(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind, bool followedByElse)
     {
         if (body is not BlockSyntax block || block.Statements.Count != 1)
+            return;
+
+        if (!CanRemoveBraces(block, followedByElse))
             return;
 
         if (LoopStatementSyntaxHelpers.SpansMultipleLines(block.Statements[0]))
@@ -162,9 +169,95 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
         if (only.IsKind(SyntaxKind.UsingStatement) || only.IsKind(SyntaxKind.LockStatement) || only.IsKind(SyntaxKind.FixedStatement))
             return;
 
+        if (!CanRemoveBraces(block, IsFollowedByElse(context.Node)))
+            return;
+
         if (LoopStatementSyntaxHelpers.SpansMultipleLines(only))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(Rule, block.OpenBraceToken.GetLocation(), kind));
+    }
+
+    private static bool CanRemoveBraces(BlockSyntax block, bool followedByElse)
+    {
+        // Preprocessor directives inside the block cannot be kept once the braces are gone.
+        if (block.ContainsDirectives)
+            return false;
+
+        var only = block.Statements[0];
+
+        // Declarations, local functions and labeled statements are not valid embedded statements.
+        if (only is LocalDeclarationStatementSyntax or LocalFunctionStatementSyntax or LabeledStatementSyntax)
+            return false;
+
+        // Removing the braces would re-bind a following else to an inner if.
+        return !(followedByElse && EndsInUnmatchedIf(only));
+    }
+
+    private static bool EndsInUnmatchedIf(StatementSyntax statement)
+    {
+        while (true)
+        {
+            switch (statement)
+            {
+                case IfStatementSyntax ifStatement:
+                    if (ifStatement.Else == null)
+                        return true;
+
+                    statement = ifStatement.Else.Statement;
+                    break;
+                case WhileStatementSyntax whileStatement:
+                    statement = whileStatement.Statement;
+                    break;
+                case ForStatementSyntax forStatement:
+                    statement = forStatement.Statement;
+                    break;
+                case CommonForEachStatementSyntax forEachStatement:
+                    statement = forEachStatement.Statement;
+                    break;
+                case UsingStatementSyntax usingStatement:
+                    statement = usingStatement.Statement;
+                    break;
+                case LockStatementSyntax lockStatement:
+                    statement = lockStatement.Statement;
+                    break;
+                case FixedStatementSyntax fixedStatement:
+                    statement = fixedStatement.Statement;
+                    break;
+                case LabeledStatementSyntax labeledStatement:
+                    statement = labeledStatement.Statement;
+                    break;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    private static bool IsFollowedByElse(SyntaxNode node)
+    {
+        // True when the statement sits in the tail of an if branch whose if has an else.
+        var child = node;
+        while (true)
+        {
+            var parent = child.Parent;
+            switch (parent)
+            {
+                case IfStatementSyntax ifStatement when ifStatement.Statement == child:
+                    if (ifStatement.Else != null)
+                        return true;
+
+                    child = ifStatement;
+                    break;
+                case ElseClauseSyntax elseClause:
+                    child = elseClause.Parent!;
+                    break;
+                case WhileStatementSyntax or ForStatementSyntax or CommonForEachStatementSyntax or UsingStatementSyntax or LockStatementSyntax or FixedStatementSyntax
+                    or LabeledStatementSyntax:
+                    child = parent;
+                    break;
+                default:
+                    return false;
+            }
+        }
     }
 }

@@ -150,6 +150,17 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
         var rewrittenList = argumentList.WithArguments(argumentList.Arguments.Replace(argument, positional));
         var rewrittenCall = withArgumentList(context.Node, rewrittenList);
 
+        // A target-typed new has no target type when re-bound in isolation, so rewrite it to an explicit creation.
+        if (context.Node is ImplicitObjectCreationExpressionSyntax implicitCreation)
+        {
+            var createdType = context.SemanticModel.GetTypeInfo(implicitCreation, context.CancellationToken).Type;
+            if (createdType == null || createdType.TypeKind == TypeKind.Error)
+                return false;
+
+            var typeSyntax = SyntaxFactory.ParseTypeName(createdType.ToMinimalDisplayString(context.SemanticModel, implicitCreation.SpanStart));
+            rewrittenCall = SyntaxFactory.ObjectCreationExpression(typeSyntax).WithArgumentList(rewrittenList);
+        }
+
         var speculative = context.SemanticModel.GetSpeculativeSymbolInfo(context.Node.SpanStart, rewrittenCall, SpeculativeBindingOption.BindAsExpression);
 
         return speculative.Symbol is IMethodSymbol speculativeMethod && SymbolEqualityComparer.Default.Equals(speculativeMethod.OriginalDefinition, method.OriginalDefinition);
