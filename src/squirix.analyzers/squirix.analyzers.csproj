@@ -14,7 +14,7 @@
         <!-- Pack as a Roslyn analyzer NuGet package. -->
         <IsPackable>true</IsPackable>
         <PackageId>squirix.analyzers</PackageId>
-        <Version>0.1.4</Version>
+        <Version>0.1.8</Version>
         <Authors>Squirix Team</Authors>
         <Description>Design-time Roslyn analyzers that enforce squirix's internal coding conventions: brace style, member-size limits, naming rules, and code-smell guards.</Description>
         <RepositoryUrl>https://github.com/squirix/Squirix.Analyzers</RepositoryUrl>
@@ -29,8 +29,6 @@
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
         <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_IncludeAnalyzerInPackage</TargetsForTfmSpecificContentInPackage>
-        <!-- Assembly version attributes are authored in AssemblyInfo.cs; skip auto-generation. -->
-        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     </PropertyGroup>
 
     <ItemGroup>
@@ -42,6 +40,8 @@
 
     <ItemGroup>
         <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
+        <AdditionalFiles Include="AnalyzerReleases.Shipped.md"/>
+        <AdditionalFiles Include="AnalyzerReleases.Unshipped.md"/>
     </ItemGroup>
 
     <Target Name="_IncludeAnalyzerInPackage">
