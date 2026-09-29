@@ -14,9 +14,10 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
     private const string DiagnosticId = "SQR0005";
 
     private static readonly LocalizableString Description =
-        "Method simple names must be at most 40 characters " + "(excluding explicit interface implementations). Applies to production and test code.";
+        "Method, property, and event simple names must be at most 40 characters " +
+        "(excluding overrides and interface implementations). Applies to production and test code.";
 
-    private static readonly LocalizableString MessageFormat = "Method name '{0}' length is {1} (limit {2})";
+    private static readonly LocalizableString MessageFormat = "Member name '{0}' length is {1} (limit {2})";
     private static readonly LocalizableString Title = "Avoid methods with name too long";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description);
 
@@ -31,32 +32,58 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
 
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSymbolAction(AnalyzeMethod, SymbolKind.Method);
+        context.RegisterSymbolAction(AnalyzeMember, SymbolKind.Method, SymbolKind.Property, SymbolKind.Event);
     }
 
-    private static void AnalyzeMethod(SymbolAnalysisContext context)
+    private static void AnalyzeMember(SymbolAnalysisContext context)
     {
-        var method = (IMethodSymbol)context.Symbol;
-        if (!method.ExplicitInterfaceImplementations.IsDefaultOrEmpty)
+        var symbol = context.Symbol;
+        if (symbol is IMethodSymbol { AssociatedSymbol: not null })
             return;
 
-        if (AnalyzerHelpers.IsCompilerOrGenerated(method))
+        if (AnalyzerHelpers.IsCompilerOrGenerated(symbol) || IsNameDictatedByBase(symbol))
             return;
 
-        var name = method.Name;
-        var effectiveLength = name.Length;
-
-        // Property getter/setter are prefixed with "get_" / "set_" (length 4).
-        if (method.MethodKind is MethodKind.PropertyGet or MethodKind.PropertySet)
-            effectiveLength -= 4;
-
-        if (effectiveLength <= AnalyzerLimits.MaxMethodNameLength)
+        var name = symbol.Name;
+        if (name.Length <= AnalyzerLimits.MaxMethodNameLength)
             return;
 
-        var location = AnalyzerHelpers.GetBestLocation(method);
+        var location = AnalyzerHelpers.GetBestLocation(symbol);
         if (location == null)
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, effectiveLength, AnalyzerLimits.MaxMethodNameLength));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, name.Length, AnalyzerLimits.MaxMethodNameLength));
+    }
+
+    private static bool IsNameDictatedByBase(ISymbol symbol)
+    {
+        if (symbol.IsOverride)
+            return true;
+
+        var explicitImplementations = symbol switch
+        {
+            IMethodSymbol method => method.ExplicitInterfaceImplementations.CastArray<ISymbol>(),
+            IPropertySymbol property => property.ExplicitInterfaceImplementations.CastArray<ISymbol>(),
+            IEventSymbol @event => @event.ExplicitInterfaceImplementations.CastArray<ISymbol>(),
+            _ => default,
+        };
+
+        if (!explicitImplementations.IsDefaultOrEmpty)
+            return true;
+
+        var type = symbol.ContainingType;
+        if (type is null)
+            return false;
+
+        foreach (var contract in type.AllInterfaces)
+        {
+            foreach (var member in contract.GetMembers(symbol.Name))
+            {
+                if (SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), symbol))
+                    return true;
+            }
+        }
+
+        return false;
     }
 }
