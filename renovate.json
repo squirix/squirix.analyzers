@@ -1,0 +1,11 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "The analyzer is compiled against the Roslyn shipped in the minimum supported .NET SDK; raising it makes the analyzer fail to load on that SDK.",
+      "matchPackageNames": ["Microsoft.CodeAnalysis.CSharp"],
+      "enabled": false
+    }
+  ]
+}
