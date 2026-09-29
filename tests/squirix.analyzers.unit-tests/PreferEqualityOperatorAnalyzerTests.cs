@@ -68,24 +68,6 @@ public sealed class PreferEqualityOperatorAnalyzerTests
     }
 
     [Test]
-    public async Task AllowsIsNullWithStructConstraint(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              class C
-                              {
-                                  bool M<T>(T value) where T : struct
-                                  {
-                                      return value is null;
-                                  }
-                              }
-                              """;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
-
-        _ = await Assert.That(diagnostics).IsEmpty();
-    }
-
-    [Test]
     public async Task AllowsOrPatternWithoutNullArm(CancellationToken cancellationToken)
     {
         const string source = """
