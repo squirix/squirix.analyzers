@@ -130,7 +130,12 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         if (context.SemanticModel.GetSymbolInfo(creation, context.CancellationToken).Symbol is not IMethodSymbol method)
             return;
 
-        AnalyzeArgumentList(context, creation.ArgumentList, method, static (node, list) => ((ImplicitObjectCreationExpressionSyntax)node).WithArgumentList(list));
+        // Re-binding a bare 'new(...)' in isolation has no target type, so rewrite it to an explicit creation of the bound type.
+        if (context.SemanticModel.GetTypeInfo(creation, context.CancellationToken).Type is not { } createdType)
+            return;
+
+        var typeSyntax = SyntaxFactory.ParseTypeName(createdType.WithNullableAnnotation(NullableAnnotation.None).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        AnalyzeArgumentList(context, creation.ArgumentList, method, (_, list) => SyntaxFactory.ObjectCreationExpression(typeSyntax).WithArgumentList(list));
     }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
@@ -313,8 +318,30 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return true;
     }
 
+    private static bool HasCallerInfoAttribute(IParameterSymbol parameter)
+    {
+        foreach (var attribute in parameter.GetAttributes())
+        {
+            var attr = attribute.AttributeClass;
+            if (attr?.ContainingNamespace?.ToDisplayString() is not "System.Runtime.CompilerServices")
+                continue;
+
+            if (attr.Name is "CallerMemberNameAttribute" or "CallerFilePathAttribute" or "CallerLineNumberAttribute" or "CallerArgumentExpressionAttribute")
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool TryGetParameterDefault(IParameterSymbol parameter, out object? defaultValue)
     {
+        // Omitting a caller-info argument makes the compiler substitute caller data, so an explicit value is never redundant.
+        if (HasCallerInfoAttribute(parameter))
+        {
+            defaultValue = null;
+            return false;
+        }
+
         if (parameter.HasExplicitDefaultValue)
         {
             defaultValue = parameter.ExplicitDefaultValue;
