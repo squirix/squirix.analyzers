@@ -12,19 +12,20 @@ and code-smell guards. They are applied at build time and their findings are sur
 
 ## Installation
 
-Add the package reference from [nuget.org](https://www.nuget.org/packages/squirix.analyzers):
+Add the package reference from [nuget.org](https://www.nuget.org/packages/squirix.analyzers) and use the latest
+published version (`0.1.8` at the time of writing):
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="squirix.analyzers" Version="0.1.0"
-                      PrivateAssets="all" OutputItemType="Analyzer"/>
+    <PackageReference Include="squirix.analyzers" Version="0.1.8" PrivateAssets="all" />
 </ItemGroup>
 ```
 
 The package ships the analyzer assembly under `analyzers/dotnet/cs`, so it is loaded as a Roslyn analyzer at build time.
 
-The root `.editorconfig` carries the severity configuration for the `SQR` diagnostics. Copy it (or the relevant
-`dotnet_diagnostic.SQR000x` entries) into the consuming repository's `.editorconfig`.
+Rules use the default severity from their descriptor. This repository's own `.editorconfig` overrides the severity of
+some `SQR` diagnostics; copy the relevant `dotnet_diagnostic.SQRnnnn.severity` entries into the consuming repository's
+`.editorconfig` to do the same.
 
 Some rules read their thresholds from per-rule `.editorconfig` options. `SQR0002` defaults `SQR0002.max_methods_per_type`
 to 20 methods per type, and `SQR0003` defaults `SQR0003.max_fields_per_type` to 15 fields per type. Add the key under a
@@ -63,7 +64,7 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0019`](docs/rules/SQR0019.md) | Usage       | `NoAllocatingThrowsAssertAnalyzer`        | Avoid allocating exception assert invocations.                       |
 | [`SQR0020`](docs/rules/SQR0020.md) | Usage       | `MergeDuplicateCatchBlocksAnalyzer`       | Merge consecutive catch blocks with identical bodies.                |
 | [`SQR0021`](docs/rules/SQR0021.md) | Usage       | `UseArgumentExceptionThrowHelperAnalyzer` | Prefer ArgumentException.ThrowIf* over manual guards.                |
-| [`SQR0022`](docs/rules/SQR0022.md) | Usage       | `UseTimeSpanThrowHelperAnalyzer`          | Prefer ArgumentOutOfRangeException.ThrowIf* for TimeSpan guards.     |
+| [`SQR0022`](docs/rules/SQR0022.md) | Usage       | `UseTimeSpanThrowHelperAnalyzer`          | Prefer a throw-helper method for TimeSpan range guards.              |
 | [`SQR0023`](docs/rules/SQR0023.md) | Usage       | `CoalesceThrowIfNullAnalyzer`             | Prefer ArgumentNullException.ThrowIfNull over null-coalescing throw. |
 | [`SQR0024`](docs/rules/SQR0024.md) | Usage       | `CoalesceThrowHelperAnalyzer`             | Prefer a throw-helper method over null-coalescing throw.             |
 | [`SQR0025`](docs/rules/SQR0025.md) | Naming      | `TryPrefixMustReturnBoolAnalyzer`         | Try-prefixed method must return bool.                                |
