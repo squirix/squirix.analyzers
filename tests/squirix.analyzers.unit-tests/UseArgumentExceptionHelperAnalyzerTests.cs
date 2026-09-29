@@ -177,6 +177,50 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests
     }
 
     [Test]
+    public Task FlagsNamedParamNameMatchingGuard(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("""throw new System.ArgumentException(paramName: "value", message: "Value is required.");""", cancellationToken);
+
+    [Test]
+    public Task FlagsNamedParamNameWithNameof(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("""throw new System.ArgumentException(message: "Value is required.", paramName: nameof(value));""", cancellationToken);
+
+    [Test]
+    public Task FlagsPositionalNameofParamName(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("""throw new System.ArgumentException("Value is required.", nameof(value));""", cancellationToken);
+
+    [Test]
+    public Task FlagsPositionalLiteralParamName(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("""throw new System.ArgumentException("Value is required.", "value");""", cancellationToken);
+
+    [Test]
+    public Task AllowsNamedParamNameMismatch(CancellationToken cancellationToken) =>
+        AssertNotFlaggedAsync("""throw new System.ArgumentException(paramName: "other", message: "value");""", cancellationToken);
+
+    [Test]
+    public Task AllowsSwappedNamedMismatchNameof(CancellationToken cancellationToken) =>
+        AssertNotFlaggedAsync("""throw new System.ArgumentException(message: "value", paramName: nameof(other));""", cancellationToken);
+
+    [Test]
+    public Task AllowsPositionalLiteralMismatch(CancellationToken cancellationToken) =>
+        AssertNotFlaggedAsync("""throw new System.ArgumentException("value", "other");""", cancellationToken);
+
+    [Test]
+    public Task AllowsArgumentNullExceptionNamed(CancellationToken cancellationToken) =>
+        AssertNotFlaggedAsync("""throw new System.ArgumentNullException(paramName: "value");""", cancellationToken);
+
+    [Test]
+    public Task AllowsArgumentNullExceptionMismatch(CancellationToken cancellationToken) =>
+        AssertNotFlaggedAsync("""throw new System.ArgumentNullException(message: "value", paramName: "other");""", cancellationToken);
+
+    [Test]
+    public Task AllowsOutOfRangeExceptionNamed(CancellationToken cancellationToken) =>
+        AssertNotFlaggedAsync("""throw new System.ArgumentOutOfRangeException(paramName: "value", message: "Value is required.");""", cancellationToken);
+
+    [Test]
+    public Task AllowsOutOfRangeExceptionMismatch(CancellationToken cancellationToken) =>
+        AssertNotFlaggedAsync("""throw new System.ArgumentOutOfRangeException(message: "value", paramName: "other");""", cancellationToken);
+
+    [Test]
     public async Task FlagsNullOrWhitespaceGuard(CancellationToken cancellationToken)
     {
         const string source = """
@@ -195,4 +239,22 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
+
+    private static async Task AssertFlaggedAsync(string throwStatement, CancellationToken cancellationToken)
+    {
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), CreateSource(throwStatement), cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    private static async Task AssertNotFlaggedAsync(string throwStatement, CancellationToken cancellationToken)
+    {
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), CreateSource(throwStatement), cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    private static string CreateSource(string throwStatement) =>
+        "class C\n{\n    void M(string value, string other)\n    {\n        if (string.IsNullOrEmpty(value))\n            " + throwStatement + "\n    }\n}\n";
 }
