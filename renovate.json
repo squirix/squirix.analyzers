@@ -1,9 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "description": "Batch dependency updates into one weekly window instead of opening pull requests as soon as releases appear. Security fixes still arrive immediately.",
+  "schedule": ["* 0-8 * * 1"],
+  "lockFileMaintenance": {
+    "schedule": ["* 0-8 * * 1"]
+  },
   "packageRules": [
     {
-      "description": "The analyzer is compiled against the Roslyn shipped in the minimum supported .NET SDK; raising it makes the analyzer fail to load on that SDK.",
+      "description": "The analyzer is compiled against the Roslyn shipped in the minimum supported .NET SDK; raising it makes the analyzer fail to load on that SDK. The test project may keep tracking newer Roslyn.",
+      "matchFileNames": ["src/**"],
       "matchPackageNames": ["Microsoft.CodeAnalysis.CSharp"],
       "enabled": false
     }
