@@ -23,7 +23,7 @@ internal static class AnalyzerRunner
         CancellationToken cancellationToken = default)
     {
         var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
-        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, References.Value, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary));
+        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, References.Value, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
         ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
 
         AnalyzerOptions? options = null;
