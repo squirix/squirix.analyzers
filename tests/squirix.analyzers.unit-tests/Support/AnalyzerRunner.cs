@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Squirix.Analyzers.UnitTests.Support;
@@ -22,7 +23,7 @@ internal static class AnalyzerRunner
         CancellationToken cancellationToken = default)
     {
         var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
-        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, References.Value, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, References.Value, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary));
         ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
 
         AnalyzerOptions? options = null;
@@ -46,6 +47,17 @@ internal static class AnalyzerRunner
     }
 
     private static string GetTrustedPlatformAssemblies() => AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? ThrowTrustedAssembliesMissing();
+
+    private static bool HasTopLevelStatements(SyntaxTree tree, CancellationToken cancellationToken)
+    {
+        foreach (var member in ((CompilationUnitSyntax)tree.GetRoot(cancellationToken)).Members)
+        {
+            if (member is GlobalStatementSyntax)
+                return true;
+        }
+
+        return false;
+    }
 
     private static ImmutableArray<MetadataReference> LoadReferences()
     {

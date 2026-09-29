@@ -178,6 +178,135 @@ public sealed class GrpcDisposeHttpClientAnalyzerTests
                                  """, cancellationToken);
 
     [Test]
+    public async Task AllowsInitializerFlagThenHandler(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               class C
+                               {
+                                   void M()
+                                   {
+                                       var options = new GrpcChannelOptions { DisposeHttpClient = true };
+                                       options.HttpHandler = new SocketsHttpHandler();
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsOwnerAssignmentWithFlag(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               class C
+                               {
+                                   void M()
+                                   {
+                                       GrpcChannelOptions options;
+                                       options = new GrpcChannelOptions { DisposeHttpClient = true };
+                                       options.HttpHandler = new SocketsHttpHandler();
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsInitializerWithoutFlagThenHandler(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               class C
+                               {
+                                   void M()
+                                   {
+                                       var options = new GrpcChannelOptions { };
+                                       options.HttpHandler = new SocketsHttpHandler();
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsUsingVarHandler(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               class C
+                               {
+                                   void M()
+                                   {
+                                       using var handler = new SocketsHttpHandler();
+                                       var options = new GrpcChannelOptions { HttpHandler = handler };
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsUsingStatementHandler(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               class C
+                               {
+                                   void M()
+                                   {
+                                       using (var handler = new SocketsHttpHandler())
+                                       {
+                                           var options = new GrpcChannelOptions { HttpHandler = handler };
+                                       }
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsAwaitUsingVarHandler(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               class AsyncHandler : HttpMessageHandler, System.IAsyncDisposable
+                               {
+                                   protected override System.Threading.Tasks.Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken) =>
+                                       System.Threading.Tasks.Task.FromResult(new HttpResponseMessage());
+
+                                   public System.Threading.Tasks.ValueTask DisposeAsync() => default;
+                               }
+
+                               class C
+                               {
+                                   async System.Threading.Tasks.Task M()
+                                   {
+                                       await using var handler = new AsyncHandler();
+                                       var options = new GrpcChannelOptions { HttpHandler = handler };
+                                       await System.Threading.Tasks.Task.CompletedTask;
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsTopLevelFlagInLaterStatement(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               var options = new GrpcChannelOptions { HttpHandler = new SocketsHttpHandler() };
+                               options.DisposeHttpClient = true;
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsTopLevelInitializerFlag(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               var options = new GrpcChannelOptions { DisposeHttpClient = true };
+                               options.HttpHandler = new SocketsHttpHandler();
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsTopLevelWithoutFlag(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Net.Http;
+                               using Grpc.Net.Client;
+
+                               var options = new GrpcChannelOptions();
+                               options.HttpHandler = new SocketsHttpHandler();
+                               """, cancellationToken);
+
+    [Test]
     public async Task AllowsSameSymbolFlagInLambda(CancellationToken cancellationToken) => await AssertCleanAsync("""
                                using System;
                                using System.Net.Http;

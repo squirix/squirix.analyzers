@@ -85,14 +85,34 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
     {
         foreach (var node in scope.DescendantNodes())
         {
-            if (node is AssignmentExpressionSyntax { Left: MemberAccessExpressionSyntax member }
-                && member.Name.Identifier.ValueText == DisposeFlagName
-                && SymbolEqualityComparer.Default.Equals(semanticModel.GetSymbolInfo(member.Expression, cancellationToken).Symbol, owner))
-                return true;
+            switch (node)
+            {
+                case AssignmentExpressionSyntax { Left: MemberAccessExpressionSyntax member }
+                    when member.Name.Identifier.ValueText == DisposeFlagName
+                         && SymbolEqualityComparer.Default.Equals(semanticModel.GetSymbolInfo(member.Expression, cancellationToken).Symbol, owner):
+                    return true;
+                case AssignmentExpressionSyntax { Right: var right } assignment
+                    when CreationInitializerSetsFlag(right)
+                         && SymbolEqualityComparer.Default.Equals(semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol, owner):
+                    return true;
+                case VariableDeclaratorSyntax { Initializer: { } initializer } declarator
+                    when CreationInitializerSetsFlag(initializer.Value)
+                         && SymbolEqualityComparer.Default.Equals(semanticModel.GetDeclaredSymbol(declarator, cancellationToken), owner):
+                    return true;
+            }
         }
 
         return false;
     }
+
+    private static bool CreationInitializerSetsFlag(ExpressionSyntax value) =>
+        Unwrap(value) is BaseObjectCreationExpressionSyntax { Initializer: { } initializer } && InitializerSetsDisposeFlag(initializer);
+
+    private static bool IsUsingDeclared(VariableDeclaratorSyntax declarator) =>
+        declarator.Parent is VariableDeclarationSyntax
+        {
+            Parent: LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 } or UsingStatementSyntax,
+        };
 
     private static bool InitializerSetsDisposeFlag(InitializerExpressionSyntax initializer)
     {
@@ -130,7 +150,10 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
         if (owner.Symbol == null)
             return false;
 
-        var scope = assignment.FirstAncestorOrSelf<MemberDeclarationSyntax>();
+        SyntaxNode? scope = assignment.FirstAncestorOrSelf<MemberDeclarationSyntax>();
+        if (scope is GlobalStatementSyntax)
+            scope = scope.Parent;
+
         return scope != null && HasDisposeFlagAssignment(scope, owner.Symbol, semanticModel, cancellationToken);
     }
 
@@ -149,7 +172,10 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
         if (semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol is not ILocalSymbol { DeclaringSyntaxReferences.Length: > 0 } local)
             return false;
 
-        if (local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax { Initializer: { } initializer })
+        if (local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax { Initializer: { } initializer } declarator)
+            return false;
+
+        if (IsUsingDeclared(declarator))
             return false;
 
         return IsOwningExpression(Unwrap(initializer.Value)) && IsDisposable(local.Type);
