@@ -39,6 +39,9 @@ public sealed class FieldNameTooLongAnalyzer : DiagnosticAnalyzer
         if (AnalyzerHelpers.IsCompilerOrGenerated(field))
             return;
 
+        if (field.ContainingType.TypeKind == TypeKind.Enum)
+            return;
+
         var name = field.Name;
         if (name.Length <= AnalyzerLimits.MaxFieldNameLength)
             return;
