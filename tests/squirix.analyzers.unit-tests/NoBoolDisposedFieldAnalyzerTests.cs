@@ -34,7 +34,120 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
     }
 
     [Test]
-    public async Task AllowsIntFlagNestedInInterlockedCall(CancellationToken cancellationToken)
+    public async Task AllowsInterlockedExchangeRef(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.Exchange(ref _disposed, 1);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsInterlockedCompareExchange(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.CompareExchange(ref _disposed, 1, 0);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsVolatileReadAndWrite(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Volatile.Write(ref _disposed, 1);
+                                  }
+
+                                  bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsThisQualifiedRefOperand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.Exchange(ref this._disposed, 1);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task FlagsReadAsInterlockedValueArgument(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.Exchange(ref _disposed, _disposed + 1);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsReadNestedInInterlockedCall(CancellationToken cancellationToken)
     {
         const string source = """
                               using System.Threading;
@@ -48,6 +161,102 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
                                   void Dispose()
                                   {
                                       Interlocked.Exchange(ref _disposed, Compute(_disposed));
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsReadAsVolatileWriteValue(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Volatile.Write(ref _disposed, _disposed);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsReadAsCompareExchangeComparand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.CompareExchange(ref _disposed, 1, _disposed);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsPlainWriteAndRead(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      _disposed = 1;
+                                  }
+
+                                  bool IsDisposed => _disposed == 1;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+        _ = await Assert.That(diagnostics[1].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task IgnoresDisposedNameWithOtherCasing(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private bool _Disposed;
+                                  private int Disposed;
+
+                                  void Dispose()
+                                  {
+                                      Disposed = 1;
                                   }
                               }
                               """;
