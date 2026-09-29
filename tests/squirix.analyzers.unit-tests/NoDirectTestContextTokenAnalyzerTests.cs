@@ -12,6 +12,25 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
 
 
                                            #nullable enable
+                                           namespace TUnit.Core
+                                           {
+                                               class TestContext
+                                               {
+                                                   public static TestContext? Current { get; } = new TestContext();
+
+                                                   public string Id { get; } = "id";
+
+                                                   public System.Threading.CancellationToken CancellationToken => System.Threading.CancellationToken.None;
+                                               }
+                                           }
+
+                                           class Other
+                                           {
+                                               public static Other? Current { get; } = new Other();
+
+                                               public System.Threading.CancellationToken CancellationToken => System.Threading.CancellationToken.None;
+                                           }
+
                                            class TestContext
                                            {
                                                public static TestContext? Current { get; } = new TestContext();
@@ -171,5 +190,248 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
 
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsNullForgivingTokenUse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = TestContext.Current!.CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsNullConditionalTokenUse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = TestContext.Current?.CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsNullConditionalChainedUse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = TestContext.Current?.CancellationToken.IsCancellationRequested;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsParenthesizedTokenUse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = (TestContext.Current).CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsParenthesizedForgivingUse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = (TestContext.Current!).CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsQualifiedTokenUse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = TUnit.Core.TestContext.Current.CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsGlobalQualifiedTokenUse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = global::TestContext.Current!.CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsGlobalQualifiedNamespaceUse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = global::TUnit.Core.TestContext.Current?.CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task AllowsTokenFromLocalContext(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var ctx = TestContext.Current!;
+                                      var token = ctx.CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsNullConditionalId(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = TestContext.Current?.Id;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsNullForgivingId(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = TestContext.Current!.Id;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsUnrelatedCurrentType(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = Other.Current!.CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsUnrelatedConditionalCurrent(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      var token = Other.Current?.CancellationToken;
+                                  }
+                              }
+                              """ + TestContextStub;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 }

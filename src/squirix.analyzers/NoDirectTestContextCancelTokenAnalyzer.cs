@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Squirix.Analyzers;
 
@@ -37,14 +38,27 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
 
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeMemberAccess, SyntaxKind.SimpleMemberAccessExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeMemberAccess, SyntaxKind.SimpleMemberAccessExpression, SyntaxKind.MemberBindingExpression);
     }
 
     private static void AnalyzeMemberAccess(SyntaxNodeAnalysisContext context)
     {
-        var node = (MemberAccessExpressionSyntax)context.Node;
+        var node = context.Node;
 
-        if (!IsTestContextCancellationToken(node))
+        Location? location;
+        switch (node)
+        {
+            case MemberAccessExpressionSyntax access when IsTestContextCancellationToken(access):
+                location = access.GetLocation();
+                break;
+            case MemberBindingExpressionSyntax binding:
+                location = GetConditionalAccessLocation(binding);
+                break;
+            default:
+                return;
+        }
+
+        if (location is null)
             return;
 
         var typeDeclaration = GetEnclosingType(node);
@@ -61,7 +75,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         if (ExposesSharedCancellationToken(symbol))
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, node.GetLocation()));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, location));
     }
 
     private static bool DeclaresCancellationTokenMember(INamedTypeSymbol symbol)
@@ -96,7 +110,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static TypeDeclarationSyntax? GetEnclosingType(MemberAccessExpressionSyntax node)
+    private static TypeDeclarationSyntax? GetEnclosingType(SyntaxNode node)
     {
         for (var current = node.Parent; current is not null; current = current.Parent)
         {
@@ -117,17 +131,69 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         return threading is { Name: "Threading" } && system is { Name: "System", IsGlobalNamespace: false } && system.ContainingNamespace.IsGlobalNamespace;
     }
 
-    private static bool IsTestContextCancellationToken(MemberAccessExpressionSyntax node)
+    private static Location? GetConditionalAccessLocation(MemberBindingExpressionSyntax binding)
     {
-        if (node.Name.Identifier.Text != "CancellationToken")
-            return false;
+        if (binding.Name.Identifier.Text != "CancellationToken")
+            return null;
 
-        if (node.Expression is not MemberAccessExpressionSyntax currentAccess)
-            return false;
+        SyntaxNode child = binding;
+        for (var parent = binding.Parent; parent is not null; child = parent, parent = parent.Parent)
+        {
+            switch (parent)
+            {
+                case ConditionalAccessExpressionSyntax conditional when conditional.WhenNotNull == child:
+                    return IsTestContextCurrent(conditional.Expression)
+                        ? Location.Create(conditional.SyntaxTree, TextSpan.FromBounds(conditional.Expression.SpanStart, binding.Span.End))
+                        : null;
+                case ConditionalAccessExpressionSyntax conditional when conditional.Expression == child:
+                case MemberAccessExpressionSyntax access when access.Expression == child:
+                case InvocationExpressionSyntax invocation when invocation.Expression == child:
+                case ElementAccessExpressionSyntax element when element.Expression == child:
+                    continue;
+                default:
+                    return null;
+            }
+        }
 
-        if (currentAccess.Name.Identifier.Text != "Current")
-            return false;
-
-        return currentAccess.Expression is IdentifierNameSyntax { Identifier.Text: "TestContext" };
+        return null;
     }
+
+    private static bool IsNamespaceQualifier(ExpressionSyntax expression) => expression switch
+    {
+        IdentifierNameSyntax => true,
+        AliasQualifiedNameSyntax => true,
+        MemberAccessExpressionSyntax access => IsNamespaceQualifier(access.Expression),
+        _ => false,
+    };
+
+    private static bool IsTestContextCancellationToken(MemberAccessExpressionSyntax node) =>
+        node.Name.Identifier.Text == "CancellationToken" && IsTestContextCurrent(node.Expression);
+
+    private static bool IsTestContextCurrent(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression:
+                    expression = suppression.Operand;
+                    continue;
+                case MemberAccessExpressionSyntax { Name.Identifier.Text: "Current" } current:
+                    return IsTestContextType(current.Expression);
+                default:
+                    return false;
+            }
+        }
+    }
+
+    private static bool IsTestContextType(ExpressionSyntax expression) => expression switch
+    {
+        IdentifierNameSyntax { Identifier.Text: "TestContext" } => true,
+        AliasQualifiedNameSyntax { Name.Identifier.Text: "TestContext" } => true,
+        MemberAccessExpressionSyntax { Name.Identifier.Text: "TestContext" } qualified => IsNamespaceQualifier(qualified.Expression),
+        _ => false,
+    };
 }
