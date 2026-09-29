@@ -216,7 +216,7 @@ public sealed class OmitSingleStatementBracesAnalyzerTests
     }
 
     [Test]
-    public async Task FlagsIfWhenInnerIfHasElse(CancellationToken cancellationToken)
+    public async Task AllowsMultilineInnerIfElse(CancellationToken cancellationToken)
     {
         const string source = """
                                       class C
