@@ -46,7 +46,7 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor IntRule = new(IntRuleId, IntTitle, IntMessage, Category, DiagnosticSeverity.Warning, true, IntDescription);
 
     /// <inheritdoc />
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(BoolRule, IntRule);
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [BoolRule, IntRule];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
