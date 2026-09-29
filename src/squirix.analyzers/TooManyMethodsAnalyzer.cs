@@ -86,8 +86,11 @@ public sealed class TooManyMethodsAnalyzer : DiagnosticAnalyzer
             {
                 case IFieldSymbol field:
                 {
+                    if (AnalyzerHelpers.IsCompilerOrGenerated(field))
+                        continue;
+
                     hasField = true;
-                    if (!field.IsConst && !AnalyzerHelpers.IsCompilerOrGenerated(field))
+                    if (!field.IsConst)
                         allFieldsAreConstants = false;
 
                     continue;

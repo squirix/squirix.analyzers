@@ -76,6 +76,47 @@ public sealed class TooManyMethodsAnalyzerTests
     }
 
     [Test]
+    public Task FlagsClassWithAutoProperty(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("class C\n{\n    public int P { get; set; }\n\n", "\n}\n", cancellationToken);
+
+    [Test]
+    public Task FlagsRecordWithPositionalParams(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("record R(int A)\n{\n", "\n}\n", cancellationToken);
+
+    [Test]
+    public Task FlagsStructWithAutoProperty(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("struct S\n{\n    public int P { get; set; }\n\n", "\n}\n", cancellationToken);
+
+    [Test]
+    public Task FlagsClassWithEventBackingField(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync(
+            "class E\n{\n    public event System.EventHandler Ev;\n\n    void Raise() { Ev?.Invoke(this, System.EventArgs.Empty); }\n\n",
+            "\n}\n",
+            cancellationToken);
+
+    [Test]
+    public Task FlagsPrimaryConstructorClass(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("class P(int a)\n{\n    int Get() => a;\n\n", "\n}\n", cancellationToken);
+
+    [Test]
+    public Task FlagsConstAndInstanceField(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("class C\n{\n    public const int A = 1;\n    private int _state;\n\n", "\n}\n", cancellationToken);
+
+    [Test]
+    public Task FlagsStaticClass(CancellationToken cancellationToken) =>
+        AssertFlaggedAsync("static class U\n{\n", "\n}\n", cancellationToken, true);
+
+    [Test]
+    public async Task DoesNotFlagStaticClassWithOnlyConstants(CancellationToken cancellationToken)
+    {
+        var source = BuildSource("static class K\n{\n    public const int A = 1;\n\n", "\n}\n", true);
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
     public async Task UsesConfigurableThreshold(CancellationToken cancellationToken)
     {
         const string header = "class Big\n{\n    private readonly int _state = 1;\n\n";
@@ -91,5 +132,25 @@ public sealed class TooManyMethodsAnalyzerTests
 
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    private static async Task AssertFlaggedAsync(string header, string footer, CancellationToken cancellationToken, bool isStatic = false)
+    {
+        var source = BuildSource(header, footer, isStatic);
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyMethodsAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    private static string BuildSource(string header, string footer, bool isStatic)
+    {
+        var modifier = isStatic ? "static " : string.Empty;
+        var lines = new string[25];
+        for (var i = 0; i < lines.Length; i++)
+            lines[i] = $"    {modifier}void M{i + 1:00}() {{ }}";
+
+        return header + string.Join("\n", lines) + footer;
     }
 }
