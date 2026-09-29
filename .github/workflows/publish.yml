@@ -27,7 +27,17 @@ jobs:
             -   name: Checkout
                 uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
                 with:
+                    fetch-depth: 0
                     persist-credentials: false
+
+            -   name: Verify tag commit is on main
+                if: github.event_name == 'push'
+                run: |
+                    git fetch --no-tags origin main
+                    if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+                        echo "Tagged commit $GITHUB_SHA is not reachable from origin/main; tag releases only from main." >&2
+                        exit 1
+                    fi
 
             -   name: Setup .NET
                 uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -46,6 +56,12 @@ jobs:
                 env:
                     PACKAGE_VERSION: ${{ inputs.packageVersion }}
 
+            -   name: Build Tests
+                run: dotnet build tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release -p:ContinuousIntegrationBuild=true
+
+            -   name: Test
+                run: dotnet test --project tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
+
             -   name: Build
                 env:
                     PACKAGE_VERSION: ${{ steps.version.outputs.package-version }}
@@ -58,7 +74,7 @@ jobs:
 
             -   name: NuGet login (OIDC to temp API key)
                 id: login
-                uses: NuGet/login@v1
+                uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
                 with:
                     user: ${{ secrets.NUGET_USER }}
 
