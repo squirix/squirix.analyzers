@@ -235,4 +235,225 @@ public sealed class SimplifyIfReturnAnalyzerTests
 
         _ = await Assert.That(diagnostics).IsEmpty();
     }
+
+    [Test]
+    public async Task AllowsIntAndLongReturnsIntoObject(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  object M(bool c)
+                                  {
+                                      if (c)
+                                          return 1;
+
+                                      return 2L;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsIntAndDoubleReturns(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  double M(bool c)
+                                  {
+                                      if (c)
+                                          return 1;
+
+                                      return 2.5;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsIntAndStringReturnsIntoObject(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  object M(bool c)
+                                  {
+                                      if (c)
+                                          return 1;
+
+                                      return "a";
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task FlagsSameTypeStringReturns(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  string M(bool c)
+                                  {
+                                      if (c)
+                                          return "a";
+
+                                      return "b";
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task FlagsSameTypeBoolReturns(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(bool c, bool d)
+                                  {
+                                      if (c)
+                                          return d;
+
+                                      return false;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task AllowsDerivedAndBaseReturns(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  class Base
+                                  {
+                                  }
+
+                                  class Derived : Base
+                                  {
+                                  }
+
+                                  Base M(bool c, Base b, Derived d)
+                                  {
+                                      if (c)
+                                          return d;
+
+                                      return b;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task FlagsNullAndNullableValueReturns(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  int? M(bool c, int? v)
+                                  {
+                                      if (c)
+                                          return null;
+
+                                      return v;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
+    public async Task AllowsNullAndValueTypeReturns(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  object? M(bool c, int v)
+                                  {
+                                      if (c)
+                                          return null;
+
+                                      return v;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsTargetTypedNewReturns(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  System.Text.StringBuilder M(bool c)
+                                  {
+                                      if (c)
+                                          return new();
+
+                                      return new();
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsDefaultLiteralReturns(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  int M(bool c)
+                                  {
+                                      if (c)
+                                          return default;
+
+                                      return 1;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new SimplifyIfReturnAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
 }
