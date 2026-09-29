@@ -42,11 +42,11 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (AnalyzerHelpers.IsCompilerOrGenerated(method))
             return;
 
-        if (method.IsOverride)
+        if (method.IsOverride || ImplementsInterfaceMember(method))
             return;
 
         var name = method.Name;
-        if (!name.StartsWith("Try", StringComparison.Ordinal))
+        if (!HasTryPrefix(name))
             return;
 
         if (ReturnsBoolLike(method.ReturnType))
@@ -56,7 +56,33 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (location == null)
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, method.ReturnType.Name));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, method.ReturnType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
+    }
+
+    /// <summary>
+    /// Matches <c>Try</c> as a whole word: the name is exactly <c>Try</c> or the next character is not a lowercase letter.
+    /// </summary>
+    private static bool HasTryPrefix(string name) => name.StartsWith("Try", StringComparison.Ordinal) && (name.Length == 3 || !char.IsLower(name[3]));
+
+    private static bool ImplementsInterfaceMember(IMethodSymbol method)
+    {
+        if (!method.ExplicitInterfaceImplementations.IsDefaultOrEmpty)
+            return true;
+
+        var type = method.ContainingType;
+        if (type == null || type.TypeKind == TypeKind.Interface)
+            return false;
+
+        foreach (var iface in type.AllInterfaces)
+        {
+            foreach (var member in iface.GetMembers(method.Name))
+            {
+                if (member is IMethodSymbol && SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), method))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsSystemThreadingTasks(INamespaceSymbol? ns) => ns is { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace.Name: "System" } } &&
