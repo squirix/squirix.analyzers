@@ -1,16 +1,16 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
+public sealed class NoBoolDisposedFieldAnalyzerTests
 {
     private const string BoolRuleId = "SQR0015";
     private const string IntRuleId = "SQR0016";
 
-    [Fact]
-    public async Task AllowsIntDisposedField()
+    [Test]
+    public async Task AllowsIntDisposedField(CancellationToken cancellationToken)
     {
         const string source = """
                               using System.Threading;
@@ -28,13 +28,126 @@ public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsIntFlagNestedInInterlockedCall()
+    [Test]
+    public async Task AllowsInterlockedExchangeRef(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.Exchange(ref _disposed, 1);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsInterlockedCompareExchange(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.CompareExchange(ref _disposed, 1, 0);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsVolatileReadAndWrite(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Volatile.Write(ref _disposed, 1);
+                                  }
+
+                                  bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsThisQualifiedRefOperand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.Exchange(ref this._disposed, 1);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task FlagsReadAsInterlockedValueArgument(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.Exchange(ref _disposed, _disposed + 1);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsReadNestedInInterlockedCall(CancellationToken cancellationToken)
     {
         const string source = """
                               using System.Threading;
@@ -52,13 +165,109 @@ public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
     }
 
-    [Fact]
-    public async Task AllowsIntFlagViaInterlockedAndVolatile()
+    [Test]
+    public async Task FlagsReadAsVolatileWriteValue(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Volatile.Write(ref _disposed, _disposed);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsReadAsCompareExchangeComparand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      Interlocked.CompareExchange(ref _disposed, 1, _disposed);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsPlainWriteAndRead(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose()
+                                  {
+                                      _disposed = 1;
+                                  }
+
+                                  bool IsDisposed => _disposed == 1;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+        _ = await Assert.That(diagnostics[1].Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task IgnoresDisposedNameWithOtherCasing(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private bool _Disposed;
+                                  private int Disposed;
+
+                                  void Dispose()
+                                  {
+                                      Disposed = 1;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsIntFlagViaInterlockedAndVolatile(CancellationToken cancellationToken)
     {
         const string source = """
                               using System.Threading;
@@ -76,13 +285,13 @@ public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsNameofDisposedField()
+    [Test]
+    public async Task AllowsNameofDisposedField(CancellationToken cancellationToken)
     {
         const string source = """
                               using System.Threading;
@@ -100,13 +309,13 @@ public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsQualifiedInterlockedVolatile()
+    [Test]
+    public async Task AllowsQualifiedInterlockedVolatile(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -122,13 +331,13 @@ public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsBareIntDisposedField()
+    [Test]
+    public async Task FlagsBareIntDisposedField(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -144,15 +353,15 @@ public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
 
-        Assert.Equal(2, diagnostics.Length);
-        Assert.Equal(IntRuleId, diagnostics[0].Id);
-        Assert.Equal(IntRuleId, diagnostics[1].Id);
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        _ = await Assert.That(diagnostics[0].Id).IsEqualTo(IntRuleId);
+        _ = await Assert.That(diagnostics[1].Id).IsEqualTo(IntRuleId);
     }
 
-    [Fact]
-    public async Task FlagsBoolDisposedField()
+    [Test]
+    public async Task FlagsBoolDisposedField(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -161,9 +370,9 @@ public sealed class NoBoolDisposedFieldAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(BoolRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(BoolRuleId);
     }
 }

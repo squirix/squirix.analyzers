@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class OmitOuterLoopBracesAnalyzerTests : AnalyzerTestBase
+public sealed class OmitOuterLoopBracesAnalyzerTests
 {
     private const string RuleId = "SQR0001";
 
-    [Fact]
-    public async Task DoesNotFlagOuterLoopWithNonLoopBody()
+    [Test]
+    public async Task DoesNotFlagOuterLoopWithNonLoopBody(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -25,13 +25,13 @@ public sealed class OmitOuterLoopBracesAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsOuterLoopContainingOnlyNestedLoop()
+    [Test]
+    public async Task FlagsOuterLoopContainingOnlyNestedLoop(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -49,9 +49,9 @@ public sealed class OmitOuterLoopBracesAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

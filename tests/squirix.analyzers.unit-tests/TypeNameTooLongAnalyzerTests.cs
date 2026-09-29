@@ -1,15 +1,15 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class TypeNameTooLongAnalyzerTests : AnalyzerTestBase
+public sealed class TypeNameTooLongAnalyzerTests
 {
     private const string RuleId = "SQR0004";
 
-    [Fact]
-    public async Task AllowsShortTypeName()
+    [Test]
+    public async Task AllowsShortTypeName(CancellationToken cancellationToken)
     {
         const string source = """
                               class Cache
@@ -17,13 +17,13 @@ public sealed class TypeNameTooLongAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNameTooLongAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNameTooLongAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsOverLongTypeName()
+    [Test]
+    public async Task FlagsOverLongTypeName(CancellationToken cancellationToken)
     {
         const string source = """
                               class ThisTypeNameIsSoExtremelyLongThatItExceedsTheFortyCharacterLimit
@@ -31,9 +31,9 @@ public sealed class TypeNameTooLongAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNameTooLongAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TypeNameTooLongAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

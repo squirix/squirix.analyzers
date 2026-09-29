@@ -20,7 +20,6 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString MessageFormat = "Method '{0}' has 'Try' prefix but returns '{1}', expected bool, Task<bool>, or ValueTask<bool>";
 
     private static readonly LocalizableString Title = "Try-prefixed method must return a Boolean result";
-
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Warning, true, Description);
 
     /// <inheritdoc />
@@ -43,11 +42,11 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (AnalyzerHelpers.IsCompilerOrGenerated(method))
             return;
 
-        if (method.IsOverride)
+        if (method.IsOverride || ImplementsInterfaceMember(method))
             return;
 
         var name = method.Name;
-        if (!name.StartsWith("Try", StringComparison.Ordinal))
+        if (!HasTryPrefix(name))
             return;
 
         if (ReturnsBoolLike(method.ReturnType))
@@ -57,8 +56,37 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (location == null)
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, method.ReturnType.Name));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, method.ReturnType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
     }
+
+    /// <summary>
+    /// Matches <c>Try</c> as a whole word: the name is exactly <c>Try</c> or the next character is not a lowercase letter.
+    /// </summary>
+    private static bool HasTryPrefix(string name) => name.StartsWith("Try", StringComparison.Ordinal) && (name.Length == 3 || !char.IsLower(name[3]));
+
+    private static bool ImplementsInterfaceMember(IMethodSymbol method)
+    {
+        if (!method.ExplicitInterfaceImplementations.IsDefaultOrEmpty)
+            return true;
+
+        var type = method.ContainingType;
+        if (type == null || type.TypeKind == TypeKind.Interface)
+            return false;
+
+        foreach (var iface in type.AllInterfaces)
+        {
+            foreach (var member in iface.GetMembers(method.Name))
+            {
+                if (member is IMethodSymbol && SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), method))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsSystemThreadingTasks(INamespaceSymbol? ns) => ns is { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace.Name: "System" } } &&
+                                                                        ns.ContainingNamespace?.ContainingNamespace?.ContainingNamespace?.IsGlobalNamespace == true;
 
     /// <summary>
     /// Accepts <c>bool</c> directly or wrapped in a single <c>Task&lt;bool&gt;</c> or
@@ -69,7 +97,7 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (type.SpecialType == SpecialType.System_Boolean)
             return true;
 
-        if (type is not INamedTypeSymbol named || named.Arity != 1)
+        if (type is not INamedTypeSymbol { Arity: 1 } named)
             return false;
 
         if (named.Name != "Task" && named.Name != "ValueTask")
@@ -78,12 +106,6 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (!IsSystemThreadingTasks(named.ContainingNamespace))
             return false;
 
-        return named.TypeArguments is [var result] && result.SpecialType == SpecialType.System_Boolean;
+        return named.TypeArguments is [{ SpecialType: SpecialType.System_Boolean }];
     }
-
-    private static bool IsSystemThreadingTasks(INamespaceSymbol? ns) =>
-        ns?.Name == "Tasks" &&
-        ns?.ContainingNamespace?.Name == "Threading" &&
-        ns?.ContainingNamespace?.ContainingNamespace?.Name == "System" &&
-        ns?.ContainingNamespace?.ContainingNamespace?.ContainingNamespace?.IsGlobalNamespace == true;
 }

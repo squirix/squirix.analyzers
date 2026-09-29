@@ -1,16 +1,16 @@
 using System.Collections.Immutable;
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class TooManyFieldsAnalyzerTests : AnalyzerTestBase
+public sealed class TooManyFieldsAnalyzerTests
 {
     private const string RuleId = "SQR0003";
 
-    [Fact]
-    public async Task DoesNotFlagTypeWithinLimit()
+    [Test]
+    public async Task DoesNotFlagTypeWithinLimit(CancellationToken cancellationToken)
     {
         const string header = "class Small\n{\n";
         const string footer = "\n}\n";
@@ -20,13 +20,13 @@ public sealed class TooManyFieldsAnalyzerTests : AnalyzerTestBase
         var fields = string.Join("\n", smallFieldLines);
         var source = header + fields + footer;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsTypeWithMoreThanFifteenFields()
+    [Test]
+    public async Task FlagsTypeWithMoreThanFifteenFields(CancellationToken cancellationToken)
     {
         const string header = "class Big\n{\n";
         const string footer = "\n}\n";
@@ -36,14 +36,14 @@ public sealed class TooManyFieldsAnalyzerTests : AnalyzerTestBase
         var fields = string.Join("\n", bigFieldLines);
         var source = header + fields + footer;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
-    [Fact]
-    public async Task UsesConfigurableThreshold()
+    [Test]
+    public async Task UsesConfigurableThreshold(CancellationToken cancellationToken)
     {
         const string header = "class Big\n{\n";
         const string footer = "\n}\n";
@@ -54,9 +54,9 @@ public sealed class TooManyFieldsAnalyzerTests : AnalyzerTestBase
         var source = header + fields + footer;
         var options = ImmutableDictionary.Create<string, string>().Add("SQR0003.max_fields_per_type", "3");
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, DefaultCancellationToken, options);
+        var diagnostics = await AnalyzerRunner.RunAsync(new TooManyFieldsAnalyzer(), source, options, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(RuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 }

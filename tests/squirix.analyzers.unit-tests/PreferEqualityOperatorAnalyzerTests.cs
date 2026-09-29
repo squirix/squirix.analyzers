@@ -1,17 +1,17 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
-using Xunit;
 
 namespace Squirix.Analyzers.UnitTests;
 
-public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
+public sealed class PreferEqualityOperatorAnalyzerTests
 {
     private const string IsConstantRuleId = "SQR0013";
     private const string IsNotConstantRuleId = "SQR0014";
     private const string NullCheckRuleId = "SQR0012";
 
-    [Fact]
-    public async Task AllowsEqualityOperatorForConstant()
+    [Test]
+    public async Task AllowsEqualityOperatorForConstant(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -24,13 +24,13 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsEqualityOperatorForNullCheck()
+    [Test]
+    public async Task AllowsEqualityOperatorForNullCheck(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -43,13 +43,13 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsInequalityOperatorForConstant()
+    [Test]
+    public async Task AllowsInequalityOperatorForConstant(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -62,31 +62,13 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task AllowsIsNullWithStructConstraint()
-    {
-        const string source = """
-                              class C
-                              {
-                                  bool M<T>(T value) where T : struct
-                                  {
-                                      return value is null;
-                                  }
-                              }
-                              """;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
-
-        Assert.Empty(diagnostics);
-    }
-
-    [Fact]
-    public async Task AllowsOrPatternWithoutNullArm()
+    [Test]
+    public async Task AllowsOrPatternWithoutNullArm(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -98,13 +80,13 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        Assert.Empty(diagnostics);
+        _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Fact]
-    public async Task FlagsIsConstantPattern()
+    [Test]
+    public async Task FlagsIsConstantPattern(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -117,14 +99,14 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(IsConstantRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IsConstantRuleId);
     }
 
-    [Fact]
-    public async Task FlagsIsNotConstantPattern()
+    [Test]
+    public async Task FlagsIsNotConstantPattern(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -137,14 +119,14 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(IsNotConstantRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IsNotConstantRuleId);
     }
 
-    [Fact]
-    public async Task FlagsIsNotNullPatternOnRecord()
+    [Test]
+    public async Task FlagsIsNotNullPatternOnRecord(CancellationToken cancellationToken)
     {
         const string source = """
                               record R(string Value);
@@ -159,14 +141,14 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
     }
 
-    [Fact]
-    public async Task FlagsIsNullForUnconstrainedTypeParameter()
+    [Test]
+    public async Task FlagsIsNullForUnconstrainedTypeParameter(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -178,14 +160,14 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
     }
 
-    [Fact]
-    public async Task FlagsIsNullOnInterfaceType()
+    [Test]
+    public async Task FlagsIsNullOnInterfaceType(CancellationToken cancellationToken)
     {
         const string source = """
                               interface IFoo
@@ -201,14 +183,14 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
     }
 
-    [Fact]
-    public async Task FlagsIsNullPattern()
+    [Test]
+    public async Task FlagsIsNullPattern(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -221,14 +203,14 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
     }
 
-    [Fact]
-    public async Task FlagsIsNullPatternOnRecord()
+    [Test]
+    public async Task FlagsIsNullPatternOnRecord(CancellationToken cancellationToken)
     {
         const string source = """
                               record R(string Value);
@@ -243,14 +225,14 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
     }
 
-    [Fact]
-    public async Task FlagsNullArmInOrPattern()
+    [Test]
+    public async Task FlagsNullArmInOrPattern(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -265,9 +247,395 @@ public sealed class PreferEqualityOperatorAnalyzerTests : AnalyzerTestBase
                               }
                               """;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, DefaultCancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
 
-        var diagnostic = Assert.Single(diagnostics);
-        Assert.Equal(NullCheckRuleId, diagnostic.Id);
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
+    }
+
+    [Test]
+    public async Task AllowsSpanConstantPattern(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(System.Span<char> value)
+                                  {
+                                      return value is "abc";
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsReadOnlySpanConstantPattern(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(System.ReadOnlySpan<char> value)
+                                  {
+                                      return value is "abc";
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsIsNotOnReadOnlySpan(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(System.ReadOnlySpan<char> value)
+                                  {
+                                      return value is not "abc";
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsConstantOnInterfaceInput(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(System.IComparable value)
+                                  {
+                                      return value is 5;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsConstantOnEnumBaseInput(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(System.Enum value)
+                                  {
+                                      return value is System.DayOfWeek.Monday;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsConstantOnValueTypeInput(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(System.ValueType value)
+                                  {
+                                      return value is 5;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsConstantOnObjectInput(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(object value)
+                                  {
+                                      return value is 5;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsStringConstantOnObjectInput(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(object value)
+                                  {
+                                      return value is "x";
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsIsNotConstantOnObjectInput(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(object value)
+                                  {
+                                      return value is not 5;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsConstantOnUnconstrainedTypeParam(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M<T>(T value)
+                                  {
+                                      return value is 5;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsOrPatternWithSeveralConstants(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(int value)
+                                  {
+                                      return value is 1 or 2;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsIsNotOrPatternConstants(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(int value)
+                                  {
+                                      return value is not (1 or 2);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsNullCheckOnCustomEqualityBase(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class B
+                              {
+                                  public static bool operator ==(B? left, B? right) => true;
+
+                                  public static bool operator !=(B? left, B? right) => false;
+
+                                  public override bool Equals(object? obj) => true;
+
+                                  public override int GetHashCode() => 0;
+                              }
+
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : B
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task FlagsStringConstantPattern(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(string value)
+                                  {
+                                      return value is "abc";
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IsConstantRuleId);
+    }
+
+    [Test]
+    public async Task FlagsNullableIntConstantPattern(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(int? value)
+                                  {
+                                      return value is 5;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IsConstantRuleId);
+    }
+
+    [Test]
+    public async Task FlagsIsNotEnumConstantPattern(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(System.DayOfWeek value)
+                                  {
+                                      return value is not System.DayOfWeek.Monday;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IsNotConstantRuleId);
+    }
+
+    [Test]
+    public async Task FlagsCharConstantPattern(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(char value)
+                                  {
+                                      return value is 'a';
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IsConstantRuleId);
+    }
+
+    [Test]
+    public async Task FlagsSingleConstantInOrPatternNullArm(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(string? value)
+                                  {
+                                      return value is null or "abc";
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
+    }
+
+    [Test]
+    public async Task FlagsNullCheckWithClassConstraint(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class B
+                              {
+                              }
+
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : class
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
+    }
+
+    [Test]
+    public async Task FlagsNullCheckWithPlainBaseConstraint(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class B
+                              {
+                              }
+
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : B
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
     }
 }

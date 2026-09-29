@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using Microsoft.CodeAnalysis;
@@ -20,8 +21,21 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Description = "Omit arguments that equal the parameter default; the default may change at the declaration.";
 
     private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value";
+
     private static readonly LocalizableString Title = "Avoid redundant default argument values";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
+
+    private static readonly HashSet<SyntaxKind> RedundantDefaultCandidateKinds =
+    [
+        SyntaxKind.DefaultLiteralExpression,
+        SyntaxKind.DefaultExpression,
+        SyntaxKind.NullLiteralExpression,
+        SyntaxKind.NumericLiteralExpression,
+        SyntaxKind.StringLiteralExpression,
+        SyntaxKind.CharacterLiteralExpression,
+        SyntaxKind.TrueLiteralExpression,
+        SyntaxKind.FalseLiteralExpression,
+    ];
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -116,7 +130,12 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         if (context.SemanticModel.GetSymbolInfo(creation, context.CancellationToken).Symbol is not IMethodSymbol method)
             return;
 
-        AnalyzeArgumentList(context, creation.ArgumentList, method, static (node, list) => ((ImplicitObjectCreationExpressionSyntax)node).WithArgumentList(list));
+        // Re-binding a bare 'new(...)' in isolation has no target type, so rewrite it to an explicit creation of the bound type.
+        if (context.SemanticModel.GetTypeInfo(creation, context.CancellationToken).Type is not { } createdType)
+            return;
+
+        var typeSyntax = SyntaxFactory.ParseTypeName(createdType.WithNullableAnnotation(NullableAnnotation.None).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        AnalyzeArgumentList(context, creation.ArgumentList, method, (_, list) => SyntaxFactory.ObjectCreationExpression(typeSyntax).WithArgumentList(list));
     }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
@@ -249,18 +268,8 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             if (argument.NameColon != null)
                 return true;
 
-            switch (argument.Expression.Kind())
-            {
-                case SyntaxKind.DefaultLiteralExpression:
-                case SyntaxKind.DefaultExpression:
-                case SyntaxKind.NullLiteralExpression:
-                case SyntaxKind.NumericLiteralExpression:
-                case SyntaxKind.StringLiteralExpression:
-                case SyntaxKind.CharacterLiteralExpression:
-                case SyntaxKind.TrueLiteralExpression:
-                case SyntaxKind.FalseLiteralExpression:
-                    return true;
-            }
+            if (RedundantDefaultCandidateKinds.Contains(argument.Expression.Kind()))
+                return true;
         }
 
         return false;
@@ -268,10 +277,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDefaultValueOfParameterType(object? defaultValue, ITypeSymbol parameterType)
     {
-        if (parameterType.IsReferenceType || parameterType is IPointerTypeSymbol)
-            return defaultValue is null;
-
-        if (parameterType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        if (parameterType.IsReferenceType || parameterType is IPointerTypeSymbol || parameterType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
             return defaultValue is null;
 
         var typeDefault = GetValueTypeDefault(parameterType);
@@ -312,8 +318,30 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return true;
     }
 
+    private static bool HasCallerInfoAttribute(IParameterSymbol parameter)
+    {
+        foreach (var attribute in parameter.GetAttributes())
+        {
+            var attr = attribute.AttributeClass;
+            if (attr?.ContainingNamespace?.ToDisplayString() is not "System.Runtime.CompilerServices")
+                continue;
+
+            if (attr.Name is "CallerMemberNameAttribute" or "CallerFilePathAttribute" or "CallerLineNumberAttribute" or "CallerArgumentExpressionAttribute")
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool TryGetParameterDefault(IParameterSymbol parameter, out object? defaultValue)
     {
+        // Omitting a caller-info argument makes the compiler substitute caller data, so an explicit value is never redundant.
+        if (HasCallerInfoAttribute(parameter))
+        {
+            defaultValue = null;
+            return false;
+        }
+
         if (parameter.HasExplicitDefaultValue)
         {
             defaultValue = parameter.ExplicitDefaultValue;

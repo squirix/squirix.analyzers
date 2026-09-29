@@ -6,6 +6,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Squirix.Analyzers;
 
@@ -94,13 +96,21 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
     private static IEnumerable<SyntaxNode> EnumerateDelegateNodes(ExpressionSyntax expression)
     {
-        if (IsDelegateNode(expression))
-            yield return expression;
-
-        foreach (var descendant in expression.DescendantNodes())
+        // Only outermost delegates are yielded: captures of nested delegates are part of the enclosing delegate's analysis,
+        // and a nested delegate capturing the enclosing delegate's own locals is not outer state.
+        var pending = new Stack<SyntaxNode>();
+        pending.Push(expression);
+        while (pending.Count > 0)
         {
-            if (IsDelegateNode(descendant))
-                yield return descendant;
+            var node = pending.Pop();
+            if (IsDelegateNode(node))
+            {
+                yield return node;
+                continue;
+            }
+
+            foreach (var child in node.ChildNodes())
+                pending.Push(child);
         }
     }
 
@@ -111,79 +121,77 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         if (function.Modifiers.Any(SyntaxKind.StaticKeyword))
             return false;
 
-        foreach (var descendant in function.DescendantNodes())
+        var operation = semanticModel.GetOperation(function, cancellationToken);
+        if (operation is null)
+            return false;
+
+        return CapturesOuterState(operation, function.Span, semanticModel, [], cancellationToken);
+    }
+
+    private static bool CapturesOuterState(IOperation operation, TextSpan scope, SemanticModel semanticModel, HashSet<ISymbol> visitedFunctions, CancellationToken cancellationToken)
+    {
+        // nameof(...) arguments resolve to symbols but never capture at runtime.
+        if (operation is INameOfOperation)
+            return false;
+
+        switch (operation)
         {
-            // Skip nested anonymous functions: their captures are checked separately when
-            // enumerated, and identifiers declared inside the outer function are not outer captures.
-            // Skip nameof(...) arguments: they resolve to symbols but never capture at runtime.
-            var skip = false;
-            for (var ancestor = descendant.Parent; ancestor is not null && ancestor != function; ancestor = ancestor.Parent)
-            {
-                if (ancestor is AnonymousFunctionExpressionSyntax)
-                {
-                    skip = true;
-                    break;
-                }
-
-                if (ancestor is not InvocationExpressionSyntax { Expression: IdentifierNameSyntax nameofName } nameofInvocation || nameofName.Identifier.ValueText != "nameof" ||
-                    !IsWithin(nameofInvocation.ArgumentList, descendant))
-                    continue;
-                skip = true;
-                break;
-            }
-
-            if (skip)
-                continue;
-
-            if (descendant is ThisExpressionSyntax or BaseExpressionSyntax)
+            case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance }:
                 return true;
 
-            if (descendant is not IdentifierNameSyntax identifier)
-                continue;
+            case ILocalReferenceOperation localReference when !IsDeclaredWithin(localReference.Local, scope, cancellationToken):
+                return true;
 
-            var symbol = semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol;
-            if (symbol is null)
-                continue;
+            case IParameterReferenceOperation parameterReference when !IsDeclaredWithin(parameterReference.Parameter, scope, cancellationToken):
+                return true;
 
-            switch (symbol)
-            {
-                case ILocalSymbol or IParameterSymbol or IRangeVariableSymbol:
-                {
-                    var declaredInside = false;
-                    foreach (var reference in symbol.DeclaringSyntaxReferences)
-                    {
-                        var syntax = reference.GetSyntax(cancellationToken);
-                        if (!function.Span.Contains(syntax.Span))
-                            continue;
-                        declaredInside = true;
-                        break;
-                    }
+            case IInvocationOperation { TargetMethod.MethodKind: MethodKind.LocalFunction } invocation
+                when LocalFunctionCaptures(invocation.TargetMethod, scope, semanticModel, visitedFunctions, cancellationToken):
+                return true;
 
-                    if (!declaredInside)
-                        return true;
-                    break;
-                }
+            case IMethodReferenceOperation { Method.MethodKind: MethodKind.LocalFunction } methodReference
+                when LocalFunctionCaptures(methodReference.Method, scope, semanticModel, visitedFunctions, cancellationToken):
+                return true;
+        }
 
-                case IFieldSymbol field:
-                    if (!field.IsStatic)
-                        return true;
-                    break;
+        foreach (var child in operation.ChildOperations)
+        {
+            if (CapturesOuterState(child, scope, semanticModel, visitedFunctions, cancellationToken))
+                return true;
+        }
 
-                case IPropertySymbol property:
-                    if (!property.IsStatic)
-                        return true;
-                    break;
+        return false;
+    }
 
-                case IMethodSymbol method:
-                    if (method is { IsStatic: false, MethodKind: not (MethodKind.Constructor or MethodKind.StaticConstructor) })
-                        return true;
-                    break;
+    private static bool LocalFunctionCaptures(IMethodSymbol localFunction, TextSpan scope, SemanticModel semanticModel, HashSet<ISymbol> visitedFunctions, CancellationToken cancellationToken)
+    {
+        // A local function declared inside the delegate is walked as part of its body.
+        if (IsDeclaredWithin(localFunction, scope, cancellationToken))
+            return false;
 
-                case IEventSymbol evt:
-                    if (!evt.IsStatic)
-                        return true;
-                    break;
-            }
+        if (!visitedFunctions.Add(localFunction))
+            return false;
+
+        foreach (var reference in localFunction.DeclaringSyntaxReferences)
+        {
+            var syntax = reference.GetSyntax(cancellationToken);
+            if (syntax.SyntaxTree != semanticModel.SyntaxTree)
+                return true;
+
+            var operation = semanticModel.GetOperation(syntax, cancellationToken);
+            if (operation is not null && CapturesOuterState(operation, syntax.Span, semanticModel, visitedFunctions, cancellationToken))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsDeclaredWithin(ISymbol symbol, TextSpan scope, CancellationToken cancellationToken)
+    {
+        foreach (var reference in symbol.DeclaringSyntaxReferences)
+        {
+            if (scope.Contains(reference.GetSyntax(cancellationToken).Span))
+                return true;
         }
 
         return false;
@@ -191,15 +199,4 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDelegateNode(SyntaxNode node) => node.IsKind(SyntaxKind.SimpleLambdaExpression) || node.IsKind(SyntaxKind.ParenthesizedLambdaExpression) ||
                                                            node.IsKind(SyntaxKind.AnonymousMethodExpression);
-
-    private static bool IsWithin(SyntaxNode ancestor, SyntaxNode descendant)
-    {
-        for (var current = descendant; current is not null; current = current.Parent)
-        {
-            if (current == ancestor)
-                return true;
-        }
-
-        return false;
-    }
 }

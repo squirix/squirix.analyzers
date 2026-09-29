@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Squirix.Analyzers.UnitTests.Support;
@@ -12,20 +14,17 @@ namespace Squirix.Analyzers.UnitTests.Support;
 /// <summary>Compiles C# source and returns the findings of a single analyzer.</summary>
 internal static class AnalyzerRunner
 {
-    public static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default,
-        ImmutableDictionary<string, string>? analyzerOptions = null)
+    private static readonly Lazy<ImmutableArray<MetadataReference>> References = new(LoadReferences);
+
+    public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
+        RunAsync(analyzer, source, null, cancellationToken);
+
+    public static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions = null,
+        CancellationToken cancellationToken = default)
     {
         var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
-        var references = new List<MetadataReference>();
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location))
-                continue;
-
-            references.Add(MetadataReference.CreateFromFile(assembly.Location));
-        }
-
-        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, References.Value, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
+        ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
 
         AnalyzerOptions? options = null;
         if (analyzerOptions is { Count: > 0 })
@@ -45,5 +44,45 @@ internal static class AnalyzerRunner
         }
 
         return [.. filtered];
+    }
+
+    private static string GetTrustedPlatformAssemblies() => AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? ThrowTrustedAssembliesMissing();
+
+    private static bool HasTopLevelStatements(SyntaxTree tree, CancellationToken cancellationToken)
+    {
+        foreach (var member in ((CompilationUnitSyntax)tree.GetRoot(cancellationToken)).Members)
+        {
+            if (member is GlobalStatementSyntax)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static ImmutableArray<MetadataReference> LoadReferences()
+    {
+        var builder = ImmutableArray.CreateBuilder<MetadataReference>();
+        foreach (var path in GetTrustedPlatformAssemblies().Split(Path.PathSeparator))
+        {
+            if (path.Length > 0)
+                builder.Add(MetadataReference.CreateFromFile(path));
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private static string ThrowTrustedAssembliesMissing() => throw new InvalidOperationException("TRUSTED_PLATFORM_ASSEMBLIES is not available.");
+
+    private static void ThrowIfSourceDoesNotCompile(Compilation compilation, CancellationToken cancellationToken)
+    {
+        var errors = new List<string>();
+        foreach (var diagnostic in compilation.GetDiagnostics(cancellationToken))
+        {
+            if (diagnostic.Severity == DiagnosticSeverity.Error)
+                errors.Add(diagnostic.ToString());
+        }
+
+        if (errors.Count > 0)
+            throw new InvalidOperationException("Test source has compiler errors:" + Environment.NewLine + string.Join(Environment.NewLine, errors));
     }
 }

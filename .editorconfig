@@ -163,25 +163,16 @@ dotnet_diagnostic.RS0030.severity = error # symbol has been banned
 dotnet_diagnostic.RS0031.severity = error # symbol has been banned for use in declarations
 
 # ===========================================================================
-# xUnit.net analyzers (https://xunit.net/xunit.analyzers/rules/)
+# TUnit analyzers (shipped in the TUnit package via TUnit.Core)
 # ===========================================================================
-# Promote Info/Hidden xUnit rules to warning.
-# Default-Error rules are omitted: they already fail the build.
-dotnet_diagnostic.xUnit1004.severity = warning # test methods should not be skipped
-dotnet_diagnostic.xUnit1033.severity = warning # class fixture should add constructor argument of type T
-dotnet_diagnostic.xUnit1042.severity = warning # MemberData returns untyped data rows
-dotnet_diagnostic.xUnit1044.severity = warning # avoid TheoryData type args that are not serializable
-dotnet_diagnostic.xUnit1045.severity = warning # avoid TheoryData type args that might not be serializable
-dotnet_diagnostic.xUnit1046.severity = warning # avoid TheoryDataRow args that are not serializable
-dotnet_diagnostic.xUnit1047.severity = warning # avoid TheoryDataRow args that might not be serializable
-dotnet_diagnostic.xUnit1050.severity = warning # ClassData returns untyped data rows
-dotnet_diagnostic.xUnit2001.severity = warning # do not use invalid equality check
-dotnet_diagnostic.xUnit2022.severity = warning # boolean assertions should not be negated
-dotnet_diagnostic.xUnit2023.severity = warning # do not use collection methods for single-item collections
-dotnet_diagnostic.xUnit2024.severity = warning # do not use boolean asserts for simple equality
-dotnet_diagnostic.xUnit2025.severity = warning # boolean assertion can be simplified
-dotnet_diagnostic.xUnit2032.severity = warning # assignable-from type assertions are confusingly named
-dotnet_diagnostic.xUnit2033.severity = warning # use assertion return value instead of re-deriving it
+# Promote Info TUnit rules to warning.
+# Default-Error/Warning rules are omitted: they already apply.
+dotnet_diagnostic.TUnit0043.severity = warning # property required not set
+dotnet_diagnostic.TUnit0057.severity = warning # hook context parameter optional
+dotnet_diagnostic.TUnit0060.severity = warning # potential empty data source
+dotnet_diagnostic.TUnitAssertions0009.severity = warning # xUnit assertion
+dotnet_diagnostic.TUnitAssertions0016.severity = warning # collection assertion uses reference equality
+dotnet_diagnostic.TUXU0001.severity = warning # xUnit migration
 
 # ===========================================================================
 # Rider / ReSharper inspection severities (UI hints; do not fail dotnet build)
