@@ -66,6 +66,9 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0022`](docs/rules/SQR0022.md) | Usage       | `UseTimeSpanThrowHelperAnalyzer`          | Prefer ArgumentOutOfRangeException.ThrowIf* for TimeSpan guards.     |
 | [`SQR0023`](docs/rules/SQR0023.md) | Usage       | `CoalesceThrowIfNullAnalyzer`             | Prefer ArgumentNullException.ThrowIfNull over null-coalescing throw. |
 | [`SQR0024`](docs/rules/SQR0024.md) | Usage       | `CoalesceThrowHelperAnalyzer`             | Prefer a throw-helper method over null-coalescing throw.             |
+| [`SQR0025`](docs/rules/SQR0025.md) | Naming      | `TryPrefixMustReturnBoolAnalyzer`         | Try-prefixed method must return bool.                                |
+| [`SQR0026`](docs/rules/SQR0026.md) | Style       | `SimplifyIfReturnAnalyzer`                | Simplify if-return to a conditional return.                          |
+| [`SQR0027`](docs/rules/SQR0027.md) | Usage       | `GrpcDisposeHttpClientAnalyzer`           | Set DisposeHttpClient when GrpcChannelOptions gets an owned handler. |
 
 ## Building
 

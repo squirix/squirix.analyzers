@@ -19,6 +19,7 @@ internal static class AnalyzerRunner
         CancellationToken cancellationToken = default)
     {
         var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
+        _ = typeof(System.Net.Http.HttpClient).Assembly;
         var references = new List<MetadataReference>();
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
