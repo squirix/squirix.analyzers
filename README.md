@@ -22,6 +22,7 @@ published version (`0.1.8` at the time of writing):
 ```
 
 The package ships the analyzer assembly under `analyzers/dotnet/cs`, so it is loaded as a Roslyn analyzer at build time.
+It is compiled against Roslyn 4.8 and loads in any compiler from .NET SDK 8.0.100 / Visual Studio 2022 17.8 onward.
 
 Rules use the default severity from their descriptor. This repository's own `.editorconfig` overrides the severity of
 some `SQR` diagnostics; copy the relevant `dotnet_diagnostic.SQRnnnn.severity` entries into the consuming repository's
