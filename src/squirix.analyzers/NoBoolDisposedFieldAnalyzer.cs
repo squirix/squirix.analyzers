@@ -14,10 +14,10 @@ namespace Squirix.Analyzers;
 /// <see cref="System.Threading.Volatile" />), never a plain <c language="csharp">bool</c> field.
 /// <list type="bullet">
 ///     <item>
-///         <description>SQR0015: flags a <c language="csharp">bool</c> field named exactly "_disposed".</description>
+///         <description>SQR0015: flags a <c language="csharp">bool</c> field named exactly "_disposed" (case-sensitive).</description>
 ///     </item>
 ///     <item>
-///         <description>SQR0016: flags an <c language="csharp">int</c> field named exactly "_disposed" when accessed outside Interlocked/Volatile.</description>
+///         <description>SQR0016: flags an <c language="csharp">int</c> field named exactly "_disposed" (case-sensitive) when accessed outside Interlocked/Volatile.</description>
 ///     </item>
 /// </list>
 /// </summary>
@@ -104,24 +104,24 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(BoolRule, field.Locations.IsDefaultOrEmpty ? Location.None : field.Locations[0], field.Name));
     }
 
-    private static bool IsDisposedFieldName(string name) => name.Equals("_disposed", StringComparison.OrdinalIgnoreCase);
+    private static bool IsDisposedFieldName(string name) => string.Equals(name, "_disposed", StringComparison.Ordinal);
 
     private static bool IsGuardedByInterlockedOrVolatile(SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
-        // An int dispose flag is guarded when it appears anywhere inside an Interlocked/Volatile
-        // invocation's argument list, even if it is nested within another call
-        // (e.g. Interlocked.Exchange(ref _disposed, Foo(_disposed))). Walk up to the containing
-        // statement but keep scanning past unrelated invocations for an enclosing guard.
-        for (var current = node.Parent; current != null; current = current.Parent)
-        {
-            if (current is StatementSyntax)
-                break;
+        // The flag is guarded only when it is itself the ref/in operand of an Interlocked/Volatile
+        // call (optionally qualified as this._disposed). Any other occurrence inside the call's
+        // arguments, such as Interlocked.Exchange(ref _disposed, _disposed + 1), is a plain read.
+        var operand = node;
+        if (node.Parent is MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } memberAccess && memberAccess.Name == node)
+            operand = memberAccess;
 
-            if (current is InvocationExpressionSyntax invocation && IsInterlockedOrVolatileInvocation(invocation, node, semanticModel, cancellationToken))
-                return true;
-        }
+        if (operand.Parent is not ArgumentSyntax argument || argument.Expression != operand)
+            return false;
 
-        return false;
+        if (!argument.RefKindKeyword.IsKind(SyntaxKind.RefKeyword) && !argument.RefKindKeyword.IsKind(SyntaxKind.InKeyword))
+            return false;
+
+        return argument.Parent?.Parent is InvocationExpressionSyntax invocation && IsInterlockedOrVolatileInvocation(invocation, semanticModel, cancellationToken);
     }
 
     private static bool IsInsideNameofOperator(SyntaxNode node)
@@ -136,22 +136,12 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsInterlockedOrVolatileInvocation(InvocationExpressionSyntax invocation, SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
+    private static bool IsInterlockedOrVolatileInvocation(InvocationExpressionSyntax invocation, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol { ContainingType: not null } method)
         {
             var containing = method.ContainingType;
-            var isGuardType = containing.Name is "Interlocked" or "Volatile" && containing.ContainingNamespace is { Name: "Threading", ContainingNamespace.Name: "System" };
-            if (!isGuardType)
-                return false;
-
-            foreach (var argument in invocation.ArgumentList.Arguments)
-            {
-                if (IsWithin(argument.Expression, node))
-                    return true;
-            }
-
-            return false;
+            return containing.Name is "Interlocked" or "Volatile" && containing.ContainingNamespace is { Name: "Threading", ContainingNamespace.Name: "System" };
         }
 
         // Fallback for unresolved symbols: exact match on the rightmost receiver name.
@@ -167,16 +157,7 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
             _ => null,
         };
 
-        if (!string.Equals(receiverName, "Interlocked", StringComparison.Ordinal) && !string.Equals(receiverName, "Volatile", StringComparison.Ordinal))
-            return false;
-
-        foreach (var argument in invocation.ArgumentList.Arguments)
-        {
-            if (IsWithin(argument.Expression, node))
-                return true;
-        }
-
-        return false;
+        return string.Equals(receiverName, "Interlocked", StringComparison.Ordinal) || string.Equals(receiverName, "Volatile", StringComparison.Ordinal);
     }
 
     private static bool IsWithin(SyntaxNode ancestor, SyntaxNode descendant)
