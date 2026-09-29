@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
@@ -12,6 +13,8 @@ namespace Squirix.Analyzers.UnitTests.Support;
 /// <summary>Compiles C# source and returns the findings of a single analyzer.</summary>
 internal static class AnalyzerRunner
 {
+    private static readonly Lazy<ImmutableArray<MetadataReference>> References = new(LoadReferences);
+
     public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
         RunAsync(analyzer, source, null, cancellationToken);
 
@@ -19,17 +22,8 @@ internal static class AnalyzerRunner
         CancellationToken cancellationToken = default)
     {
         var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
-        _ = typeof(System.Net.Http.HttpClient).Assembly;
-        var references = new List<MetadataReference>();
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location))
-                continue;
-
-            references.Add(MetadataReference.CreateFromFile(assembly.Location));
-        }
-
-        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, References.Value, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
 
         AnalyzerOptions? options = null;
         if (analyzerOptions is { Count: > 0 })
@@ -49,5 +43,34 @@ internal static class AnalyzerRunner
         }
 
         return [.. filtered];
+    }
+
+    private static string GetTrustedPlatformAssemblies() => AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? ThrowTrustedAssembliesMissing();
+
+    private static ImmutableArray<MetadataReference> LoadReferences()
+    {
+        var builder = ImmutableArray.CreateBuilder<MetadataReference>();
+        foreach (var path in GetTrustedPlatformAssemblies().Split(Path.PathSeparator))
+        {
+            if (path.Length > 0)
+                builder.Add(MetadataReference.CreateFromFile(path));
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private static string ThrowTrustedAssembliesMissing() => throw new InvalidOperationException("TRUSTED_PLATFORM_ASSEMBLIES is not available.");
+
+    private static void ThrowIfSourceDoesNotCompile(Compilation compilation, CancellationToken cancellationToken)
+    {
+        var errors = new List<string>();
+        foreach (var diagnostic in compilation.GetDiagnostics(cancellationToken))
+        {
+            if (diagnostic.Severity == DiagnosticSeverity.Error)
+                errors.Add(diagnostic.ToString());
+        }
+
+        if (errors.Count > 0)
+            throw new InvalidOperationException("Test source has compiler errors:" + Environment.NewLine + string.Join(Environment.NewLine, errors));
     }
 }

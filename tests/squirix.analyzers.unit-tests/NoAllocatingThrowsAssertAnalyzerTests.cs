@@ -16,7 +16,8 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
                               {
                                   void M()
                                   {
-                                      Throws<System.InvalidOperationException>(() => { });
+                                      var x = 0;
+                                      Throws<System.InvalidOperationException>(() => { x++; });
                                   }
 
                                   static void Throws<T>(System.Action action) where T : System.Exception
@@ -122,18 +123,24 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
     public async Task AllowsThrowMethodWithoutDelegateArgument(CancellationToken cancellationToken)
     {
         const string source = """
+                              namespace Other
+                              {
+                                  static class Assert
+                                  {
+                                      public static void ThrowExactly(System.Type type, System.Func<object> action)
+                                      {
+                                      }
+                                  }
+                              }
+
                               class C
                               {
                                   void M()
                                   {
-                                      ThrowExactly(System.InvalidOperationException, MyFunc);
+                                      Other.Assert.ThrowExactly(typeof(System.InvalidOperationException), MyFunc);
                                   }
 
-                                  static void ThrowExactly(System.Type type, System.Func<object?> action)
-                                  {
-                                  }
-
-                                  static object? MyFunc() => null;
+                                  object MyFunc() => null;
                               }
                               """;
 
@@ -209,6 +216,10 @@ public sealed class NoAllocatingThrowsAssertAnalyzerTests
                               static class ShouldExtensions
                               {
                                   public static T Should<T>(this T value) => value;
+
+                                  public static void Throw<TException>(this System.Action subject, System.Action action) where TException : System.Exception
+                                  {
+                                  }
                               }
                               """;
 

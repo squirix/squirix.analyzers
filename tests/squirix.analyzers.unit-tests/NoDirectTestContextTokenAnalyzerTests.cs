@@ -8,6 +8,20 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
 {
     private const string RuleId = "SQR0017";
 
+    private const string TestContextStub = """
+
+
+                                           #nullable enable
+                                           class TestContext
+                                           {
+                                               public static TestContext? Current { get; } = new TestContext();
+
+                                               public string Id { get; } = "id";
+
+                                               public System.Threading.CancellationToken CancellationToken => System.Threading.CancellationToken.None;
+                                           }
+                                           """;
+
     [Test]
     public async Task AllowsDeclaredSharedTokenOfAnyName(CancellationToken cancellationToken)
     {
@@ -22,7 +36,7 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
                                       var token = TestContext.Current.CancellationToken;
                                   }
                               }
-                              """;
+                              """ + TestContextStub;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
@@ -43,7 +57,7 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
                                       var token = TestContext.Current.CancellationToken;
                                   }
                               }
-                              """;
+                              """ + TestContextStub;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
@@ -67,7 +81,7 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
                                       var token = TestContext.Current.CancellationToken;
                                   }
                               }
-                              """;
+                              """ + TestContextStub;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
@@ -85,7 +99,7 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
                                       var token = TestContext.Current.CancellationToken;
                                   }
                               }
-                              """;
+                              """ + TestContextStub;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
@@ -109,7 +123,7 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
                                       var token = TestContext.Current.CancellationToken;
                                   }
                               }
-                              """;
+                              """ + TestContextStub;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
@@ -128,7 +142,7 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
                                       var token = TestContext.Current.CancellationToken;
                                   }
                               }
-                              """;
+                              """ + TestContextStub;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
@@ -151,7 +165,7 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
                                       var token = TestContext.Current.CancellationToken;
                                   }
                               }
-                              """;
+                              """ + TestContextStub;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
