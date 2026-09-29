@@ -45,7 +45,7 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         IsNotConstantDescription);
 
     /// <inheritdoc />
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [NullCheckRule, IsConstantRule, IsNotConstantRule];
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(NullCheckRule, IsConstantRule, IsNotConstantRule);
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

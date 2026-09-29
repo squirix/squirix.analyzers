@@ -34,7 +34,11 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" PrivateAssets="all"/>
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" PrivateAssets="all"/>
+        <!-- Deliberate Roslyn floor: the analyzer is compiled against the oldest Microsoft.CodeAnalysis.CSharp it builds with (4.0.1,
+             the compiler in SDK 6.0.1xx / VS 2022 17.0) so it loads on every newer SDK. Do not raise it just to track the latest
+             release: a newer reference makes the analyzer fail to load (CS9057) on older SDKs. Also avoid APIs newer than this
+             version, and avoid collection expressions for ImmutableArray (they need System.Collections.Immutable 8+ at run time). -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.0.1" PrivateAssets="all"/>
         <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="all"/>
         <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
         <None Include="..\..\icon.png" Pack="true" PackagePath="\"/>
