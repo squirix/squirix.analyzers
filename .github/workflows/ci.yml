@@ -88,17 +88,63 @@ jobs:
                 with:
                     globs: '**/*.md'
 
+    min-sdk:
+        name: Minimum SDK
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            -   name: Set Git Options
+                run: |
+                    git config --global core.autocrlf false
+                    git config --global core.eol lf
+
+            -   name: Checkout
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    persist-credentials: false
+
+            -   name: Pin minimum SDK
+                run: |
+                    cat > global.json <<'JSON'
+                    {
+                      "sdk": {
+                        "version": "10.0.100",
+                        "rollForward": "disable"
+                      },
+                      "test": {
+                        "runner": "Microsoft.Testing.Platform"
+                      }
+                    }
+                    JSON
+
+            -   name: Setup .NET
+                uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+                with:
+                    global-json-file: global.json
+
+            -   name: Verify SDK
+                run: dotnet --version
+
+            -   name: Restore
+                run: dotnet restore squirix.analyzers.slnx
+
+            -   name: Build
+                run: dotnet build squirix.analyzers.slnx --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
+
+            -   name: Test
+                run: dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
+
     ci-success:
         name: CI success
         runs-on: ubuntu-latest
         timeout-minutes: 5
-        needs: [build, format, markdownlint]
+        needs: [build, format, markdownlint, min-sdk]
         if: always()
         steps:
             -   name: Verify Required Checks
                 run: |
                     fail=0
-                    for result in "$RESULT_BUILD" "$RESULT_FORMAT" "$RESULT_MARKDOWNLINT"; do
+                    for result in "$RESULT_BUILD" "$RESULT_FORMAT" "$RESULT_MARKDOWNLINT" "$RESULT_MIN_SDK"; do
                         case "$result" in
                             success|skipped) ;;
                             *)
@@ -116,3 +162,4 @@ jobs:
                     RESULT_BUILD: ${{ needs.build.result }}
                     RESULT_FORMAT: ${{ needs.format.result }}
                     RESULT_MARKDOWNLINT: ${{ needs.markdownlint.result }}
+                    RESULT_MIN_SDK: ${{ needs.min-sdk.result }}
