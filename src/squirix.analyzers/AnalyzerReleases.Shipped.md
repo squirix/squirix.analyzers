@@ -1,3 +1,20 @@
+## Release 0.1.10
+
+### New Rules
+
+Rule ID | Category    | Severity | Notes
+--------|-------------|----------|-------
+SQR0028 | Performance | Warning  |
+SQR0029 | Performance | Warning  |
+
+## Release 0.1.9
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+SQR0027 | Usage    | Warning  |
+
 ## Release 0.1.7
 
 ### New Rules
