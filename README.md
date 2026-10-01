@@ -29,7 +29,9 @@ some `SQR` diagnostics; copy the relevant `dotnet_diagnostic.SQRnnnn.severity` e
 `.editorconfig` to do the same.
 
 Some rules read their thresholds from per-rule `.editorconfig` options. `SQR0002` defaults `SQR0002.max_methods_per_type`
-to 20 methods per type, and `SQR0003` defaults `SQR0003.max_fields_per_type` to 15 fields per type. Add the key under a
+to 20 methods per type, and `SQR0003` defaults `SQR0003.max_fields_per_type` to 15 fields per type. `SQR0028` passes structs up to
+`SQR0028.max_by_value_size` bytes by value (default 16), and `SQR0029` reports structs of at least `SQR0029.min_struct_size`
+bytes (default 1, every struct). Add the key under a
 `[*.cs]` section in the consuming repository's `.editorconfig`, e.g.:
 
 ```editorconfig
@@ -71,6 +73,8 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0025`](docs/rules/SQR0025.md) | Naming      | `TryPrefixMustReturnBoolAnalyzer`         | Try-prefixed method must return bool.                                |
 | [`SQR0026`](docs/rules/SQR0026.md) | Style       | `SimplifyIfReturnAnalyzer`                | Simplify if-return to a conditional return.                          |
 | [`SQR0027`](docs/rules/SQR0027.md) | Usage       | `GrpcDisposeHttpClientAnalyzer`           | Set DisposeHttpClient when GrpcChannelOptions gets an owned handler. |
+| [`SQR0028`](docs/rules/SQR0028.md) | Performance | `LargeStructByValueParameterAnalyzer`     | Pass readonly structs above 16 bytes by 'in'.                        |
+| [`SQR0029`](docs/rules/SQR0029.md) | Performance | `DefensiveStructCopyAnalyzer`             | No non-readonly struct members via readonly variables.               |
 
 ## Building
 

@@ -19,11 +19,26 @@ internal static class AnalyzerRunner
     public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
         RunAsync(analyzer, source, null, cancellationToken);
 
-    public static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions = null,
-        CancellationToken cancellationToken = default)
+    public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions = null,
+        CancellationToken cancellationToken = default) => RunAsync(analyzer, source, analyzerOptions, References.Value, cancellationToken);
+
+    /// <summary>Compiles <paramref name="library" /> into an assembly first, so <paramref name="source" /> sees its types as metadata.</summary>
+    public static Task<ImmutableArray<Diagnostic>> RunWithLibraryAsync(DiagnosticAnalyzer analyzer, string library, string source, CancellationToken cancellationToken = default)
+    {
+        var tree = CSharpSyntaxTree.ParseText(library, cancellationToken: cancellationToken);
+        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests.Library", new[] { tree }, References.Value, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
+
+        using var image = new MemoryStream();
+        _ = compilation.Emit(image, cancellationToken: cancellationToken);
+        return RunAsync(analyzer, source, null, References.Value.Add(MetadataReference.CreateFromImage(image.ToArray())), cancellationToken);
+    }
+
+    private static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions,
+        ImmutableArray<MetadataReference> references, CancellationToken cancellationToken)
     {
         var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
-        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, References.Value, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
+        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, references, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
         ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
 
         AnalyzerOptions? options = null;
