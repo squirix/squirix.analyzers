@@ -97,24 +97,15 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
     /// Returns the symbol of the readonly variable the receiver reads, or <c language="csharp">null</c> when the
     /// receiver is writable or a temporary value.
     /// </summary>
-    private static ISymbol? GetReadOnlyVariable(IOperation receiver, ISymbol containingSymbol)
+    private static ISymbol? GetReadOnlyVariable(IOperation receiver, ISymbol containingSymbol) => receiver switch
     {
-        switch (receiver)
-        {
-            case IParameterReferenceOperation { Parameter.RefKind: RefKind.In or RefKind.RefReadOnlyParameter } parameter:
-                return parameter.Parameter;
-            case ILocalReferenceOperation { Local.RefKind: RefKind.RefReadOnly } local:
-                return local.Local;
-            case IInvocationOperation { TargetMethod.ReturnsByRefReadonly: true } call:
-                return call.TargetMethod;
-            case IPropertyReferenceOperation { Property.ReturnsByRefReadonly: true } property:
-                return property.Property;
-            case IFieldReferenceOperation field:
-                return GetReadOnlyField(field, containingSymbol);
-            default:
-                return null;
-        }
-    }
+        IParameterReferenceOperation { Parameter.RefKind: RefKind.In or RefKind.RefReadOnlyParameter } parameter => parameter.Parameter,
+        ILocalReferenceOperation { Local.RefKind: RefKind.RefReadOnly } local => local.Local,
+        IInvocationOperation { TargetMethod.ReturnsByRefReadonly: true } call => call.TargetMethod,
+        IPropertyReferenceOperation { Property.ReturnsByRefReadonly: true } property => property.Property,
+        IFieldReferenceOperation field => GetReadOnlyField(field, containingSymbol),
+        _ => null,
+    };
 
     private static ISymbol? GetReadOnlyField(IFieldReferenceOperation reference, ISymbol containingSymbol)
     {

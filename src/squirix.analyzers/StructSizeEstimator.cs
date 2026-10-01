@@ -42,33 +42,21 @@ internal sealed class StructSizeEstimator
     private static int GetFieldOffset(IFieldSymbol field) =>
         FindAttribute(field, "FieldOffsetAttribute") is { ConstructorArguments: [{ Value: int value }] } ? value : -1;
 
-    private static Layout GetFrameworkLayout(INamedTypeSymbol type)
+    private static Layout GetFrameworkLayout(INamedTypeSymbol type) => (type.ContainingNamespace?.ToDisplayString(), type.MetadataName) switch
     {
-        switch (type.ContainingNamespace?.ToDisplayString())
-        {
-            case "System":
-                return type.MetadataName switch
-                {
-                    "Guid" => new Layout(16, 4, false),
-                    "Int128" or "UInt128" => new Layout(16, 16, false),
-                    "DateTimeOffset" => new Layout(16, 8, false),
-                    "Memory`1" or "ReadOnlyMemory`1" or "Span`1" or "ReadOnlySpan`1" or "ArraySegment`1" => new Layout(16, 8, true),
-                    "TimeSpan" or "TimeOnly" => new Layout(8, 8, false),
-                    "Range" => new Layout(8, 4, false),
-                    "DateOnly" or "Index" => new Layout(4, 4, false),
-                    "Half" => new Layout(2, 2, false),
-                    _ => default,
-                };
-            case "System.Threading" when type.MetadataName == "CancellationToken":
-                return Pointer;
-            case "System.Threading.Tasks" when type.MetadataName == "ValueTask":
-                return new Layout(16, 8, true);
-            case "System.Runtime.InteropServices" when type.MetadataName == "GCHandle":
-                return new Layout(8, 8, false);
-            default:
-                return default;
-        }
-    }
+        ("System", "Guid") => new Layout(16, 4, false),
+        ("System", "Int128" or "UInt128") => new Layout(16, 16, false),
+        ("System", "DateTimeOffset") => new Layout(16, 8, false),
+        ("System", "Memory`1" or "ReadOnlyMemory`1" or "Span`1" or "ReadOnlySpan`1" or "ArraySegment`1") => new Layout(16, 8, true),
+        ("System", "TimeSpan" or "TimeOnly") => new Layout(8, 8, false),
+        ("System", "Range") => new Layout(8, 4, false),
+        ("System", "DateOnly" or "Index") => new Layout(4, 4, false),
+        ("System", "Half") => new Layout(2, 2, false),
+        ("System.Threading", "CancellationToken") => Pointer,
+        ("System.Threading.Tasks", "ValueTask") => new Layout(16, 8, true),
+        ("System.Runtime.InteropServices", "GCHandle") => new Layout(8, 8, false),
+        _ => default,
+    };
 
     private static int GetIntArgument(AttributeData? attribute, string name)
     {
