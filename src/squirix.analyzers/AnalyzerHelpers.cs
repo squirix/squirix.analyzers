@@ -29,7 +29,16 @@ internal static class AnalyzerHelpers
         if (tree is null)
             return defaultValue;
 
-        var options = context.Options.AnalyzerConfigOptionsProvider.GetOptions(tree);
+        return GetIntOption(context.Options, tree, optionName, defaultValue);
+    }
+
+    /// <summary>
+    /// Reads an integer .editorconfig option for a syntax tree, returning <paramref name="defaultValue" />
+    /// when the option is absent or not a valid positive int.
+    /// </summary>
+    internal static int GetIntOption(AnalyzerOptions analyzerOptions, SyntaxTree tree, string optionName, int defaultValue)
+    {
+        var options = analyzerOptions.AnalyzerConfigOptionsProvider.GetOptions(tree);
         if (!options.TryGetValue(optionName, out var raw))
             return defaultValue;
 
