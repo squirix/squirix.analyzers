@@ -126,7 +126,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     private static bool TryGetResultType(ITypeSymbol type, out string result)
     {
         result = string.Empty;
-        ITypeSymbol? current = type;
+        var current = type;
         while (current != null && !IsNamed(current, "Task", true))
             current = current.BaseType;
 

@@ -89,26 +89,19 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         if (depth > MaxOriginDepth)
             return false;
 
-        switch (operation)
+        return operation switch
         {
-            case IInvocationOperation { TargetMethod.Name: "WhenAny" } invocation:
-                return SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, types.Task);
-            case IInvocationOperation { TargetMethod.Name: "ConfigureAwait" or "WaitAsync", Instance: { } instance }:
-                return IsWhenAnyOrigin(instance, types, cancellationToken, depth + 1);
-            case IConversionOperation conversion:
-                return IsWhenAnyOrigin(conversion.Operand, types, cancellationToken, depth + 1);
-            case IConditionalOperation conditional:
-                return IsWhenAnyOriginOrNull(conditional.WhenTrue, types, cancellationToken, depth + 1)
-                       && conditional.WhenFalse != null
-                       && IsWhenAnyOriginOrNull(conditional.WhenFalse, types, cancellationToken, depth + 1);
-            case ICoalesceOperation coalesce:
-                return IsWhenAnyOriginOrNull(coalesce.Value, types, cancellationToken, depth + 1)
-                       && IsWhenAnyOriginOrNull(coalesce.WhenNull, types, cancellationToken, depth + 1);
-            case ILocalReferenceOperation { Local.DeclaringSyntaxReferences.Length: > 0 } reference:
-                return operation.SemanticModel != null && AreAllAssignmentsWhenAnyOrigin(reference.Local, operation.SemanticModel, types, cancellationToken, depth + 1);
-            default:
-                return false;
-        }
+            IInvocationOperation { TargetMethod.Name: "WhenAny" } invocation => SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, types.Task),
+            IInvocationOperation { TargetMethod.Name: "ConfigureAwait" or "WaitAsync", Instance: { } instance } => IsWhenAnyOrigin(instance, types, cancellationToken, depth + 1),
+            IConversionOperation conversion => IsWhenAnyOrigin(conversion.Operand, types, cancellationToken, depth + 1),
+            IConditionalOperation conditional => IsWhenAnyOriginOrNull(conditional.WhenTrue, types, cancellationToken, depth + 1)
+                                   && conditional.WhenFalse != null
+                                   && IsWhenAnyOriginOrNull(conditional.WhenFalse, types, cancellationToken, depth + 1),
+            ICoalesceOperation coalesce => IsWhenAnyOriginOrNull(coalesce.Value, types, cancellationToken, depth + 1)
+                                   && IsWhenAnyOriginOrNull(coalesce.WhenNull, types, cancellationToken, depth + 1),
+            ILocalReferenceOperation { Local.DeclaringSyntaxReferences.Length: > 0 } reference => operation.SemanticModel != null && AreAllAssignmentsWhenAnyOrigin(reference.Local, operation.SemanticModel, types, cancellationToken, depth + 1),
+            _ => false,
+        };
     }
 
     private static bool IsWhenAnyOriginOrNull(IOperation operation, TaskTypes types, CancellationToken cancellationToken, int depth)

@@ -381,16 +381,13 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
 
         private bool IsFinishedFactory(SyntaxNode node)
         {
-            switch (node)
+            return node switch
             {
-                case InvocationExpressionSyntax invocation:
-                    return SemanticModel.GetSymbolInfo(invocation, CancellationToken).Symbol is IMethodSymbol { Name: "FromResult" or "FromException" or "FromCanceled" } method
-                           && IsTasksType(method.ContainingType);
-                case BaseObjectCreationExpressionSyntax creation:
-                    return SemanticModel.GetTypeInfo(creation, CancellationToken).Type is { Name: "ValueTask" } type && IsTasksType(type);
-                default:
-                    return false;
-            }
+                InvocationExpressionSyntax invocation => SemanticModel.GetSymbolInfo(invocation, CancellationToken).Symbol is IMethodSymbol { Name: "FromResult" or "FromException" or "FromCanceled" } method
+                                           && IsTasksType(method.ContainingType),
+                BaseObjectCreationExpressionSyntax creation => SemanticModel.GetTypeInfo(creation, CancellationToken).Type is { Name: "ValueTask" } type && IsTasksType(type),
+                _ => false,
+            };
         }
 
         private bool IsTaskCall(ExpressionSyntax expression) =>
