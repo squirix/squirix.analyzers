@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
@@ -94,18 +95,71 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
                 return IsWhenAnyOrigin(instance, types, cancellationToken, depth + 1);
             case IConversionOperation conversion:
                 return IsWhenAnyOrigin(conversion.Operand, types, cancellationToken, depth + 1);
+            case IConditionalOperation conditional:
+                return IsWhenAnyOriginOrNull(conditional.WhenTrue, types, cancellationToken, depth + 1)
+                       && conditional.WhenFalse != null
+                       && IsWhenAnyOriginOrNull(conditional.WhenFalse, types, cancellationToken, depth + 1);
+            case ICoalesceOperation coalesce:
+                return IsWhenAnyOriginOrNull(coalesce.Value, types, cancellationToken, depth + 1)
+                       && IsWhenAnyOriginOrNull(coalesce.WhenNull, types, cancellationToken, depth + 1);
             case ILocalReferenceOperation { Local.DeclaringSyntaxReferences.Length: > 0 } reference:
-                if (operation.SemanticModel == null)
-                    return false;
-
-                if (reference.Local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax { Initializer: { } initializer })
-                    return false;
-
-                var initialValue = operation.SemanticModel.GetOperation(initializer.Value, cancellationToken);
-                return initialValue != null && IsWhenAnyOrigin(initialValue, types, cancellationToken, depth + 1);
+                return operation.SemanticModel != null && AreAllAssignmentsWhenAnyOrigin(reference.Local, operation.SemanticModel, types, cancellationToken, depth + 1);
             default:
                 return false;
         }
+    }
+
+    private static bool IsWhenAnyOriginOrNull(IOperation operation, TaskTypes types, CancellationToken cancellationToken, int depth)
+    {
+        while (operation is IConversionOperation conversion)
+            operation = conversion.Operand;
+
+        if (operation is IDefaultValueOperation || operation is { ConstantValue: { HasValue: true, Value: null } })
+            return true;
+
+        return IsWhenAnyOrigin(operation, types, cancellationToken, depth);
+    }
+
+    private static bool AreAllAssignmentsWhenAnyOrigin(ILocalSymbol local, SemanticModel semanticModel, TaskTypes types, CancellationToken cancellationToken, int depth)
+    {
+        if (depth > MaxOriginDepth)
+            return false;
+
+        if (local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax declarator)
+            return false;
+
+        if (declarator.Initializer is { } initializer && !IsWhenAnyValue(initializer.Value, semanticModel, types, cancellationToken, depth))
+            return false;
+
+        SyntaxNode? scope = declarator.FirstAncestorOrSelf<MemberDeclarationSyntax>();
+        if (scope is GlobalStatementSyntax)
+            scope = scope.Parent;
+
+        if (scope == null)
+            return declarator.Initializer != null;
+
+        var hasValue = declarator.Initializer != null;
+        foreach (var node in scope.DescendantNodes())
+        {
+            if (node is not AssignmentExpressionSyntax assignment || !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) && !assignment.IsKind(SyntaxKind.CoalesceAssignmentExpression))
+                continue;
+
+            if (!SymbolEqualityComparer.Default.Equals(semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol, local))
+                continue;
+
+            if (!IsWhenAnyValue(assignment.Right, semanticModel, types, cancellationToken, depth))
+                return false;
+
+            hasValue = true;
+        }
+
+        return hasValue;
+    }
+
+    private static bool IsWhenAnyValue(ExpressionSyntax value, SemanticModel semanticModel, TaskTypes types, CancellationToken cancellationToken, int depth)
+    {
+        var operation = semanticModel.GetOperation(value, cancellationToken);
+        return operation != null && IsWhenAnyOriginOrNull(operation, types, cancellationToken, depth + 1);
     }
 
     private static bool IsResultDiscarded(IAwaitOperation awaitOperation) => awaitOperation.Parent switch

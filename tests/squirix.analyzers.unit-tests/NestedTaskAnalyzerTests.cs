@@ -297,6 +297,62 @@ public sealed class NestedTaskAnalyzerTests
                                }
                                """, cancellationToken);
 
+    [Test]
+    public async Task AllowsConditionalWhenAnyLocalInLoop(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(List<Task> pending, Task progress)
+                                   {
+                                       var next = pending.Count > 0 ? Task.WhenAny(pending) : null;
+                                       while (true)
+                                       {
+                                           if (next == null)
+                                               continue;
+
+                                           if (await Task.WhenAny(next, progress).ConfigureAwait(false) == progress)
+                                               return;
+
+                                           var completed = await next.ConfigureAwait(false);
+                                           next = pending.Count > 0 ? Task.WhenAny(pending) : null;
+                                       }
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsLocalReassignedFromStartNew(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(List<Task> pending, Task progress)
+                                   {
+                                       var next = Task.WhenAny(pending);
+                                       next = Task.Factory.StartNew(() => Task.Delay(1));
+                                       _ = await Task.WhenAny(next, progress);
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsConditionalWithStartNewBranch(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(List<Task> pending, Task progress, bool flag)
+                                   {
+                                       var next = flag ? Task.WhenAny(pending) : Task.Factory.StartNew(() => Task.Delay(1));
+                                       _ = await Task.WhenAny(next, progress);
+                                   }
+                               }
+                               """, cancellationToken);
+
     private static async Task AssertCleanAsync(string source, CancellationToken cancellationToken)
     {
         var diagnostics = await AnalyzerRunner.RunAsync(new NestedTaskAnalyzer(), source, cancellationToken);
