@@ -1,5 +1,11 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Squirix.Analyzers.UnitTests.Support;
 
 namespace Squirix.Analyzers.UnitTests;
@@ -322,6 +328,483 @@ public sealed class TaskOutlivesUsingScopeAnalyzerTests
 
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.GetMessage()).Contains("'stream'");
+    }
+
+    [Test]
+    public async Task AllowsFromResultOfNonCarryingArgument(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            static int Parse(Stream s) => 1;
+
+            Task<int> M()
+            {
+                using var stream = new MemoryStream();
+                return Task.FromResult(Parse(stream));
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsFromResultOfHashData(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.IO;
+        using System.Security.Cryptography;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task<byte[]> M()
+            {
+                using var stream = new MemoryStream();
+                return Task.FromResult(SHA256.HashData(stream));
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsFromCanceled(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var cts = new CancellationTokenSource();
+                cts.Cancel();
+                return Task.FromCanceled(cts.Token);
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsFromResultOfClonedElement(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.Text.Json;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task<JsonElement> M()
+            {
+                using var doc = JsonDocument.Parse("{}");
+                return Task.FromResult(doc.RootElement.Clone());
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsValueTaskConstructedFromResult(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            static int Read(Stream s) => 1;
+
+            ValueTask<int> M()
+            {
+                using var s = new MemoryStream();
+                return new ValueTask<int>(Read(s));
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsLambdaCapturingResource(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var stream = new MemoryStream();
+                return Task.Run(() => stream.WriteByte(1));
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsReceiverSplitIntoLocalFromCreation(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task<string> M()
+            {
+                using var stream = new MemoryStream();
+                var reader = new StreamReader(stream);
+                return reader.ReadToEndAsync();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsReceiverSplitIntoLocalFromCall(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System;
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class Holder : IDisposable
+        {
+            public Stream Create() => new MemoryStream();
+
+            public void Dispose()
+            {
+            }
+        }
+
+        class C
+        {
+            Task M()
+            {
+                using var holder = new Holder();
+                var inner = holder.Create();
+                return inner.FlushAsync();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsConditionalAccessCall(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var stream = new MemoryStream();
+                return stream?.FlushAsync();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsTernaryBranch(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M(bool flag)
+            {
+                using var stream = new MemoryStream();
+                return flag ? stream.FlushAsync() : Task.CompletedTask;
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsCastCall(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var stream = new MemoryStream();
+                return (Task)stream.FlushAsync();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsReassignedAlias(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var cts = new CancellationTokenSource();
+                var token = cts.Token;
+                token = CancellationToken.None;
+                return Task.Delay(1, token);
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsReturnAfterWait(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var cts = new CancellationTokenSource();
+                var t = Task.Delay(1, cts.Token);
+                t.Wait();
+                return t;
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsReturnAfterGetResult(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var cts = new CancellationTokenSource();
+                var t = Task.Delay(1, cts.Token);
+                t.GetAwaiter().GetResult();
+                return t;
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsReturnAfterResult(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task<int> M()
+            {
+                using var cts = new CancellationTokenSource();
+                var t = Task.Run(() => cts.Token.CanBeCanceled ? 1 : 0);
+                _ = t.Result;
+                return t;
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsTopLevelStatements(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+
+        using var s = new MemoryStream();
+        s.FlushAsync();
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsAwaitUsingStatement(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            async Task M()
+            {
+                await using (var s = new MemoryStream())
+                {
+                    s.FlushAsync();
+                }
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsAwaitUsingDeclaration(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            async Task M()
+            {
+                await using var s = new MemoryStream();
+                s.FlushAsync();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsValueTaskFireAndForget(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System;
+        using System.IO;
+
+        class C
+        {
+            void M()
+            {
+                using var s = new MemoryStream();
+                _ = s.WriteAsync(ReadOnlyMemory<byte>.Empty);
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsLocalFunctionInsideScope(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            void M()
+            {
+                using var s = new MemoryStream();
+                Local();
+
+                Task Local() => s.FlushAsync();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task ReportsLambdaUsingOnceWithInnerResource(CancellationToken cancellationToken)
+    {
+        var diagnostics = await AnalyzerRunner.RunAsync(new TaskOutlivesUsingScopeAnalyzer(), """
+            using System;
+            using System.IO;
+            using System.Threading.Tasks;
+
+            class C
+            {
+                void M()
+                {
+                    using var outer = new MemoryStream();
+                    Func<Task> f = () =>
+                    {
+                        using var inner = new MemoryStream();
+                        return inner.FlushAsync();
+                    };
+                }
+            }
+            """, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).Contains("'inner'");
+    }
+
+    [Test]
+    public async Task FlagsNestedBlockUnderUsingDeclaration(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var s = new MemoryStream();
+                {
+                    return s.FlushAsync();
+                }
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsSecondDeclarator(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using MemoryStream a = new MemoryStream(), b = new MemoryStream();
+                return b.FlushAsync();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsUsingInCatch(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System;
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                try
+                {
+                    return Task.CompletedTask;
+                }
+                catch (Exception)
+                {
+                    using var s = new MemoryStream();
+                    return s.FlushAsync();
+                }
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsTaskSubclassReturn(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class MyTask : Task
+        {
+            public MyTask(Stream s)
+                : base(static () => { })
+            {
+            }
+        }
+
+        class C
+        {
+            Task M()
+            {
+                using var s = new MemoryStream();
+                return new MyTask(s);
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsLabeledUsingDeclaration(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.IO;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+            L:
+                using var s = new MemoryStream();
+                return s.FlushAsync();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task ToleratesIncompleteCode(CancellationToken cancellationToken)
+    {
+        const string Source = """
+                              using System.IO;
+                              using System.Threading.Tasks;
+
+                              class C
+                              {
+                                  Task M()
+                                  {
+                                      using var s = new MemoryStream();
+                                      var t = s.;
+                                      using (var q = )
+                                      {
+                                          return Task.WhenAny(t, s.FlushAsync(;
+                                      }
+                                      using var
+                                  }
+                              }
+                              """;
+
+        var references = new List<MetadataReference>();
+        foreach (var path in ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator))
+            references.Add(MetadataReference.CreateFromFile(path));
+
+        var tree = CSharpSyntaxTree.ParseText(Source, cancellationToken: cancellationToken);
+        var compilation = CSharpCompilation.Create("Incomplete", [tree], references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var diagnostics = await compilation.WithAnalyzers([new TaskOutlivesUsingScopeAnalyzer()]).GetAnalyzerDiagnosticsAsync(cancellationToken);
+
+        foreach (var diagnostic in diagnostics)
+            _ = await Assert.That(diagnostic.Id).IsNotEqualTo("AD0001");
     }
 
     private static async Task AssertCleanAsync(string source, CancellationToken cancellationToken)

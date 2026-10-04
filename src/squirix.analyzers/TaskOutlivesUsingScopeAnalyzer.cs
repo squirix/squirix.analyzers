@@ -44,7 +44,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeUsingDeclaration, SyntaxKind.LocalDeclarationStatement);
     }
 
-    private static void AddFollowing(SyntaxList<StatementSyntax> statements, StatementSyntax declaration, List<SyntaxNode> result)
+    private static void AddFollowing(SyntaxList<StatementSyntax> statements, SyntaxNode declaration, List<SyntaxNode> result)
     {
         var found = false;
         foreach (var statement in statements)
@@ -95,7 +95,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
 
     private static bool IsInsideOuterScope(SyntaxNode node, SyntaxNodeAnalysisContext context)
     {
-        SyntaxNode child = node;
+        var child = node;
         for (var parent = node.Parent; parent != null; child = parent, parent = parent.Parent)
         {
             if (IsFunctionBoundary(parent) || parent is MemberDeclarationSyntax and not GlobalStatementSyntax)
@@ -107,14 +107,20 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
                     return true;
                 case BlockSyntax block when HasPrecedingUsingDeclaration(block.Statements, child):
                     return true;
-                case SwitchSectionSyntax section when HasPrecedingUsingDeclaration(section.Statements, child):
-                    return true;
                 case CompilationUnitSyntax unit when HasPrecedingGlobalUsingDeclaration(unit, child):
                     return true;
             }
         }
 
         return false;
+    }
+
+    private static bool IsUsingDeclaration(StatementSyntax statement)
+    {
+        while (statement is LabeledStatementSyntax labeled)
+            statement = labeled.Statement;
+
+        return statement is LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 };
     }
 
     private static bool HasPrecedingUsingDeclaration(SyntaxList<StatementSyntax> statements, SyntaxNode child)
@@ -124,7 +130,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             if (statement == child)
                 return false;
 
-            if (statement is LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 })
+            if (IsUsingDeclaration(statement))
                 return true;
         }
 
@@ -138,7 +144,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             if (member == child)
                 return false;
 
-            if (member is GlobalStatementSyntax { Statement: LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 } })
+            if (member is GlobalStatementSyntax global && IsUsingDeclaration(global.Statement))
                 return true;
         }
 
@@ -157,13 +163,14 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
     private static List<SyntaxNode> GetFollowingStatements(LocalDeclarationStatementSyntax declaration)
     {
         var result = new List<SyntaxNode>();
-        switch (declaration.Parent)
+        SyntaxNode current = declaration;
+        while (current.Parent is LabeledStatementSyntax)
+            current = current.Parent;
+
+        switch (current.Parent)
         {
             case BlockSyntax block:
-                AddFollowing(block.Statements, declaration, result);
-                break;
-            case SwitchSectionSyntax section:
-                AddFollowing(section.Statements, declaration, result);
+                AddFollowing(block.Statements, current, result);
                 break;
             case GlobalStatementSyntax { Parent: CompilationUnitSyntax unit } global:
                 var found = false;
@@ -183,15 +190,16 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
 
     private static bool IsFunctionBoundary(SyntaxNode node) => node is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax;
 
+    private static bool IsTasksType(ITypeSymbol type) =>
+        type.Name is "Task" or "ValueTask"
+        && type.ContainingNamespace is { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } };
+
     private static bool IsTaskLike(ITypeSymbol? type)
     {
         for (var current = type; current != null; current = current.BaseType)
         {
-            if (current.Name is "Task" or "ValueTask"
-                && current.ContainingNamespace is { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } })
-            {
+            if (IsTasksType(current))
                 return true;
-            }
         }
 
         return false;
@@ -203,6 +211,41 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             expression = parenthesized.Expression;
 
         return expression;
+    }
+
+    private static void CollectCandidates(ExpressionSyntax expression, List<ExpressionSyntax> candidates)
+    {
+        switch (expression)
+        {
+            case ParenthesizedExpressionSyntax parenthesized:
+                CollectCandidates(parenthesized.Expression, candidates);
+                break;
+            case CastExpressionSyntax cast:
+                CollectCandidates(cast.Expression, candidates);
+                break;
+            case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppress:
+                CollectCandidates(suppress.Operand, candidates);
+                break;
+            case ConditionalExpressionSyntax conditional:
+                CollectCandidates(conditional.WhenTrue, candidates);
+                CollectCandidates(conditional.WhenFalse, candidates);
+                break;
+            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.CoalesceExpression } coalesce:
+                CollectCandidates(coalesce.Left, candidates);
+                CollectCandidates(coalesce.Right, candidates);
+                break;
+            case SwitchExpressionSyntax switchExpression:
+                foreach (var arm in switchExpression.Arms)
+                    CollectCandidates(arm.Expression, candidates);
+
+                break;
+            case ConditionalAccessExpressionSyntax conditionalAccess:
+                CollectCandidates(conditionalAccess.WhenNotNull, candidates);
+                break;
+            default:
+                candidates.Add(expression);
+                break;
+        }
     }
 
     private static SyntaxNode GetChainRoot(SyntaxNode node)
@@ -235,7 +278,20 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    private static SyntaxNode? GetConditionalReceiver(SyntaxNode call)
+    {
+        for (var node = call.Parent; node != null && node is not StatementSyntax; node = node.Parent)
+        {
+            if (node is ConditionalAccessExpressionSyntax conditional && conditional.WhenNotNull.Span.Contains(call.Span))
+                return conditional.Expression;
+        }
+
+        return null;
+    }
+
     private static bool IsChain(SyntaxNode node) => node is MemberAccessExpressionSyntax or InvocationExpressionSyntax or ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax;
+
+    private static bool IsCall(SyntaxNode node) => node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax;
 
     private static bool CanCarryResource(ITypeSymbol? type)
     {
@@ -273,6 +329,14 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             foreach (var node in root.DescendantNodesAndSelf(static node => !IsFunctionBoundary(node)))
                 Visit(node);
         }
+
+        private static void Consider(ILocalSymbol candidate, ref ILocalSymbol? best)
+        {
+            if (best == null || GetDeclarationStart(candidate) > GetDeclarationStart(best))
+                best = candidate;
+        }
+
+        private static int GetDeclarationStart(ILocalSymbol local) => local.Locations.IsEmpty ? 0 : local.Locations[0].SourceSpan.Start;
 
         private void AddNestedResources(UsingStatementSyntax statement)
         {
@@ -315,23 +379,48 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             return invocation.Expression is MemberAccessExpressionSyntax member ? member.Name.Identifier.ValueText : invocation.Expression.ToString();
         }
 
+        private bool IsFinishedFactory(SyntaxNode node)
+        {
+            switch (node)
+            {
+                case InvocationExpressionSyntax invocation:
+                    return SemanticModel.GetSymbolInfo(invocation, CancellationToken).Symbol is IMethodSymbol { Name: "FromResult" or "FromException" or "FromCanceled" } method
+                           && IsTasksType(method.ContainingType);
+                case BaseObjectCreationExpressionSyntax creation:
+                    return SemanticModel.GetTypeInfo(creation, CancellationToken).Type is { Name: "ValueTask" } type && IsTasksType(type);
+                default:
+                    return false;
+            }
+        }
+
         private bool IsTaskCall(ExpressionSyntax expression) =>
-            expression is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax && IsTaskLike(SemanticModel.GetTypeInfo(expression, CancellationToken).Type);
+            IsCall(expression) && IsTaskLike(SemanticModel.GetTypeInfo(expression, CancellationToken).Type) && !IsFinishedFactory(expression);
 
         private void Report(ExpressionSyntax expression, string name, ILocalSymbol resource) =>
             _context.ReportDiagnostic(Diagnostic.Create(Rule, expression.GetLocation(), name, resource.Name));
 
         private void ReportIfBound(ExpressionSyntax expression)
         {
-            if (!IsTaskCall(expression) || !TryFindBound(expression, out var resource))
-                return;
-
-            Report(expression, GetCallName(expression), resource);
+            var candidates = new List<ExpressionSyntax>();
+            CollectCandidates(expression, candidates);
+            foreach (var candidate in candidates)
+            {
+                if (candidate is IdentifierNameSyntax identifier
+                    && SemanticModel.GetSymbolInfo(identifier, CancellationToken).Symbol is { } symbol
+                    && _tainted.TryGetValue(symbol, out var taintedResource))
+                {
+                    Report(candidate, identifier.Identifier.ValueText, taintedResource);
+                }
+                else if (IsTaskCall(candidate) && TryFindBound(candidate, out var resource))
+                {
+                    Report(candidate, GetCallName(candidate), resource);
+                }
+            }
         }
 
         private void Track(ILocalSymbol? local, ExpressionSyntax value)
         {
-            if (local == null || _references.ContainsKey(local))
+            if (local == null || (_references.TryGetValue(local, out var self) && SymbolEqualityComparer.Default.Equals(self, local)))
                 return;
 
             var expression = Unwrap(value);
@@ -342,32 +431,53 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
-            if (IsTaskCall(expression) && TryFindBound(expression, out var resource))
-                _tainted[local] = resource;
-            else
-                _ = _tainted.Remove(local);
-        }
+            _ = _references.Remove(local);
+            _ = _tainted.Remove(local);
+            var candidates = new List<ExpressionSyntax>();
+            CollectCandidates(expression, candidates);
+            foreach (var candidate in candidates)
+            {
+                if (candidate is IdentifierNameSyntax identifier
+                    && SemanticModel.GetSymbolInfo(identifier, CancellationToken).Symbol is { } symbol
+                    && _tainted.TryGetValue(symbol, out var copied))
+                {
+                    _tainted[local] = copied;
+                    return;
+                }
 
-        private static void Consider(ILocalSymbol candidate, ref ILocalSymbol? best)
-        {
-            if (best == null || GetDeclarationStart(candidate) > GetDeclarationStart(best))
-                best = candidate;
-        }
+                if (!IsCall(candidate) || IsFinishedFactory(candidate) || !TryFindBound(candidate, out var resource))
+                    continue;
 
-        private static int GetDeclarationStart(ILocalSymbol local) => local.Locations.IsEmpty ? 0 : local.Locations[0].SourceSpan.Start;
+                if (IsTaskCall(candidate))
+                {
+                    _tainted[local] = resource;
+                    return;
+                }
+
+                if (CanCarryResource(local.Type))
+                {
+                    _references[local] = resource;
+                    return;
+                }
+            }
+        }
 
         private bool TryFindBound(ExpressionSyntax call, out ILocalSymbol resource)
         {
             ILocalSymbol? best = null;
-            if (call is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax member })
+            if (call is InvocationExpressionSyntax invocation)
             {
-                if (TryResolve(GetChainRoot(member.Expression), out var receiverResource))
+                var root = GetChainRoot(invocation.Expression);
+                if (root is MemberBindingExpressionSyntax && GetConditionalReceiver(call) is { } receiver)
+                    root = GetChainRoot(receiver);
+
+                if (TryResolve(root, out var receiverResource))
                     Consider(receiverResource, ref best);
-                else
+                else if (invocation.Expression is MemberAccessExpressionSyntax member)
                     Search(member.Expression, ref best);
             }
 
-            var arguments = call is InvocationExpressionSyntax invocation ? invocation.ArgumentList : ((BaseObjectCreationExpressionSyntax)call).ArgumentList;
+            var arguments = call is InvocationExpressionSyntax invoked ? invoked.ArgumentList : ((BaseObjectCreationExpressionSyntax)call).ArgumentList;
             if (arguments != null)
             {
                 foreach (var argument in arguments.Arguments)
@@ -380,8 +490,19 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
 
         private void Search(SyntaxNode node, ref ILocalSymbol? best)
         {
-            if (IsFunctionBoundary(node))
+            if (node is LocalFunctionStatementSyntax)
                 return;
+
+            if (node is AnonymousFunctionExpressionSyntax)
+            {
+                foreach (var inner in node.DescendantNodes())
+                {
+                    if (TryResolve(inner, out var captured))
+                        Consider(captured, ref best);
+                }
+
+                return;
+            }
 
             if (node is IdentifierNameSyntax)
             {
@@ -391,12 +512,16 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
-            if (IsChain(node) && TryResolve(GetChainRoot(node), out var rooted))
+            if ((IsChain(node) || IsCall(node)) && node is ExpressionSyntax expression)
             {
-                if (CanCarryResource(SemanticModel.GetTypeInfo(node, CancellationToken).Type))
-                    Consider(rooted, ref best);
+                if (IsFinishedFactory(node) || !CanCarryResource(SemanticModel.GetTypeInfo(expression, CancellationToken).Type))
+                    return;
 
-                return;
+                if (IsChain(node) && TryResolve(GetChainRoot(node), out var rooted))
+                {
+                    Consider(rooted, ref best);
+                    return;
+                }
             }
 
             foreach (var child in node.ChildNodes())
@@ -444,11 +569,14 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
                 case AwaitExpressionSyntax awaitExpression:
                     ClearAwaited(awaitExpression.Expression);
                     break;
+                case MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Result" or "Wait" or "GetAwaiter" } blocking:
+                    ClearAwaited(blocking.Expression);
+                    break;
                 case ExpressionStatementSyntax statement:
                     VisitExpressionStatement(statement);
                     break;
                 case ReturnStatementSyntax { Expression: { } returned }:
-                    VisitReturn(Unwrap(returned));
+                    ReportIfBound(returned);
                     break;
             }
         }
@@ -463,19 +591,6 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             }
 
             ReportIfBound(expression);
-        }
-
-        private void VisitReturn(ExpressionSyntax returned)
-        {
-            if (returned is IdentifierNameSyntax identifier
-                && SemanticModel.GetSymbolInfo(identifier, CancellationToken).Symbol is { } symbol
-                && _tainted.TryGetValue(symbol, out var resource))
-            {
-                Report(returned, identifier.Identifier.ValueText, resource);
-                return;
-            }
-
-            ReportIfBound(returned);
         }
     }
 }
