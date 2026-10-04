@@ -13,11 +13,11 @@ and code-smell guards. They are applied at build time and their findings are sur
 ## Installation
 
 Add the package reference from [nuget.org](https://www.nuget.org/packages/squirix.analyzers) and use the latest
-published version (`0.1.10` at the time of writing):
+published version (`0.1.11` at the time of writing):
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="squirix.analyzers" Version="0.1.10" PrivateAssets="all" />
+    <PackageReference Include="squirix.analyzers" Version="0.1.11" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -75,6 +75,9 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0027`](docs/rules/SQR0027.md) | Usage       | `GrpcDisposeHttpClientAnalyzer`           | Set DisposeHttpClient when GrpcChannelOptions gets an owned handler. |
 | [`SQR0028`](docs/rules/SQR0028.md) | Performance | `LargeStructByValueParameterAnalyzer`     | Pass readonly structs above 16 bytes by 'in'.                        |
 | [`SQR0029`](docs/rules/SQR0029.md) | Performance | `DefensiveStructCopyAnalyzer`             | No non-readonly struct members via readonly variables.               |
+| [`SQR0030`](docs/rules/SQR0030.md) | Reliability | `TaskOutlivesUsingScopeAnalyzer`          | Await tasks that use a resource before its using scope ends.         |
+| [`SQR0031`](docs/rules/SQR0031.md) | Reliability | `NestedTaskAnalyzer`                      | Unwrap nested tasks before awaiting or returning them.               |
+| [`SQR0032`](docs/rules/SQR0032.md) | Reliability | `DiscardedTaskResultDelegateAnalyzer`     | No `Task<T>` to `Task` conversion in a delegate return.              |
 
 ## Building
 
