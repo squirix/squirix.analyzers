@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Immutable;
+using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -16,6 +18,7 @@ namespace Squirix.Analyzers;
 public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
 {
     private const string DiagnosticId = "SQR0031";
+    private const int MaxOriginDepth = 8;
 
     private static readonly LocalizableString Description = "A task whose result is another task completes when the inner task has started, not when it has finished. " +
                                                             "Awaiting it and discarding the result, or converting it to Task, never waits for the inner task and hides its exceptions. " +
@@ -63,7 +66,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         if (operand is IInvocationOperation { TargetMethod.Name: "ConfigureAwait", Instance: { } instance })
             operand = instance;
 
-        if (types.IsNestedTask(operand.Type))
+        if (types.IsNestedTask(operand.Type) && !IsWhenAnyOrigin(operand, types, context.CancellationToken, 0))
             Report(context, operand);
     }
 
@@ -74,8 +77,35 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
             return;
 
         var operand = conversion.Operand;
-        if (operand.Type is INamedTypeSymbol named && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, types.TaskOfT) && types.IsNestedTask(named))
+        if (operand.Type is INamedTypeSymbol named && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, types.TaskOfT) && types.IsNestedTask(named) && !IsWhenAnyOrigin(operand, types, context.CancellationToken, 0))
             Report(context, operand);
+    }
+
+    private static bool IsWhenAnyOrigin(IOperation operation, TaskTypes types, CancellationToken cancellationToken, int depth)
+    {
+        if (depth > MaxOriginDepth)
+            return false;
+
+        switch (operation)
+        {
+            case IInvocationOperation { TargetMethod.Name: "WhenAny" } invocation:
+                return SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, types.Task);
+            case IInvocationOperation { TargetMethod.Name: "ConfigureAwait" or "WaitAsync", Instance: { } instance }:
+                return IsWhenAnyOrigin(instance, types, cancellationToken, depth + 1);
+            case IConversionOperation conversion:
+                return IsWhenAnyOrigin(conversion.Operand, types, cancellationToken, depth + 1);
+            case ILocalReferenceOperation { Local.DeclaringSyntaxReferences.Length: > 0 } reference:
+                if (operation.SemanticModel == null)
+                    return false;
+
+                if (reference.Local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax { Initializer: { } initializer })
+                    return false;
+
+                var initialValue = operation.SemanticModel.GetOperation(initializer.Value, cancellationToken);
+                return initialValue != null && IsWhenAnyOrigin(initialValue, types, cancellationToken, depth + 1);
+            default:
+                return false;
+        }
     }
 
     private static bool IsResultDiscarded(IAwaitOperation awaitOperation) => awaitOperation.Parent switch

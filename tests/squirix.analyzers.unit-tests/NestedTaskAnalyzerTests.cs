@@ -219,6 +219,84 @@ public sealed class NestedTaskAnalyzerTests
                                }
                                """, cancellationToken);
 
+    [Test]
+    public async Task AllowsWhenAnyAwaitWithConfigureAwait(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System;
+                               using System.Threading;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(Task a, Task b)
+                                   {
+                                       _ = await Task.WhenAny(a, b).ConfigureAwait(false);
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsWhenAnyAwaitWithWaitAsync(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System;
+                               using System.Threading;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(Task a)
+                                   {
+                                       _ = await Task.WhenAny(a).WaitAsync(TimeSpan.FromSeconds(1), TimeProvider.System, CancellationToken.None);
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsWhenAnyLocalPassedToTaskParameter(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System;
+                               using System.Threading;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(Task a, Task b)
+                                   {
+                                       var next = Task.WhenAny(a);
+                                       if (await Task.WhenAny(next, b).ConfigureAwait(false) != next)
+                                           return;
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsWhenAnyLocalAwaitDiscarded(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System;
+                               using System.Threading;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(Task a)
+                                   {
+                                       var next = Task.WhenAny(a);
+                                       _ = await next;
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsStartNewPassedToWhenAny(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System;
+                               using System.Threading;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   Task M()
+                                   {
+                                       return Task.WhenAny(Task.Factory.StartNew(() => Task.Delay(1)), Task.Delay(1));
+                                   }
+                               }
+                               """, cancellationToken);
+
     private static async Task AssertCleanAsync(string source, CancellationToken cancellationToken)
     {
         var diagnostics = await AnalyzerRunner.RunAsync(new NestedTaskAnalyzer(), source, cancellationToken);
