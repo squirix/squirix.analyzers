@@ -1,3 +1,13 @@
+## Release 0.1.11
+
+### New Rules
+
+Rule ID | Category    | Severity | Notes
+--------|-------------|----------|-------
+SQR0030 | Reliability | Warning  |
+SQR0031 | Reliability | Warning  |
+SQR0032 | Reliability | Warning  |
+
 ## Release 0.1.10
 
 ### New Rules
