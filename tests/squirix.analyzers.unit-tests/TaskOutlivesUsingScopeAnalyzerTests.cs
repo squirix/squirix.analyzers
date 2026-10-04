@@ -548,6 +548,23 @@ public sealed class TaskOutlivesUsingScopeAnalyzerTests
         """, cancellationToken);
 
     [Test]
+    public async Task ReportsReturnAfterBareGetAwaiter(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        class C
+        {
+            Task M()
+            {
+                using var cts = new CancellationTokenSource();
+                var t = Task.Delay(1, cts.Token);
+                _ = t.GetAwaiter();
+                return t;
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
     public async Task AllowsReturnAfterGetResult(CancellationToken cancellationToken) => await AssertCleanAsync("""
         using System.Threading;
         using System.Threading.Tasks;

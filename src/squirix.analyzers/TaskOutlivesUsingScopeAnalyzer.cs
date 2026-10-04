@@ -566,8 +566,15 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
                 case AwaitExpressionSyntax awaitExpression:
                     ClearAwaited(awaitExpression.Expression);
                     break;
-                case MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Result" or "Wait" or "GetAwaiter" } blocking:
+                case MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Result" or "Wait" } blocking:
                     ClearAwaited(blocking.Expression);
+                    break;
+                case MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "GetResult",
+                    Expression: InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "GetAwaiter" } awaiter },
+                }:
+                    ClearAwaited(awaiter.Expression);
                     break;
                 case ExpressionStatementSyntax statement:
                     VisitExpressionStatement(statement);
