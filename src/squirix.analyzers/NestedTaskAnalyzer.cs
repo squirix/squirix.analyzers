@@ -55,6 +55,8 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
             compilation.GetTypeByMetadataName("System.Threading.Tasks.ValueTask`1"));
         context.RegisterOperationAction(operationContext => AnalyzeAwait(operationContext, types), OperationKind.Await);
         context.RegisterOperationAction(operationContext => AnalyzeConversion(operationContext, types), OperationKind.Conversion);
+        context.RegisterOperationAction(operationContext => AnalyzeWait(operationContext, types), OperationKind.Invocation);
+        context.RegisterOperationAction(operationContext => AnalyzeMethodGroup(operationContext, types), OperationKind.DelegateCreation);
     }
 
     private static void AnalyzeAwait(OperationAnalysisContext context, TaskTypes types)
@@ -141,6 +143,13 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         var hasValue = declarator.Initializer != null;
         foreach (var node in scope.DescendantNodes())
         {
+            if (node is ArgumentSyntax { RefKindKeyword.RawKind: not 0 } argument
+                && SymbolEqualityComparer.Default.Equals(semanticModel.GetSymbolInfo(argument.Expression, cancellationToken).Symbol, local))
+                return false;
+
+            if (node is AssignmentExpressionSyntax { Left: TupleExpressionSyntax tuple } && TupleTargetsLocal(tuple, local, semanticModel, cancellationToken))
+                return false;
+
             if (node is not AssignmentExpressionSyntax assignment || !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) && !assignment.IsKind(SyntaxKind.CoalesceAssignmentExpression))
                 continue;
 
@@ -156,10 +165,45 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         return hasValue;
     }
 
+    private static bool TupleTargetsLocal(TupleExpressionSyntax tuple, ILocalSymbol local, SemanticModel semanticModel, CancellationToken cancellationToken)
+    {
+        foreach (var node in tuple.DescendantNodes())
+        {
+            if (node is IdentifierNameSyntax && SymbolEqualityComparer.Default.Equals(semanticModel.GetSymbolInfo(node, cancellationToken).Symbol, local))
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool IsWhenAnyValue(ExpressionSyntax value, SemanticModel semanticModel, TaskTypes types, CancellationToken cancellationToken, int depth)
     {
         var operation = semanticModel.GetOperation(value, cancellationToken);
         return operation != null && IsWhenAnyOriginOrNull(operation, types, cancellationToken, depth + 1);
+    }
+
+    private static void AnalyzeWait(OperationAnalysisContext context, TaskTypes types)
+    {
+        var invocation = (IInvocationOperation)context.Operation;
+        if (invocation is not { TargetMethod.Name: "Wait", Instance: { } instance } || !SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, types.Task))
+            return;
+
+        if (types.IsNestedTask(instance.Type) && !IsWhenAnyOrigin(instance, types, context.CancellationToken, 0))
+            Report(context, instance);
+    }
+
+    private static void AnalyzeMethodGroup(OperationAnalysisContext context, TaskTypes types)
+    {
+        var creation = (IDelegateCreationOperation)context.Operation;
+        if (creation.Target is not IMethodReferenceOperation reference)
+            return;
+
+        if (creation.Type is not INamedTypeSymbol { DelegateInvokeMethod: { } invoke } || !SymbolEqualityComparer.Default.Equals(invoke.ReturnType, types.Task))
+            return;
+
+        var returnType = reference.Method.ReturnType;
+        if (returnType is INamedTypeSymbol named && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, types.TaskOfT) && types.IsNestedTask(named))
+            Report(context, reference);
     }
 
     private static bool IsResultDiscarded(IAwaitOperation awaitOperation) => awaitOperation.Parent switch

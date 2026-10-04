@@ -265,6 +265,87 @@ public sealed class DiscardedTaskResultDelegateAnalyzerTests
                                  }
                                  """, 0, cancellationToken);
 
+    [Test]
+    public async Task FlagsTaskSubclassReturnedFromFuncTask(CancellationToken cancellationToken) => await AssertCountAsync("""
+                                 using System;
+                                 using System.Threading.Tasks;
+
+                                 class C
+                                 {
+                                     class MyTask : Task<int>
+                                     {
+                                         public MyTask() : base(static () => 1)
+                                         {
+                                         }
+                                     }
+
+                                     void M()
+                                     {
+                                         Func<Task> f = () => new MyTask();
+                                     }
+                                 }
+                                 """, 1, cancellationToken);
+
+    [Test]
+    public async Task FlagsConditionalArm(CancellationToken cancellationToken) => await AssertCountAsync("""
+                                 using System;
+                                 using System.Threading.Tasks;
+
+                                 class C
+                                 {
+                                     static Task<int> GetAsync() => Task.FromResult(1);
+
+                                     void M(bool b)
+                                     {
+                                         Func<Task> f = () => b ? GetAsync() : Task.CompletedTask;
+                                     }
+                                 }
+                                 """, 1, cancellationToken);
+
+    [Test]
+    public async Task FlagsSwitchExpressionArm(CancellationToken cancellationToken) => await AssertCountAsync("""
+                                 using System;
+                                 using System.Threading.Tasks;
+
+                                 class C
+                                 {
+                                     static Task<int> GetAsync() => Task.FromResult(1);
+
+                                     void M(int n)
+                                     {
+                                         Func<Task> f = () => n switch { 0 => GetAsync(), _ => Task.CompletedTask };
+                                     }
+                                 }
+                                 """, 1, cancellationToken);
+
+    [Test]
+    public async Task FlagsDelegateCreatedFromDelegate(CancellationToken cancellationToken) => await AssertCountAsync("""
+                                 using System;
+                                 using System.Threading.Tasks;
+
+                                 class C
+                                 {
+                                     void M(Func<Task<int>> source)
+                                     {
+                                         var f = new Func<Task>(source);
+                                     }
+                                 }
+                                 """, 1, cancellationToken);
+
+    [Test]
+    public async Task AllowsThrowExpressionBody(CancellationToken cancellationToken) => await AssertCountAsync("""
+                                 using System;
+                                 using System.Threading.Tasks;
+
+                                 class C
+                                 {
+                                     void M()
+                                     {
+                                         Func<Task> f = () => throw new InvalidOperationException();
+                                     }
+                                 }
+                                 """, 0, cancellationToken);
+
     private static async Task AssertCountAsync(string source, int expected, CancellationToken cancellationToken)
     {
         var diagnostics = await AnalyzerRunner.RunAsync(new DiscardedTaskResultDelegateAnalyzer(), source, cancellationToken);

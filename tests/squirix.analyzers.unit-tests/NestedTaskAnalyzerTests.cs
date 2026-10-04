@@ -353,6 +353,189 @@ public sealed class NestedTaskAnalyzerTests
                                }
                                """, cancellationToken);
 
+    [Test]
+    public async Task FlagsLocalPassedByOut(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   static void Replace(out Task<Task> t) => t = Task.Factory.StartNew(() => Task.Delay(1));
+
+                                   async Task M(List<Task> pending, Task progress)
+                                   {
+                                       var t = Task.WhenAny(pending);
+                                       Replace(out t);
+                                       _ = await Task.WhenAny(t, progress);
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsLocalAssignedByDeconstruction(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(List<Task> pending, Task progress)
+                                   {
+                                       var t = Task.WhenAny(pending);
+                                       (t, _) = (Task.Factory.StartNew(() => Task.Delay(1)), 0);
+                                       _ = await Task.WhenAny(t, progress);
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsWaitOnNestedTask(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   void M()
+                                   {
+                                       Task.Factory.StartNew(() => Task.Delay(1)).Wait();
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsWaitWithTimeoutOnNestedTask(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   bool M()
+                                   {
+                                       return Task.Factory.StartNew(() => Task.Delay(1)).Wait(10);
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsWaitOnWhenAny(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   void M(List<Task> pending)
+                                   {
+                                       Task.WhenAny(pending).Wait();
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsMethodGroupReturningNestedTask(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   static Task<Task> N() => Task.Factory.StartNew(() => Task.Delay(1));
+
+                                   void M()
+                                   {
+                                       Func<Task> f = N;
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsMethodGroupNestedGenericTask(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   static Task<Task<int>> N() => Task.Factory.StartNew(() => Task.FromResult(1));
+
+                                   void M()
+                                   {
+                                       Func<Task> f = N;
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsContinueWithAwaitDiscarded(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   static Task SomeAsync() => Task.Delay(1);
+
+                                   async Task M(Task source)
+                                   {
+                                       await source.ContinueWith(_ => SomeAsync());
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsNestedTaskParameterAwaitDiscarded(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(Task<Task> nested)
+                                   {
+                                       await nested;
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsCollectionExpressionElement(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   void M()
+                                   {
+                                       Task[] a = [Task.Factory.StartNew(() => Task.Delay(1))];
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task AllowsCoalesceWhenAnyLocal(CancellationToken cancellationToken) => await AssertCleanAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   async Task M(Task a, Task b, Task progress)
+                                   {
+                                       var next = Task.WhenAny(a) ?? Task.WhenAny(b);
+                                       _ = await Task.WhenAny(next, progress);
+                                   }
+                               }
+                               """, cancellationToken);
+
+    [Test]
+    public async Task FlagsWhenAnyFieldAwaitDiscarded(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+                               using System.Collections.Generic;
+                               using System.Threading.Tasks;
+
+                               class C
+                               {
+                                   private readonly Task<Task> _next = Task.WhenAny(Task.Delay(1));
+
+                                   async Task M()
+                                   {
+                                       _ = await _next;
+                                   }
+                               }
+                               """, cancellationToken);
+
     private static async Task AssertCleanAsync(string source, CancellationToken cancellationToken)
     {
         var diagnostics = await AnalyzerRunner.RunAsync(new NestedTaskAnalyzer(), source, cancellationToken);

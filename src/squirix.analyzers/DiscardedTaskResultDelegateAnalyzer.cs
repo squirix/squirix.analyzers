@@ -39,12 +39,12 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         context.RegisterOperationAction(AnalyzeDelegateCreation, OperationKind.DelegateCreation);
     }
 
-    private static void AnalyzeBlock(OperationAnalysisContext context, SemanticModel semanticModel, BlockSyntax block, string delegateName)
+    private static void AnalyzeBlock(OperationAnalysisContext context, SemanticModel semanticModel, BlockSyntax block, INamedTypeSymbol delegateType)
     {
         foreach (var node in block.DescendantNodes(static child => child is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)))
         {
             if (node is ReturnStatementSyntax { Expression: { } returned })
-                ReportReturned(context, semanticModel, returned, delegateName);
+                ReportReturned(context, semanticModel, returned, delegateType);
         }
     }
 
@@ -54,21 +54,23 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         if (creation.Type is not INamedTypeSymbol { DelegateInvokeMethod: { } invoke } delegateType || !IsPlainTask(invoke.ReturnType))
             return;
 
-        var delegateName = delegateType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
         switch (creation.Target)
         {
             case IMethodReferenceOperation reference:
                 if (TryGetResultType(reference.Method.ReturnType, out var methodResult))
-                    context.ReportDiagnostic(Diagnostic.Create(Rule, reference.Syntax.GetLocation(), delegateName, methodResult));
+                    context.ReportDiagnostic(Diagnostic.Create(Rule, reference.Syntax.GetLocation(), GetDelegateName(delegateType), methodResult));
 
                 break;
             case IAnonymousFunctionOperation { Symbol.IsAsync: false } function when function.Syntax is AnonymousFunctionExpressionSyntax syntax:
-                AnalyzeFunction(context, syntax, delegateName);
+                AnalyzeFunction(context, syntax, delegateType);
+                break;
+            case { Type: INamedTypeSymbol { DelegateInvokeMethod: { } sourceInvoke } } source when TryGetResultType(sourceInvoke.ReturnType, out var delegateResult):
+                context.ReportDiagnostic(Diagnostic.Create(Rule, source.Syntax.GetLocation(), GetDelegateName(delegateType), delegateResult));
                 break;
         }
     }
 
-    private static void AnalyzeFunction(OperationAnalysisContext context, AnonymousFunctionExpressionSyntax function, string delegateName)
+    private static void AnalyzeFunction(OperationAnalysisContext context, AnonymousFunctionExpressionSyntax function, INamedTypeSymbol delegateType)
     {
         var semanticModel = context.Operation.SemanticModel;
         if (semanticModel == null)
@@ -76,12 +78,12 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
         if (function.Body is ExpressionSyntax expressionBody)
         {
-            ReportReturned(context, semanticModel, expressionBody, delegateName);
+            ReportReturned(context, semanticModel, expressionBody, delegateType);
             return;
         }
 
         if (function.Body is BlockSyntax block)
-            AnalyzeBlock(context, semanticModel, block, delegateName);
+            AnalyzeBlock(context, semanticModel, block, delegateType);
     }
 
     private static bool IsNamed(ITypeSymbol type, string name, bool generic) =>
@@ -93,23 +95,45 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
     private static bool IsTaskLike(ITypeSymbol type) => IsNamed(type, "Task", false) || IsNamed(type, "Task", true) || IsNamed(type, "ValueTask", false) || IsNamed(type, "ValueTask", true);
 
-    private static void ReportReturned(OperationAnalysisContext context, SemanticModel semanticModel, ExpressionSyntax returned, string delegateName)
+    private static string GetDelegateName(INamedTypeSymbol delegateType) => delegateType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+
+    private static void ReportReturned(OperationAnalysisContext context, SemanticModel semanticModel, ExpressionSyntax returned, INamedTypeSymbol delegateType)
     {
+        switch (returned)
+        {
+            case ParenthesizedExpressionSyntax parenthesized:
+                ReportReturned(context, semanticModel, parenthesized.Expression, delegateType);
+                return;
+            case ConditionalExpressionSyntax conditional:
+                ReportReturned(context, semanticModel, conditional.WhenTrue, delegateType);
+                ReportReturned(context, semanticModel, conditional.WhenFalse, delegateType);
+                return;
+            case SwitchExpressionSyntax switchExpression:
+                foreach (var arm in switchExpression.Arms)
+                    ReportReturned(context, semanticModel, arm.Expression, delegateType);
+
+                return;
+        }
+
         var info = semanticModel.GetTypeInfo(returned, context.CancellationToken);
         if (info.Type == null || info.ConvertedType == null || !IsPlainTask(info.ConvertedType))
             return;
 
         if (TryGetResultType(info.Type, out var result))
-            context.ReportDiagnostic(Diagnostic.Create(Rule, returned.GetLocation(), delegateName, result));
+            context.ReportDiagnostic(Diagnostic.Create(Rule, returned.GetLocation(), GetDelegateName(delegateType), result));
     }
 
     private static bool TryGetResultType(ITypeSymbol type, out string result)
     {
         result = string.Empty;
-        if (!IsNamed(type, "Task", true))
+        ITypeSymbol? current = type;
+        while (current != null && !IsNamed(current, "Task", true))
+            current = current.BaseType;
+
+        if (current == null)
             return false;
 
-        var argument = ((INamedTypeSymbol)type).TypeArguments[0];
+        var argument = ((INamedTypeSymbol)current).TypeArguments[0];
         if (IsTaskLike(argument))
             return false;
 
