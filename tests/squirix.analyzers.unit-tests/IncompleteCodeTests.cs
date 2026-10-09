@@ -264,22 +264,48 @@ public sealed class IncompleteCodeTests
                                                    }
                                                    """;
 
-    private const string BrokenTrivia = """"
-                                        #if DEBUG
-                                        using System;
-                                        #region Types
+    private const string BrokenComment = """
+                                         class C
+                                         {
+                                             void M() { if (true) { } }
 
-                                        [Obsolete(
-                                        class C
-                                        {
-                                            [return: ]
-                                            string M() => "unterminated;
+                                             /* never closed
+                                             void N() { }
+                                         }
+                                         """;
 
-                                            string R() => """
-                                                raw text that never ends
+    private const string BrokenPreprocessor = """
+                                              #define DEBUG
+                                              using System;
+                                              #region Types
+                                              #if DEBUG
 
-                                            void N() { /* never closed
-                                        """";
+                                              [Obsolete(
+                                              class C
+                                              {
+                                                  [return: ]
+                                                  int M(bool flag) { if (flag) { return 1; } return 2; }
+                                              #elif
+                                              """;
+
+    private const string BrokenRawString = """"
+                                           class C
+                                           {
+                                               string R() => """
+                                                   raw text that never ends
+
+                                               void N() { }
+                                           }
+                                           """";
+
+    private const string BrokenStringLiteral = """
+                                               class C
+                                               {
+                                                   string M() => "unterminated;
+
+                                                   void N() { for (;;) { } }
+                                               }
+                                               """;
 
     private const string BrokenModernSyntax = """
                                               namespace App;
@@ -312,7 +338,10 @@ public sealed class IncompleteCodeTests
         (nameof(BrokenTasksAndScopes), BrokenTasksAndScopes),
         (nameof(BrokenTypes), BrokenTypes),
         (nameof(BrokenTopLevel), BrokenTopLevel),
-        (nameof(BrokenTrivia), BrokenTrivia),
+        (nameof(BrokenComment), BrokenComment),
+        (nameof(BrokenPreprocessor), BrokenPreprocessor),
+        (nameof(BrokenRawString), BrokenRawString),
+        (nameof(BrokenStringLiteral), BrokenStringLiteral),
         (nameof(BrokenModernSyntax), BrokenModernSyntax),
         (nameof(ValidShapesNextToErrors), ValidShapesNextToErrors),
     ];
