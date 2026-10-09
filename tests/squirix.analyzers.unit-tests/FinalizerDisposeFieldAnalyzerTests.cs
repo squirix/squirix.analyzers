@@ -464,12 +464,16 @@ public sealed class FinalizerDisposeFieldAnalyzerTests
             private readonly Gate _gate;
             private readonly Gate _other;
             private bool _disposed;
+            private long _state;
+            private long _count;
 
             public C(Gate gate, Gate other) : base(1)
             {
                 _gate = gate;
                 _other = other;
                 _disposed = false;
+                _state = default(long);
+                _count = 0L;
             }
 
             protected override void Dispose(bool disposing)
@@ -481,9 +485,11 @@ public sealed class FinalizerDisposeFieldAnalyzerTests
                     return;
 
                 _gate.Exit();
+                if (_state != 0 || _count != 0)
+                    _gate.Exit();
             }
         }
-        """, 2, cancellationToken);
+        """, 3, cancellationToken);
 
     [Test]
     public async Task FlagsObjectInitializerAsNoFlag(CancellationToken cancellationToken) => await AssertCountAsync("""

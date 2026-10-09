@@ -134,9 +134,10 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    /// <summary>Returns whether <paramref name="value" /> is a literal that leaves a field at its default value: <c>false</c>, <c>0</c>, <c>null</c> or <c>default</c>.</summary>
+    /// <summary>Returns whether <paramref name="value" /> leaves a field at its default value: <c>false</c>, a numeric zero, <c>null</c>, <c>default</c> or <c>default(T)</c>.</summary>
     private static bool IsDefaultLiteral(ExpressionSyntax value) =>
-        value is LiteralExpressionSyntax literal && (literal.Token.Value is false or null || literal.Token.Value is 0);
+        value is DefaultExpressionSyntax
+        || (value is LiteralExpressionSyntax literal && literal.Token.Value is false or null or 0 or 0L or 0U or 0UL or 0F or 0D or 0M);
 
     private static bool IsDisposeBool(IMethodSymbol method) =>
         method is { Name: "Dispose", MethodKind: MethodKind.Ordinary, IsStatic: false, ReturnsVoid: true, Parameters.Length: 1 }
