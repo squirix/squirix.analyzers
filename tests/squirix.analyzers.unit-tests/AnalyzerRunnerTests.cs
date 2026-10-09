@@ -29,6 +29,40 @@ public sealed class AnalyzerRunnerTests
         _ = await Assert.That(failure.Message).Contains(ThrowingAnalyzer.Reason);
     }
 
+    [Test]
+    public async Task FailsWhenAnalyzerThrowsOnIncompleteCode(CancellationToken cancellationToken)
+    {
+        InvalidOperationException? failure = null;
+        try
+        {
+            _ = await AnalyzerRunner.RunOnIncompleteCodeAsync(new ThrowingAnalyzer(), "class C { void M( }", cancellationToken);
+        }
+        catch (InvalidOperationException exception)
+        {
+            failure = exception;
+        }
+
+        _ = await Assert.That(failure).IsNotNull();
+        _ = await Assert.That(failure!.Message).Contains(ThrowingAnalyzer.Reason);
+    }
+
+    [Test]
+    public async Task FailsWhenIncompleteCodeCompiles(CancellationToken cancellationToken)
+    {
+        InvalidOperationException? failure = null;
+        try
+        {
+            _ = await AnalyzerRunner.RunOnIncompleteCodeAsync(new FinalizerDisposeFieldAnalyzer(), "class C { }", cancellationToken);
+        }
+        catch (InvalidOperationException exception)
+        {
+            failure = exception;
+        }
+
+        _ = await Assert.That(failure).IsNotNull();
+        _ = await Assert.That(failure!.Message).Contains("compiles without errors");
+    }
+
     /// <summary>
     /// Throws on every type. Roslyn skips an analyzer without supported diagnostics, so it borrows a shipped descriptor instead of declaring a rule
     /// in the test project.
