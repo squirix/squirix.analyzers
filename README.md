@@ -78,6 +78,7 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0030`](docs/rules/SQR0030.md) | Reliability | `TaskOutlivesUsingScopeAnalyzer`          | Await tasks that use a resource before its using scope ends.         |
 | [`SQR0031`](docs/rules/SQR0031.md) | Reliability | `NestedTaskAnalyzer`                      | Unwrap nested tasks before awaiting or returning them.               |
 | [`SQR0032`](docs/rules/SQR0032.md) | Reliability | `DiscardedTaskResultDelegateAnalyzer`     | No `Task<T>` to `Task` conversion in a delegate return.              |
+| [`SQR0033`](docs/rules/SQR0033.md) | Reliability | `FinalizerDisposeFieldAnalyzer`           | No field dereference outside `disposing` in a finalizable type.      |
 
 ## Building
 
