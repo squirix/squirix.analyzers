@@ -29,7 +29,10 @@ public sealed class AnalyzerRunnerTests
         _ = await Assert.That(failure.Message).Contains(ThrowingAnalyzer.Reason);
     }
 
-    /// <summary>Throws on every type; borrows a shipped descriptor, so the test project declares no rule of its own.</summary>
+    /// <summary>
+    /// Throws on every type. Roslyn skips an analyzer without supported diagnostics, so it borrows a shipped descriptor instead of declaring a rule
+    /// in the test project.
+    /// </summary>
     [SuppressMessage("MicrosoftCodeAnalysisCorrectness", "RS1001:Missing diagnostic analyzer attribute",
         Justification = "Test double passed to the runner directly; the attribute would register it as a compiler extension of the test assembly (RS1036, RS1041).")]
     private sealed class ThrowingAnalyzer : DiagnosticAnalyzer

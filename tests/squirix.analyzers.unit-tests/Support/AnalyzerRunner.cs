@@ -12,9 +12,11 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Squirix.Analyzers.UnitTests.Support;
 
 /// <summary>Compiles C# source and returns the findings of a single analyzer.</summary>
-/// <remarks>Throws when the analyzer itself throws: Roslyn reports that as AD0001, which the ID filter would otherwise drop.</remarks>
+/// <remarks>Throws when the analyzer or the analyzer driver throws: Roslyn reports that as AD0001 or AD0002, which the ID filter would otherwise drop.</remarks>
 internal static class AnalyzerRunner
 {
+    private const string AnalyzerDriverExceptionId = "AD0002";
+
     private const string AnalyzerExceptionId = "AD0001";
 
     private static readonly Lazy<ImmutableArray<MetadataReference>> References = new(LoadReferences);
@@ -97,7 +99,7 @@ internal static class AnalyzerRunner
         var crashes = new List<string>();
         foreach (var diagnostic in diagnostics)
         {
-            if (diagnostic.Id == AnalyzerExceptionId)
+            if (diagnostic.Id == AnalyzerExceptionId || diagnostic.Id == AnalyzerDriverExceptionId)
                 crashes.Add(diagnostic.ToString());
         }
 
