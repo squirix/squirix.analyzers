@@ -50,6 +50,8 @@ internal static class AnalyzerRunner
         var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, references, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
         if (requireCompilableSource)
             ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
+        else
+            ThrowIfSourceCompiles(compilation, cancellationToken);
 
         AnalyzerOptions? options = null;
         if (analyzerOptions is { Count: > 0 })
@@ -110,6 +112,17 @@ internal static class AnalyzerRunner
 
         if (crashes.Count > 0)
             throw new InvalidOperationException("Analyzer threw an exception:" + Environment.NewLine + string.Join(Environment.NewLine, crashes));
+    }
+
+    private static void ThrowIfSourceCompiles(Compilation compilation, CancellationToken cancellationToken)
+    {
+        foreach (var diagnostic in compilation.GetDiagnostics(cancellationToken))
+        {
+            if (diagnostic.Severity == DiagnosticSeverity.Error)
+                return;
+        }
+
+        throw new InvalidOperationException("Incomplete-code source compiles without errors, so it no longer tests incomplete code.");
     }
 
     private static void ThrowIfSourceDoesNotCompile(Compilation compilation, CancellationToken cancellationToken)

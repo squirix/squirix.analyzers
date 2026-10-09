@@ -9,8 +9,8 @@ namespace Squirix.Analyzers.UnitTests;
 
 /// <summary>
 /// Runs every shipped analyzer on code that does not compile, as an IDE does while the user types. Each sample breaks the shapes that the rules
-/// inspect: missing tokens, unresolved types and members, and invocations typed halfway. The last sample keeps a shape for each rule intact
-/// next to such errors, so every rule gets past its early exits. A run passes when no analyzer throws.
+/// inspect: missing tokens, unresolved types and members, invocations typed halfway, unterminated literals and comments, and newer syntax.
+/// The last sample keeps a reported shape for each rule intact next to such errors, so every rule gets past its early exits.
 /// </summary>
 public sealed class IncompleteCodeTests
 {
@@ -221,6 +221,7 @@ public sealed class IncompleteCodeTests
                                                        private readonly Mutable _mutable;
                                                        private readonly object _value;
                                                        private readonly Unknown _broken = Missing(;
+                                                       private int _disposed;
 
                                                        public C(object value)
                                                        {
@@ -229,7 +230,7 @@ public sealed class IncompleteCodeTests
 
                                                        static Task<int> GetAsync() => Task.FromResult(1);
 
-                                                       int Pick(bool flag, object? other, Large large, string text, int count)
+                                                       int Pick(bool flag, object? other, Large large, string text, int count, C? peer, Unknown missing)
                                                        {
                                                            _mutable.Touch();
                                                            if (other == null) throw new ArgumentNullException(nameof(other));
@@ -237,6 +238,10 @@ public sealed class IncompleteCodeTests
                                                            if (string.IsNullOrEmpty(text))
                                                                throw new ArgumentException("Text is required.", nameof(text));
                                                            if (count is 42)
+                                                               _mutable.Touch();
+                                                           if (count is not 3)
+                                                               _mutable.Touch();
+                                                           if (peer is null || missing is null)
                                                                _mutable.Touch();
                                                            if (flag) return 1;
                                                            return 2;
@@ -253,70 +258,125 @@ public sealed class IncompleteCodeTests
 
                                                        protected override void Dispose(bool disposing) => _value.ToString();
 
+                                                       void Close() => _disposed = 1;
+
                                                        void Broken() { var a = ; Missing( }
                                                    }
                                                    """;
 
+    private const string BrokenTrivia = """"
+                                        #if DEBUG
+                                        using System;
+                                        #region Types
+
+                                        [Obsolete(
+                                        class C
+                                        {
+                                            [return: ]
+                                            string M() => "unterminated;
+
+                                            string R() => """
+                                                raw text that never ends
+
+                                            void N() { /* never closed
+                                        """";
+
+    private const string BrokenModernSyntax = """
+                                              namespace App;
+
+                                              record struct Point(int X, Unknown Y);
+
+                                              class Service(Unknown logger, int count) : Base(count)
+                                              {
+                                                  int M(object value) => value switch { int i when i > => 1, string { Length: } => 2, _ => };
+
+                                                  void N(int[] values)
+                                                  {
+                                                      int Local(int x) => x +
+                                                      Func<int, int> f = x => ;
+                                                      var point = new Point() { X = };
+                                                      int[] items = [1, , 2];
+                                                      switch (values.Length) { case : break; case 1 }
+                                                  }
+                                              }
+
+                                              namespace ;
+                                              """;
+
+    private static readonly (string Name, string Source)[] Samples =
+    [
+        (nameof(BrokenControlFlow), BrokenControlFlow),
+        (nameof(BrokenDisposePattern), BrokenDisposePattern),
+        (nameof(BrokenInvocations), BrokenInvocations),
+        (nameof(BrokenStructs), BrokenStructs),
+        (nameof(BrokenTasksAndScopes), BrokenTasksAndScopes),
+        (nameof(BrokenTypes), BrokenTypes),
+        (nameof(BrokenTopLevel), BrokenTopLevel),
+        (nameof(BrokenTrivia), BrokenTrivia),
+        (nameof(BrokenModernSyntax), BrokenModernSyntax),
+        (nameof(ValidShapesNextToErrors), ValidShapesNextToErrors),
+    ];
+
+    private static readonly Lazy<Dictionary<string, Type>> Analyzers = new(FindAnalyzers);
+
     /// <summary>Returns every analyzer and sample combination; analyzers are found by reflection so that a new rule is covered without editing this list.</summary>
     public static IEnumerable<(string Analyzer, string Sample)> Cases()
     {
-        var samples = new[]
-        {
-            nameof(BrokenControlFlow),
-            nameof(BrokenDisposePattern),
-            nameof(BrokenInvocations),
-            nameof(BrokenStructs),
-            nameof(BrokenTasksAndScopes),
-            nameof(BrokenTypes),
-            nameof(BrokenTopLevel),
-            nameof(ValidShapesNextToErrors),
-        };
-        foreach (var type in typeof(FinalizerDisposeFieldAnalyzer).Assembly.GetTypes())
-        {
-            if (type.IsAbstract || !typeof(DiagnosticAnalyzer).IsAssignableFrom(type))
-                continue;
-
-            foreach (var sample in samples)
-                yield return (type.Name, sample);
-        }
+        foreach (var analyzer in Analyzers.Value.Keys)
+            foreach (var (sample, _) in Samples)
+                yield return (analyzer, sample);
     }
 
     [Test]
     [MethodDataSource(nameof(Cases))]
-    public async Task AnalyzerDoesNotThrow(string analyzer, string sample, CancellationToken cancellationToken)
-    {
-        var diagnostics = await AnalyzerRunner.RunOnIncompleteCodeAsync(CreateAnalyzer(analyzer), GetSample(sample), cancellationToken);
+    public async Task AnalyzerDoesNotThrow(string analyzer, string sample, CancellationToken cancellationToken) =>
+        _ = await AnalyzerRunner.RunOnIncompleteCodeAsync(CreateAnalyzer(analyzer), GetSample(sample), cancellationToken);
 
-        _ = await Assert.That(diagnostics.IsDefault).IsFalse();
-    }
-
+    /// <summary>Every rule must report on at least one sample, so that each rule's own logic runs on code with errors and not only its early exits.</summary>
     [Test]
-    public async Task CoversEveryAnalyzer(CancellationToken cancellationToken)
+    public async Task EveryRuleReportsOnSomeSample(CancellationToken cancellationToken)
     {
-        var analyzers = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (analyzer, _) in Cases())
-            _ = analyzers.Add(analyzer);
+        var silent = new List<string>();
+        foreach (var name in Analyzers.Value.Keys)
+        {
+            var reported = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (_, source) in Samples)
+                foreach (var diagnostic in await AnalyzerRunner.RunOnIncompleteCodeAsync(CreateAnalyzer(name), source, cancellationToken))
+                    _ = reported.Add(diagnostic.Id);
 
-        _ = await Assert.That(analyzers).Contains(nameof(FinalizerDisposeFieldAnalyzer));
-        _ = await Assert.That(analyzers).Contains(nameof(OmitOuterLoopBracesAnalyzer));
+            foreach (var descriptor in CreateAnalyzer(name).SupportedDiagnostics)
+            {
+                if (!reported.Contains(descriptor.Id))
+                    silent.Add(descriptor.Id);
+            }
+        }
+
+        _ = await Assert.That(Analyzers.Value.Keys).Contains(nameof(FinalizerDisposeFieldAnalyzer));
+        _ = await Assert.That(silent).IsEmpty();
     }
 
-    private static DiagnosticAnalyzer CreateAnalyzer(string name)
+    private static DiagnosticAnalyzer CreateAnalyzer(string name) => (DiagnosticAnalyzer)Activator.CreateInstance(Analyzers.Value[name])!;
+
+    private static Dictionary<string, Type> FindAnalyzers()
     {
-        var type = typeof(FinalizerDisposeFieldAnalyzer).Assembly.GetType("Squirix.Analyzers." + name, true)!;
-        return (DiagnosticAnalyzer)Activator.CreateInstance(type)!;
+        var analyzers = new Dictionary<string, Type>(StringComparer.Ordinal);
+        foreach (var type in typeof(FinalizerDisposeFieldAnalyzer).Assembly.GetTypes())
+        {
+            if (!type.IsAbstract && typeof(DiagnosticAnalyzer).IsAssignableFrom(type) && type.IsDefined(typeof(DiagnosticAnalyzerAttribute), false))
+                analyzers.Add(type.Name, type);
+        }
+
+        return analyzers;
     }
 
-    private static string GetSample(string name) => name switch
+    private static string GetSample(string name)
     {
-        nameof(BrokenControlFlow) => BrokenControlFlow,
-        nameof(BrokenDisposePattern) => BrokenDisposePattern,
-        nameof(BrokenInvocations) => BrokenInvocations,
-        nameof(BrokenStructs) => BrokenStructs,
-        nameof(BrokenTasksAndScopes) => BrokenTasksAndScopes,
-        nameof(BrokenTypes) => BrokenTypes,
-        nameof(BrokenTopLevel) => BrokenTopLevel,
-        nameof(ValidShapesNextToErrors) => ValidShapesNextToErrors,
-        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown sample."),
-    };
+        foreach (var (sample, source) in Samples)
+        {
+            if (sample == name)
+                return source;
+        }
+
+        throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown sample.");
+    }
 }
