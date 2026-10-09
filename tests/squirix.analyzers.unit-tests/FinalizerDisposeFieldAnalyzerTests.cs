@@ -435,6 +435,195 @@ public sealed class FinalizerDisposeFieldAnalyzerTests
         }
         """, 0, cancellationToken);
 
+    [Test]
+    public async Task FlagsOppositeNullChecksOfTheField(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private readonly Gate _gate;
+
+            public C(Gate gate) : base(1) => _gate = gate;
+
+            protected override void Dispose(bool disposing)
+            {
+                if (ReferenceEquals(_gate, null))
+                    _gate.Exit();
+
+                if (_gate == null)
+                    _gate.Exit();
+
+                if (_gate is null or { IsOpen: true })
+                    _gate.Exit();
+            }
+        }
+        """, 3, cancellationToken);
+
+    [Test]
+    public async Task FlagsCheckOfReferenceOrDefaultedField(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private readonly Gate _gate;
+            private readonly Gate _other;
+            private bool _disposed;
+
+            public C(Gate gate, Gate other) : base(1)
+            {
+                _gate = gate;
+                _other = other;
+                _disposed = false;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (_other == null)
+                    _gate.Exit();
+
+                if (_disposed)
+                    return;
+
+                _gate.Exit();
+            }
+        }
+        """, 2, cancellationToken);
+
+    [Test]
+    public async Task FlagsObjectInitializerAsNoFlag(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private readonly Gate _gate;
+            private bool IsOpen;
+
+            public C() : base(1) => _gate = new Gate { IsOpen = true };
+
+            protected override void Dispose(bool disposing)
+            {
+                if (IsOpen)
+                    _gate.Exit();
+            }
+        }
+        """, 1, cancellationToken);
+
+    [Test]
+    public async Task FlagsInvertedOrBypassedDisposingGuard(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private readonly Gate _gate;
+
+            public C(Gate gate) : base(1) => _gate = gate;
+
+            protected override void Dispose(bool disposing)
+            {
+                _ = disposing || _gate.IsOpen;
+                try
+                {
+                    if (!disposing)
+                        return;
+                }
+                finally
+                {
+                    _gate.Exit();
+                }
+
+                if (disposing)
+                    return;
+
+                _gate.Exit();
+            }
+        }
+        """, 3, cancellationToken);
+
+    [Test]
+    public async Task FlagsThroughIntermediateBaseClass(CancellationToken cancellationToken) => await AssertCountAsync("""
+        class Mid : Base
+        {
+            protected Mid() : base(1) { }
+        }
+
+        sealed class C<T> : Mid
+            where T : class
+        {
+            private readonly T _value;
+
+            public C(T value) => _value = value;
+
+            protected override void Dispose(bool disposing) => _ = _value.ToString();
+        }
+        """, 1, cancellationToken);
+
+    [Test]
+    public async Task AllowsEquivalentDisposingChecks(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private readonly Gate _gate;
+
+            public C(Gate gate) : base(1) => _gate = gate;
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing == true)
+                    _gate.Exit();
+
+                if (disposing is not false)
+                    _gate.Exit();
+
+                if (!disposing || _gate is null)
+                {
+                    return;
+                }
+
+                _gate.Exit();
+            }
+        }
+        """, 0, cancellationToken);
+
+    [Test]
+    public async Task AllowsDereferenceAfterThrowOrPattern(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private readonly Gate _a;
+            private readonly Gate _b;
+
+            public C(Gate a, Gate b) : base(1)
+            {
+                _a = a;
+                _b = b;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing is false)
+                    throw new InvalidOperationException();
+
+                _a.Exit();
+                if (_b is { IsOpen: true })
+                    _b.Exit();
+            }
+        }
+        """, 0, cancellationToken);
+
+    [Test]
+    public async Task AllowsNameofExtensionAndLocalFunction(CancellationToken cancellationToken) => await AssertCountAsync("""
+        static class GateExtensions
+        {
+            public static void Close(this Gate gate) { }
+        }
+
+        sealed class C : Base
+        {
+            private readonly Gate _gate;
+
+            public C(Gate gate) : base(1) => _gate = gate;
+
+            protected override void Dispose(bool disposing)
+            {
+                _ = nameof(_gate.IsOpen);
+                _gate.Close();
+                Exit();
+
+                void Exit() => _gate.Exit();
+            }
+        }
+        """, 0, cancellationToken);
+
     private static async Task AssertCountAsync(string source, int expected, CancellationToken cancellationToken, bool withBase = true)
     {
         var diagnostics = await AnalyzerRunner.RunAsync(new FinalizerDisposeFieldAnalyzer(), withBase ? FinalizableBase + source : source, cancellationToken);

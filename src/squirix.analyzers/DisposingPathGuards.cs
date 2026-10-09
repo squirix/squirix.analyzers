@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Operations;
@@ -8,28 +9,31 @@ namespace Squirix.Analyzers;
 /// <summary>
 /// Decides whether a field dereference in <c>Dispose(bool)</c> runs only on a path that the finalizer of a half-built
 /// object cannot reach (SQR0033): inside a branch where <c>disposing</c> is true, where the field is not null, or
-/// where a field that a constructor assigns has been checked.
+/// where a value-type field that a constructor sets to a non-default value has been checked.
 /// </summary>
 internal sealed class DisposingPathGuards
 {
+    private readonly CancellationToken _cancellationToken;
+
     private readonly HashSet<string> _constructorAssignedFields;
 
     private readonly IParameterSymbol _disposing;
 
     private readonly INamedTypeSymbol _type;
 
-    internal DisposingPathGuards(IParameterSymbol disposing, INamedTypeSymbol type, HashSet<string> constructorAssignedFields)
+    internal DisposingPathGuards(IParameterSymbol disposing, INamedTypeSymbol type, HashSet<string> constructorAssignedFields, CancellationToken cancellationToken)
     {
         _disposing = disposing;
         _type = type;
         _constructorAssignedFields = constructorAssignedFields;
+        _cancellationToken = cancellationToken;
     }
 
-    internal static bool HasInitializer(IFieldSymbol field)
+    internal static bool HasInitializer(IFieldSymbol field, CancellationToken cancellationToken)
     {
         foreach (var reference in field.DeclaringSyntaxReferences)
         {
-            if (reference.GetSyntax() is VariableDeclaratorSyntax { Initializer: not null })
+            if (reference.GetSyntax(cancellationToken) is VariableDeclaratorSyntax { Initializer: not null })
                 return true;
         }
 
@@ -45,6 +49,9 @@ internal sealed class DisposingPathGuards
             {
                 case IAnonymousFunctionOperation or ILocalFunctionOperation:
                     // A lambda or local function runs when it is called, so the enclosing branch does not tell which path it is on.
+                    return true;
+                case INameOfOperation:
+                    // nameof does not evaluate its argument.
                     return true;
                 case IConditionalOperation conditional when (child == conditional.WhenTrue && Implies(conditional.Condition, true, reference.Field))
                                                             || (child == conditional.WhenFalse && Implies(conditional.Condition, false, reference.Field)):
@@ -65,20 +72,35 @@ internal sealed class DisposingPathGuards
         _ => false,
     };
 
+    private static bool IsBoolConstant(IOperation operation, out bool constant)
+    {
+        if (Unwrap(operation).ConstantValue is { HasValue: true, Value: bool value })
+        {
+            constant = value;
+            return true;
+        }
+
+        constant = false;
+        return false;
+    }
+
     private static bool IsNullConstant(IOperation operation) => Unwrap(operation).ConstantValue is { HasValue: true, Value: null };
 
     private static bool IsSameField(IOperation operation, IFieldSymbol field) =>
         Unwrap(operation) is IFieldReferenceOperation { Instance: IInstanceReferenceOperation } reference
         && SymbolEqualityComparer.Default.Equals(reference.Field.OriginalDefinition, field.OriginalDefinition);
 
-    /// <summary>Returns whether <paramref name="pattern" /> matches a null value; only the null-related pattern shapes are distinguished.</summary>
-    private static bool MatchesNull(IPatternOperation pattern) => pattern switch
+    /// <summary>Returns whether <paramref name="pattern" /> matches a null value, or <see langword="null" /> when the pattern shape is not recognized.</summary>
+    private static bool? MatchesNull(IPatternOperation pattern) => pattern switch
     {
         IConstantPatternOperation constant => IsNullConstant(constant.Value),
         INegatedPatternOperation negated => !MatchesNull(negated.Pattern),
         IDeclarationPatternOperation declaration => declaration.MatchesNull,
         IDiscardPatternOperation => true,
-        _ => false,
+        IRecursivePatternOperation or ITypePatternOperation or IRelationalPatternOperation => false,
+        IBinaryPatternOperation { OperatorKind: BinaryOperatorKind.Or } either => MatchesNull(either.LeftPattern) | MatchesNull(either.RightPattern),
+        IBinaryPatternOperation { OperatorKind: BinaryOperatorKind.And } both => MatchesNull(both.LeftPattern) & MatchesNull(both.RightPattern),
+        _ => null,
     };
 
     private static IOperation Unwrap(IOperation operation)
@@ -113,7 +135,7 @@ internal sealed class DisposingPathGuards
         condition = Unwrap(condition);
         return condition switch
         {
-            IParameterReferenceOperation parameter when SymbolEqualityComparer.Default.Equals(parameter.Parameter, _disposing) => value,
+            IParameterReferenceOperation parameter when IsDisposing(parameter) => value,
             IUnaryOperation { OperatorKind: UnaryOperatorKind.Not } negation => Implies(negation.Operand, !value, field),
             IBinaryOperation { OperatorKind: BinaryOperatorKind.ConditionalAnd } conjunction => value
                 ? Implies(conjunction.LeftOperand, true, field) || Implies(conjunction.RightOperand, true, field)
@@ -125,24 +147,41 @@ internal sealed class DisposingPathGuards
                 when (IsSameField(comparison.LeftOperand, field) && IsNullConstant(comparison.RightOperand))
                      || (IsSameField(comparison.RightOperand, field) && IsNullConstant(comparison.LeftOperand))
                 => value == (comparison.OperatorKind == BinaryOperatorKind.NotEquals),
-            IIsPatternOperation pattern when IsSameField(pattern.Value, field) => value == !MatchesNull(pattern.Pattern),
-            _ => ReadsConstructorAssignedField(condition),
+            IBinaryOperation { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals } comparison
+                when IsDisposingComparedToConstant(comparison.LeftOperand, comparison.RightOperand, out var constant)
+                     || IsDisposingComparedToConstant(comparison.RightOperand, comparison.LeftOperand, out constant)
+                => constant == (value == (comparison.OperatorKind == BinaryOperatorKind.Equals)),
+            IIsPatternOperation { Pattern: IConstantPatternOperation constantPattern } pattern
+                when IsDisposing(pattern.Value) && IsBoolConstant(constantPattern.Value, out var constant) => constant == value,
+            IIsPatternOperation { Pattern: INegatedPatternOperation { Pattern: IConstantPatternOperation constantPattern } } pattern
+                when IsDisposing(pattern.Value) && IsBoolConstant(constantPattern.Value, out var constant) => constant != value,
+            IIsPatternOperation pattern when IsSameField(pattern.Value, field) => MatchesNull(pattern.Pattern) is { } matchesNull && value != matchesNull,
+            _ => ReadsConstructorFlag(condition),
         };
     }
 
+    private bool IsDisposing(IOperation operation) =>
+        Unwrap(operation) is IParameterReferenceOperation parameter && SymbolEqualityComparer.Default.Equals(parameter.Parameter, _disposing);
+
+    private bool IsDisposingComparedToConstant(IOperation operand, IOperation other, out bool constant)
+    {
+        constant = false;
+        return IsDisposing(operand) && IsBoolConstant(other, out constant);
+    }
+
     /// <summary>
-    /// Returns whether <paramref name="condition" /> reads a field of the type that a constructor assigns and that has no initializer:
-    /// such a field still has its default value in an object whose constructor body did not run, so the check tells the two apart.
-    /// The direction of the check is not verified.
+    /// Returns whether <paramref name="condition" /> reads a value-type field of the type that a constructor sets to a non-default value and
+    /// that has no initializer: such a flag still has its default value in an object whose constructor body did not run, so the check tells
+    /// the two apart. The direction of the check is not verified.
     /// </summary>
-    private bool ReadsConstructorAssignedField(IOperation condition)
+    private bool ReadsConstructorFlag(IOperation condition)
     {
         foreach (var operation in condition.DescendantsAndSelf())
         {
-            if (operation is IFieldReferenceOperation { Instance: IInstanceReferenceOperation, Field: { IsStatic: false } field }
+            if (operation is IFieldReferenceOperation { Instance: IInstanceReferenceOperation, Field: { IsStatic: false, Type.IsValueType: true } field }
                 && SymbolEqualityComparer.Default.Equals(field.ContainingType.OriginalDefinition, _type.OriginalDefinition)
                 && _constructorAssignedFields.Contains(field.Name)
-                && !HasInitializer(field))
+                && !HasInitializer(field, _cancellationToken))
                 return true;
         }
 

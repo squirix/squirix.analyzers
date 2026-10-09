@@ -54,12 +54,12 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
         if (type.TypeKind != TypeKind.Class || !(DeclaresFinalizer(type) || (method.IsOverride && InheritsFinalizer(type))))
             return;
 
-        var guards = new DisposingPathGuards(method.Parameters[0], type, CollectConstructorAssignedFields(type, context.CancellationToken));
+        var guards = new DisposingPathGuards(method.Parameters[0], type, CollectConstructorAssignedFields(type, context.CancellationToken), context.CancellationToken);
         foreach (var block in context.OperationBlocks)
         {
             foreach (var operation in block.DescendantsAndSelf())
             {
-                if (operation is IFieldReferenceOperation reference && IsUnsafeFieldReference(reference, type) && IsDereferenced(reference) && !guards.IsGuarded(reference))
+                if (operation is IFieldReferenceOperation reference && IsUnsafeFieldReference(reference, type, context.CancellationToken) && IsDereferenced(reference) && !guards.IsGuarded(reference))
                     context.ReportDiagnostic(Diagnostic.Create(Rule, reference.Syntax.GetLocation(), reference.Field.Name));
             }
         }
@@ -75,9 +75,10 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
                 if (reference.GetSyntax(cancellationToken) is not ConstructorDeclarationSyntax declaration)
                     continue;
 
-                foreach (var node in declaration.DescendantNodes(static child => child is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)))
+                // Object initializers assign members of the created object, not fields of this one.
+                foreach (var node in declaration.DescendantNodes(static child => child is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax or InitializerExpressionSyntax)))
                 {
-                    if (node is AssignmentExpressionSyntax assignment && TryGetAssignedName(assignment.Left, out var name))
+                    if (node is AssignmentExpressionSyntax assignment && !IsDefaultLiteral(assignment.Right) && TryGetAssignedName(assignment.Left, out var name))
                         _ = names.Add(name);
                 }
             }
@@ -133,18 +134,22 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
         };
     }
 
+    /// <summary>Returns whether <paramref name="value" /> is a literal that leaves a field at its default value: <c>false</c>, <c>0</c>, <c>null</c> or <c>default</c>.</summary>
+    private static bool IsDefaultLiteral(ExpressionSyntax value) =>
+        value is LiteralExpressionSyntax literal && (literal.Token.Value is false or null || literal.Token.Value is 0);
+
     private static bool IsDisposeBool(IMethodSymbol method) =>
         method is { Name: "Dispose", MethodKind: MethodKind.Ordinary, IsStatic: false, ReturnsVoid: true, Parameters.Length: 1 }
         && method.Parameters[0].Type.SpecialType == SpecialType.System_Boolean;
 
-    private static bool IsUnsafeFieldReference(IFieldReferenceOperation reference, INamedTypeSymbol type)
+    private static bool IsUnsafeFieldReference(IFieldReferenceOperation reference, INamedTypeSymbol type, CancellationToken cancellationToken)
     {
         var field = reference.Field;
         return reference.Instance is IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance }
                && !field.IsStatic
                && !field.Type.IsValueType
                && SymbolEqualityComparer.Default.Equals(field.ContainingType.OriginalDefinition, type.OriginalDefinition)
-               && !DisposingPathGuards.HasInitializer(field);
+               && !DisposingPathGuards.HasInitializer(field, cancellationToken);
     }
 
     private static bool TryGetAssignedName(ExpressionSyntax target, out string name)
