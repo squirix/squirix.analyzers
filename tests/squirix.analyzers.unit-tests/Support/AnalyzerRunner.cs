@@ -12,8 +12,11 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Squirix.Analyzers.UnitTests.Support;
 
 /// <summary>Compiles C# source and returns the findings of a single analyzer.</summary>
+/// <remarks>Throws when the analyzer itself throws: Roslyn reports that as AD0001, which the ID filter would otherwise drop.</remarks>
 internal static class AnalyzerRunner
 {
+    private const string AnalyzerExceptionId = "AD0001";
+
     private static readonly Lazy<ImmutableArray<MetadataReference>> References = new(LoadReferences);
 
     public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
@@ -47,6 +50,7 @@ internal static class AnalyzerRunner
 
         var withAnalyzers = compilation.WithAnalyzers([analyzer], options);
         var allDiagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync(cancellationToken);
+        ThrowIfAnalyzerThrew(allDiagnostics);
         var supportedIds = new HashSet<string>();
         foreach (var supported in analyzer.SupportedDiagnostics)
             _ = supportedIds.Add(supported.Id);
@@ -87,6 +91,19 @@ internal static class AnalyzerRunner
     }
 
     private static string ThrowTrustedAssembliesMissing() => throw new InvalidOperationException("TRUSTED_PLATFORM_ASSEMBLIES is not available.");
+
+    private static void ThrowIfAnalyzerThrew(ImmutableArray<Diagnostic> diagnostics)
+    {
+        var crashes = new List<string>();
+        foreach (var diagnostic in diagnostics)
+        {
+            if (diagnostic.Id == AnalyzerExceptionId)
+                crashes.Add(diagnostic.ToString());
+        }
+
+        if (crashes.Count > 0)
+            throw new InvalidOperationException("Analyzer threw an exception:" + Environment.NewLine + string.Join(Environment.NewLine, crashes));
+    }
 
     private static void ThrowIfSourceDoesNotCompile(Compilation compilation, CancellationToken cancellationToken)
     {
