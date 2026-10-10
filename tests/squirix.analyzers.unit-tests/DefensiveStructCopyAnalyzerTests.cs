@@ -495,6 +495,22 @@ public sealed class DefensiveStructCopyAnalyzerTests
         }
         """, cancellationToken);
 
+    /// <summary>A ref field makes its struct writable, but not the readonly fields inside that struct.</summary>
+    [Test]
+    public async Task FlagsReadOnlyFieldBehindRefField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        struct Inner { public readonly Counter Deep; }
+
+        ref struct Writer
+        {
+            public ref Inner Nested;
+        }
+
+        class C
+        {
+            int M(Writer writer) => writer.Nested.Deep.Next();
+        }
+        """, cancellationToken);
+
     [Test]
     public async Task SkipsUnknownSizeWithConfiguredSize(CancellationToken cancellationToken)
     {
