@@ -74,14 +74,13 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// Reports a tuple value taken apart into targets that lose a result, as in <c language="csharp">(Func&lt;Task&gt; work, int n) = pair</c>.
-    /// The parts are converted one by one, and none of those conversions has a node. A tuple literal is left out: its
-    /// elements are converted where they stand and are reported there.
+    /// The parts are converted one by one, and none of those conversions has a node. An element of a tuple literal
+    /// that is converted where it stands already has the type of its target, so it is not reported a second time here.
     /// </summary>
     private static void AnalyzeDeconstruction(OperationAnalysisContext context)
     {
         var deconstruction = (IDeconstructionAssignmentOperation)context.Operation;
-        if (deconstruction.Value is not ITupleOperation)
-            _ = FindLosses(context, deconstruction.Value.Syntax, deconstruction.Value.Type, deconstruction.Target.Type);
+        _ = FindLosses(context, deconstruction.Value.Syntax, deconstruction.Value.Type, deconstruction.Target.Type);
     }
 
     private static void AnalyzeDelegateCreation(OperationAnalysisContext context)
@@ -178,12 +177,12 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
     private static bool IsEnumerableOfT(INamedTypeSymbol type) => type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T;
 
-    private static bool IsCastOperand(SyntaxNode expression)
+    /// <summary>Returns whether two types are the same apart from tuple element names and nullable annotations.</summary>
+    private static bool IsSameType(IOperation at, ITypeSymbol? left, ITypeSymbol? right)
     {
-        while (expression.Parent is ParenthesizedExpressionSyntax parenthesized)
-            expression = parenthesized;
-
-        return expression.Parent is CastExpressionSyntax;
+        left = Unwrap(left);
+        right = Unwrap(right);
+        return left != null && right != null && at.SemanticModel is { } model && model.Compilation.ClassifyConversion(left, right).IsIdentity;
     }
 
     private static bool IsNamed(ITypeSymbol type, string name, bool generic) =>
@@ -230,17 +229,14 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
             {
                 case IConversionOperation conversion:
                     if (!conversion.IsImplicit)
-                        return conversion.OperatorMethod == null && SymbolEqualityComparer.Default.Equals(Unwrap(conversion.Type), Unwrap(lossy));
+                        return conversion.OperatorMethod == null && IsSameType(conversion, conversion.Type, lossy);
 
                     break;
-                case ITupleOperation tuple:
-                    // A cast written right over a tuple literal types its elements and leaves no conversion node above it.
-                    if (IsCastOperand(tuple.Syntax))
-                        return true;
+                case ITupleOperation or ICollectionExpressionOperation:
+                    // A cast over the literal covers the element only while the element still has the type that loses the result.
+                    if (current is not ISpreadOperation && !IsSameType(current, current.Type, lossy))
+                        return false;
 
-                    lossy = tuple.Type;
-                    break;
-                case ICollectionExpressionOperation:
                     lossy = parent.Type;
                     break;
                 case IConditionalOperation conditional when conditional.Condition != current:
