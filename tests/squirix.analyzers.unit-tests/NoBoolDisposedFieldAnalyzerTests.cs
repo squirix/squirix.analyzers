@@ -176,6 +176,114 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
     }
 
     [Test]
+    public async Task AllowsParenthesizedRefOperand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose() => Interlocked.Exchange(ref (_disposed), 1);
+
+                                  bool IsDisposed() => Volatile.Read(ref (this._disposed)) != 0;
+
+                                  static bool IsClosed(C other) => Volatile.Read(in ((other._disposed))) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>The call receives a reference to whichever flag the condition picks, so both branches are guarded.</summary>
+    [Test]
+    public async Task AllowsRefConditionalOperand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  static void Close(bool first, C a, C b) => Interlocked.Exchange(ref (first ? ref a._disposed : ref b._disposed), 1);
+
+                                  void CloseOne(bool mine, bool first, C a, C b) =>
+                                      Interlocked.Exchange(ref (mine ? ref _disposed : ref (first ? ref (a._disposed) : ref b._disposed)), 1);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>The condition reads the flag; only the branches of a ref conditional stand for the reference.</summary>
+    [Test]
+    public async Task FlagsFlagInRefConditionalCondition(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+                                  private int _first;
+                                  private int _second;
+
+                                  void M() => Interlocked.Exchange(ref (_disposed == 0 ? ref _first : ref _second), 1);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsRefConditionalOutsideInterlocked(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  static void Close(bool first, C a, C b)
+                                  {
+                                      ref var flag = ref (first ? ref a._disposed : ref b._disposed);
+                                      flag = 1;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task FlagsParenthesizedPlainAccess(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  bool IsDisposed() => (_disposed) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
     public async Task FlagsPlainReadOfAnotherInstanceFlag(CancellationToken cancellationToken)
     {
         const string source = """
