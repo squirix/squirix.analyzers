@@ -15,7 +15,8 @@ namespace Squirix.Analyzers;
 /// Forbids exception-assert invocations that allocate a new delegate on every call, regardless of the assert library
 /// (xUnit <c language="csharp">Assert.Throws</c>, FluentAssertions <c language="csharp">Should().Throw</c>, NUnit
 /// <c language="csharp">Assert.Throws</c>, and similar helpers). An invocation is flagged when the method is a
-/// <c language="csharp">Throws</c>/<c language="csharp">Throw</c> family member and at least one argument is a
+/// <c language="csharp">Throws</c>/<c language="csharp">Throw</c> family member and it, or an earlier call of the same
+/// chain (<c language="csharp">Assert.That(...)</c>, <c language="csharp">Invoking(...)</c>), is given a
 /// capturing delegate (a lambda or anonymous method that captures outer state or 'this', which allocates a new
 /// delegate and a display class on every call). A non-capturing lambda has no closure and is cached as a single
 /// static delegate (whether or not it is marked 'static'), so it does not allocate per call and is not flagged.
@@ -35,8 +36,8 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
     private static readonly HashSet<string> ThrowMethodNames =
     [
-        "Throws", "ThrowsAny", "ThrowsAsync", "ThrowsAnyAsync",
-        "Throw", "ThrowAny", "ThrowExactly", "ThrowAsync",
+        "Throws", "ThrowsAny", "ThrowsAsync", "ThrowsAnyAsync", "ThrowsExactly", "ThrowsExactlyAsync", "ThrowsException",
+        "Throw", "ThrowAny", "ThrowExactly", "ThrowAsync", "ThrowExactlyAsync", "ThrowWithinAsync",
     ];
 
     private static readonly LocalizableString Title = "Avoid allocating exception assert invocations";
@@ -59,12 +60,13 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var node = (InvocationExpressionSyntax)context.Node;
-
-        if (node.Expression is not MemberAccessExpressionSyntax memberAccess)
+        var name = GetInvokedName(node.Expression);
+        if (name == null || !ThrowMethodNames.Contains(name))
             return;
 
-        var name = memberAccess.Name.Identifier.Text;
-        if (!ThrowMethodNames.Contains(name))
+        // A bare name is an assert only when it comes from another type through 'using static'; a method of the
+        // enclosing type with such a name is the code's own helper.
+        if (node.Expression is SimpleNameSyntax && !IsImportedStaticMethod(context))
             return;
 
         if (!CapturesDelegate(node, context.SemanticModel, context.CancellationToken))
@@ -72,12 +74,23 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(Rule, node.GetLocation(), $"`{name}`"));
     }
 
+    /// <summary>
+    /// Returns whether the assert is given a capturing delegate: in its own arguments, or in the arguments of an earlier
+    /// call of the same chain, as in <c language="csharp">Assert.That(() => ...).Throws&lt;T&gt;()</c> and
+    /// <c language="csharp">Invoking(() => ...).Should().Throw&lt;T&gt;()</c>.
+    /// </summary>
     private static bool CapturesDelegate(InvocationExpressionSyntax invocation, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
-        foreach (var argument in invocation.ArgumentList.Arguments)
+        for (ExpressionSyntax? link = invocation; link != null; link = GetReceiver(link))
         {
-            if (ContainsCapturingDelegate(argument.Expression, semanticModel, cancellationToken))
-                return true;
+            if (link is not InvocationExpressionSyntax call)
+                continue;
+
+            foreach (var argument in call.ArgumentList.Arguments)
+            {
+                if (ContainsCapturingDelegate(argument.Expression, semanticModel, cancellationToken))
+                    return true;
+            }
         }
 
         return false;
@@ -114,11 +127,34 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    private static string? GetInvokedName(ExpressionSyntax expression) => expression switch
+    {
+        MemberAccessExpressionSyntax access => access.Name.Identifier.Text,
+        MemberBindingExpressionSyntax binding => binding.Name.Identifier.Text,
+        SimpleNameSyntax name => name.Identifier.Text,
+        _ => null,
+    };
+
+    /// <summary>Returns the expression an invocation or member access is applied to, looking through wrappers that change nothing.</summary>
+    private static ExpressionSyntax? GetReceiver(ExpressionSyntax expression) => expression switch
+    {
+        InvocationExpressionSyntax call => (call.Expression as MemberAccessExpressionSyntax)?.Expression,
+        MemberAccessExpressionSyntax access => access.Expression,
+        ParenthesizedExpressionSyntax parenthesized => parenthesized.Expression,
+        PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression => suppression.Operand,
+        AwaitExpressionSyntax awaited => awaited.Expression,
+        _ => null,
+    };
+
     private static bool IsCapturingDelegate(AnonymousFunctionExpressionSyntax function, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         // Explicitly static lambdas never capture; non-capturing lambdas without the modifier
         // are likewise cached by the compiler, so only true outer-state capture allocates per call.
         if (function.Modifiers.Any(SyntaxKind.StaticKeyword))
+            return false;
+
+        // A lambda that becomes an expression tree, as in a mock setup, is data for the library and not a delegate to call.
+        if (semanticModel.GetTypeInfo(function, cancellationToken).ConvertedType is INamedTypeSymbol { TypeKind: not (TypeKind.Delegate or TypeKind.Error) })
             return false;
 
         var operation = semanticModel.GetOperation(function, cancellationToken);
@@ -195,6 +231,24 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         }
 
         return false;
+    }
+
+    /// <summary>Returns whether the invoked method is a static method of a type other than the enclosing ones and their bases.</summary>
+    private static bool IsImportedStaticMethod(SyntaxNodeAnalysisContext context)
+    {
+        if (context.SemanticModel.GetSymbolInfo(context.Node, context.CancellationToken).Symbol is not IMethodSymbol { IsStatic: true, MethodKind: MethodKind.Ordinary } method)
+            return false;
+
+        for (var enclosing = context.ContainingSymbol?.ContainingType; enclosing != null; enclosing = enclosing.ContainingType)
+        {
+            for (var type = enclosing; type != null; type = type.BaseType)
+            {
+                if (SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, method.ContainingType.OriginalDefinition))
+                    return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IsDelegateNode(SyntaxNode node) => node.IsKind(SyntaxKind.SimpleLambdaExpression) || node.IsKind(SyntaxKind.ParenthesizedLambdaExpression) ||
