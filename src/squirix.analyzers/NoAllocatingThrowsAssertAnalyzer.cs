@@ -36,9 +36,12 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
     private static readonly HashSet<string> ThrowMethodNames =
     [
-        "Throws", "ThrowsAny", "ThrowsAsync", "ThrowsAnyAsync", "ThrowsExactly", "ThrowsExactlyAsync", "ThrowsException",
-        "Throw", "ThrowAny", "ThrowExactly", "ThrowAsync", "ThrowExactlyAsync", "ThrowWithinAsync",
+        "Throws", "ThrowsAny", "ThrowsAsync", "ThrowsAnyAsync", "ThrowsExactly", "ThrowsExactlyAsync", "ThrowsException", "ThrowsExceptionAsync",
+        "Throw", "ThrowAny", "ThrowExactly", "ThrowAsync", "ThrowAnyAsync", "ThrowExactlyAsync", "ThrowWithinAsync",
     ];
+
+    // Mocking libraries name their "make this call throw" methods like asserts; a chain that ends in one is a setup.
+    private static readonly HashSet<string> MockingNamespaces = ["Moq", "NSubstitute", "FakeItEasy"];
 
     private static readonly LocalizableString Title = "Avoid allocating exception assert invocations";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
@@ -69,26 +72,38 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         if (node.Expression is SimpleNameSyntax && !IsImportedStaticMethod(context))
             return;
 
-        if (!CapturesDelegate(node, context.SemanticModel, context.CancellationToken))
+        if (!CapturesDelegate(node, context.SemanticModel, context.CancellationToken) || IsMockSetup(context))
             return;
         context.ReportDiagnostic(Diagnostic.Create(Rule, node.GetLocation(), $"`{name}`"));
     }
 
     /// <summary>
-    /// Returns whether the assert is given a capturing delegate: in its own arguments, or in the arguments of an earlier
-    /// call of the same chain, as in <c language="csharp">Assert.That(() => ...).Throws&lt;T&gt;()</c> and
-    /// <c language="csharp">Invoking(() => ...).Should().Throw&lt;T&gt;()</c>.
+    /// Returns whether the assert is given a capturing delegate. In its own arguments any delegate counts. Along the
+    /// chain before it, only a delegate that is itself the argument of a call counts, as in
+    /// <c language="csharp">Assert.That(() => ...).Throws&lt;T&gt;()</c> and
+    /// <c language="csharp">Invoking(() => ...).Should().Throw&lt;T&gt;()</c>, or the delegate the chain starts from
+    /// (<c language="csharp">new Action(() => ...).Should().Throw&lt;T&gt;()</c>): a lambda deeper inside an argument
+    /// belongs to the operation under test, not to the assert.
     /// </summary>
-    private static bool CapturesDelegate(InvocationExpressionSyntax invocation, SemanticModel semanticModel, CancellationToken cancellationToken)
+    private static bool CapturesDelegate(InvocationExpressionSyntax assert, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
-        for (ExpressionSyntax? link = invocation; link != null; link = GetReceiver(link))
+        foreach (var argument in assert.ArgumentList.Arguments)
         {
+            if (ContainsCapturingDelegate(argument.Expression, semanticModel, cancellationToken))
+                return true;
+        }
+
+        for (var link = GetReceiver(assert); link != null; link = GetReceiver(link))
+        {
+            if (GetDirectDelegate(link, semanticModel, cancellationToken) is { } subject && IsCapturingDelegate(subject, semanticModel, cancellationToken))
+                return true;
+
             if (link is not InvocationExpressionSyntax call)
                 continue;
 
             foreach (var argument in call.ArgumentList.Arguments)
             {
-                if (ContainsCapturingDelegate(argument.Expression, semanticModel, cancellationToken))
+                if (GetDirectDelegate(argument.Expression, semanticModel, cancellationToken) is { } function && IsCapturingDelegate(function, semanticModel, cancellationToken))
                     return true;
             }
         }
@@ -127,6 +142,34 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Returns the lambda or anonymous method an expression consists of, looking through parentheses, a cast and a
+    /// delegate creation such as <c language="csharp">new Action(() => ...)</c>.
+    /// </summary>
+    private static AnonymousFunctionExpressionSyntax? GetDirectDelegate(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case AnonymousFunctionExpressionSyntax function:
+                    return function;
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    break;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    break;
+                case ObjectCreationExpressionSyntax { ArgumentList.Arguments: { Count: 1 } arguments } creation
+                    when semanticModel.GetTypeInfo(creation, cancellationToken).Type is { TypeKind: TypeKind.Delegate }:
+                    expression = arguments[0].Expression;
+                    break;
+                default:
+                    return null;
+            }
+        }
+    }
+
     private static string? GetInvokedName(ExpressionSyntax expression) => expression switch
     {
         MemberAccessExpressionSyntax access => access.Name.Identifier.Text,
@@ -135,16 +178,32 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         _ => null,
     };
 
-    /// <summary>Returns the expression an invocation or member access is applied to, looking through wrappers that change nothing.</summary>
+    /// <summary>
+    /// Returns the previous link of a call chain: what an invocation or member access is applied to, the inside of
+    /// parentheses, of a null-forgiving operator and of an await, and for a link that follows <c language="csharp">?.</c>
+    /// the expression before it.
+    /// </summary>
     private static ExpressionSyntax? GetReceiver(ExpressionSyntax expression) => expression switch
     {
-        InvocationExpressionSyntax call => (call.Expression as MemberAccessExpressionSyntax)?.Expression,
+        InvocationExpressionSyntax call => call.Expression,
         MemberAccessExpressionSyntax access => access.Expression,
+        MemberBindingExpressionSyntax binding => GetConditionalReceiver(binding),
         ParenthesizedExpressionSyntax parenthesized => parenthesized.Expression,
         PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression => suppression.Operand,
         AwaitExpressionSyntax awaited => awaited.Expression,
         _ => null,
     };
+
+    private static ExpressionSyntax? GetConditionalReceiver(MemberBindingExpressionSyntax binding)
+    {
+        for (var node = binding.Parent; node != null; node = node.Parent)
+        {
+            if (node is ConditionalAccessExpressionSyntax conditional && conditional.WhenNotNull.Span.Contains(binding.Span))
+                return conditional.Expression;
+        }
+
+        return null;
+    }
 
     private static bool IsCapturingDelegate(AnonymousFunctionExpressionSyntax function, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
@@ -154,7 +213,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
             return false;
 
         // A lambda that becomes an expression tree, as in a mock setup, is data for the library and not a delegate to call.
-        if (semanticModel.GetTypeInfo(function, cancellationToken).ConvertedType is INamedTypeSymbol { TypeKind: not (TypeKind.Delegate or TypeKind.Error) })
+        if (IsExpressionTree(semanticModel.GetTypeInfo(function, cancellationToken).ConvertedType))
             return false;
 
         var operation = semanticModel.GetOperation(function, cancellationToken);
@@ -231,6 +290,30 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
         }
 
         return false;
+    }
+
+    private static bool IsExpressionTree(ITypeSymbol? type)
+    {
+        for (var current = type; current != null; current = current.BaseType)
+        {
+            if (current is { Name: "Expression", ContainingNamespace: { Name: "Expressions", ContainingNamespace: { Name: "Linq", ContainingNamespace.Name: "System" } } })
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Returns whether the matched method belongs to a mocking library, where it sets a call up to throw and asserts nothing.</summary>
+    private static bool IsMockSetup(SyntaxNodeAnalysisContext context)
+    {
+        if (context.SemanticModel.GetSymbolInfo(context.Node, context.CancellationToken).Symbol is not IMethodSymbol method)
+            return false;
+
+        var root = method.ContainingNamespace;
+        while (root is { IsGlobalNamespace: false, ContainingNamespace.IsGlobalNamespace: false })
+            root = root.ContainingNamespace;
+
+        return root != null && MockingNamespaces.Contains(root.Name);
     }
 
     /// <summary>Returns whether the invoked method is a static method of a type other than the enclosing ones and their bases.</summary>

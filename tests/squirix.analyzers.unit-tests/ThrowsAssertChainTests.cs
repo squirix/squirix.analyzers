@@ -27,11 +27,15 @@ public sealed class ThrowsAssertChainTests
                                       public int Get(int key) => key;
 
                                       public Task<int> GetAsync(int key) => Task.FromResult(key);
+
+                                      public int GetOrAdd(int key, Func<int, int> factory) => factory(key);
                                   }
 
                                   class C
                                   {
                                       private readonly Cache _cache = new Cache();
+
+                                      static Exception Pick(Func<Exception, bool> filter) => new InvalidOperationException();
 
                                       void M(int key)
                                       {
@@ -50,6 +54,8 @@ public sealed class ThrowsAssertChainTests
                                           public static Builder That(Action action) => new Builder();
 
                                           public static Builder That<T>(Func<T> function) => new Builder();
+
+                                          public static Builder That(int value) => new Builder();
 
                                           public static Builder That(Func<Task> function) => new Builder();
 
@@ -100,6 +106,54 @@ public sealed class ThrowsAssertChainTests
                                           public Task ThrowAsync<T>() where T : Exception => Task.CompletedTask;
 
                                           public Task ThrowExactlyAsync<T>() where T : Exception => Task.CompletedTask;
+
+                                          public Task ThrowWithinAsync<T>() where T : Exception => Task.CompletedTask;
+                                      }
+                                  }
+
+                                  namespace Lib
+                                  {
+                                      static class DelegateAsserts
+                                      {
+                                          public static void ThrowAny(Delegate action) { }
+
+                                          public static void ThrowExactly(object action) { }
+                                      }
+                                  }
+
+                                  namespace Moq
+                                  {
+                                      class Mock<T>
+                                      {
+                                          public Language.Setup Setup(Expression<Func<T, int>> call) => new Language.Setup();
+                                      }
+                                  }
+
+                                  namespace Moq.Language
+                                  {
+                                      class Setup
+                                      {
+                                          public Setup Callback(Action action) => this;
+
+                                          public void Throws<TException>() where TException : Exception { }
+
+                                          public void Throws(Func<Exception> factory) { }
+                                      }
+                                  }
+
+                                  namespace NSubstitute
+                                  {
+                                      static class Substitute
+                                      {
+                                          public static Core.WhenCalled When<T>(T substitute, Action<T> call) => new Core.WhenCalled();
+                                      }
+                                  }
+
+                                  namespace NSubstitute.Core
+                                  {
+                                      class WhenCalled
+                                      {
+                                          public void Throw<TException>() where TException : Exception { }
                                       }
                                   }
 
@@ -147,6 +201,17 @@ public sealed class ThrowsAssertChainTests
         "Throws<InvalidOperationException>(() => _cache.Get(key));",
         "ThrowsAny<Exception>(() => _cache.Get(key));",
         "_ = ThrowsAsync<InvalidOperationException>(() => _cache.GetAsync(key));",
+        "TUnit.Assertions.Assert.That(delegate { _cache.Get(key); }).Throws<InvalidOperationException>();",
+        "TUnit.Assertions.Assert.That((Action)(() => _cache.Get(key))).Throws<InvalidOperationException>();",
+        "new Cache().Invoking(c => c.Get(key)).Should().Throw<InvalidOperationException>();",
+        "((Action)(() => _cache.Get(key))).Should().Throw<InvalidOperationException>();",
+        "new Action(() => _cache.Get(key)).Should().Throw<InvalidOperationException>();",
+        "_ = new Func<Task>(() => _cache.GetAsync(key)).Should().ThrowAsync<InvalidOperationException>();",
+        "FluentActions.Invoking(() => _cache.Get(key))?.Should().Throw<InvalidOperationException>();",
+        "_cache?.Invoking(c => c.Get(key)).Should().Throw<InvalidOperationException>();",
+        "_ = FluentActions.Awaiting(() => _cache.GetAsync(key)).Should().ThrowWithinAsync<InvalidOperationException>();",
+        "Lib.DelegateAsserts.ThrowAny(() => _cache.Get(key));",
+        "Lib.DelegateAsserts.ThrowExactly(() => _cache.Get(key));",
     ];
 
     /// <summary>Returns statements that allocate nothing per call, or that are not an exception assert over a delegate.</summary>
@@ -164,6 +229,22 @@ public sealed class ThrowsAssertChainTests
 
         // A mock setup takes an expression tree, which is data for the library, and Throws there is not an assert.
         "new Mock<Cache>().Setup(c => c.Get(key)).Throws<InvalidOperationException>();",
+
+        // Throws and Throw of a mocking library set a call up to throw, whatever delegates the chain holds.
+        "new Moq.Mock<Cache>().Setup(c => c.Get(key)).Callback(() => key++).Throws<InvalidOperationException>();",
+        "new Moq.Mock<Cache>().Setup(c => c.Get(key)).Throws(() => new InvalidOperationException(key.ToString()));",
+        "NSubstitute.Substitute.When(_cache, c => c.Get(key)).Throw<InvalidOperationException>();",
+
+        // The lambda belongs to the operation under test: the assert receives an already started operation.
+        "TUnit.Assertions.Assert.That(() => 1).And.Throws<InvalidOperationException>(); _ = _cache.Get(key);",
+        "TUnit.Assertions.Assert.That(_cache.GetOrAdd(key, k => k + key)).Throws<InvalidOperationException>();",
+        "System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(Pick(e => e.Message.Length > key)).Throw();",
+
+        // The lambda goes to a constructor of the subject, not to the assert.
+        "new Lazy<int>(() => _cache.Get(key)).Invoking(static l => l.Value.ToString()).Should().Throw<InvalidOperationException>();",
+
+        // The chain is split across a local: the assert only receives what That returned.
+        "var assertion = TUnit.Assertions.Assert.That(() => _cache.Get(key)); assertion.Throws<InvalidOperationException>();",
     ];
 
     [Test]
