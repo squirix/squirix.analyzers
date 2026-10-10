@@ -91,6 +91,9 @@ public sealed class IncompleteCodeTests
                                                      Func<Task> g = Undefined;
                                                      _ = Assert.Throws<InvalidOperationException>(() => u.
                                                      await Assert.ThrowsAsync<Exception>(async () => await
+                                                     Throws<Unknown>(() => u.
+                                                     Assert.That(() => u.).Throws<
+                                                     u?.Should().Throw(
                                                      var token = TestContext.Current.Execution.
                                                      var options = new GrpcChannelOptions { HttpHandler = new SocketsHttpHandler(), DisposeHttpClient =
                                                  }
