@@ -25,41 +25,19 @@ internal static class BraceRemovalGuards
         return !(followedByElse && EndsInUnmatchedIf(only));
     }
 
-    /// <summary>Returns whether an else follows the statement, so that an unbraced inner if would capture it.</summary>
-    internal static bool IsFollowedByElse(SyntaxNode node)
-    {
-        // True when the statement sits in the tail of an if branch whose if has an else.
-        var child = node;
-        while (true)
-        {
-            var parent = child.Parent;
-            switch (parent)
-            {
-                case IfStatementSyntax ifStatement when ifStatement.Statement == child:
-                    if (ifStatement.Else != null)
-                        return true;
-
-                    child = ifStatement;
-                    break;
-                case ElseClauseSyntax elseClause:
-                    child = elseClause.Parent!;
-                    break;
-                case WhileStatementSyntax or ForStatementSyntax or CommonForEachStatementSyntax or UsingStatementSyntax or LockStatementSyntax or FixedStatementSyntax
-                    or LabeledStatementSyntax:
-                    child = parent;
-                    break;
-                default:
-                    return false;
-            }
-        }
-    }
-
-    private static bool EndsInUnmatchedIf(StatementSyntax statement)
+    /// <summary>
+    /// Returns whether the statement ends in an if without an else, which would capture an else that follows the statement.
+    /// A block around a single statement does not count as protection, because another diagnostic may ask to remove it too.
+    /// </summary>
+    internal static bool EndsInUnmatchedIf(StatementSyntax statement)
     {
         while (true)
         {
             switch (statement)
             {
+                case BlockSyntax { Statements.Count: 1 } block:
+                    statement = block.Statements[0];
+                    break;
                 case IfStatementSyntax ifStatement:
                     if (ifStatement.Else == null)
                         return true;
@@ -86,6 +64,35 @@ internal static class BraceRemovalGuards
                     break;
                 case LabeledStatementSyntax labeledStatement:
                     statement = labeledStatement.Statement;
+                    break;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    /// <summary>Returns whether an else follows the statement, so that an unbraced inner if would capture it.</summary>
+    internal static bool IsFollowedByElse(SyntaxNode node)
+    {
+        // True when the statement sits in the tail of an if branch whose if has an else.
+        var child = node;
+        while (true)
+        {
+            var parent = child.Parent;
+            switch (parent)
+            {
+                case IfStatementSyntax ifStatement when ifStatement.Statement == child:
+                    if (ifStatement.Else != null)
+                        return true;
+
+                    child = ifStatement;
+                    break;
+                case ElseClauseSyntax elseClause:
+                    child = elseClause.Parent!;
+                    break;
+                case WhileStatementSyntax or ForStatementSyntax or CommonForEachStatementSyntax or UsingStatementSyntax or LockStatementSyntax or FixedStatementSyntax
+                    or LabeledStatementSyntax:
+                    child = parent;
                     break;
                 default:
                     return false;
