@@ -150,6 +150,32 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
     }
 
     [Test]
+    public async Task AllowsPointerAndStaticQualifiedFlag(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              struct State
+                              {
+                                  public int _disposed;
+                              }
+
+                              class C
+                              {
+                                  private static int _disposed;
+
+                                  static void Close() => Interlocked.Exchange(ref C._disposed, 1);
+
+                                  static unsafe void Close(State* state) => Interlocked.Exchange(ref state->_disposed, 1);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
     public async Task FlagsPlainReadOfAnotherInstanceFlag(CancellationToken cancellationToken)
     {
         const string source = """
