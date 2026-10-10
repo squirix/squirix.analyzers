@@ -61,6 +61,9 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
             return;
         }
 
+        if (receiver is IConditionalAccessOperation { WhenNotNull: IPropertyReferenceOperation inner })
+            receiver = inner;
+
         if (receiver is IPropertyReferenceOperation { Property.Name: "Execution" } execution
             && IsTestContext(execution.Property.ContainingType, "Core", "TUnit")
             && IsCurrentOf(GetReceiver(execution, ref start), "Core", "TUnit"))
@@ -99,12 +102,18 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    /// <summary>Returns the type that declares the code, or null for top-level statements, which have no type to derive from a test base.</summary>
     private static INamedTypeSymbol? GetContainingType(ISymbol? symbol)
     {
         for (var current = symbol; current is not null; current = current.ContainingSymbol)
         {
-            if (current is INamedTypeSymbol type)
-                return type;
+            switch (current)
+            {
+                case IMethodSymbol { Name: WellKnownMemberNames.TopLevelStatementsEntryPointMethodName }:
+                    return null;
+                case INamedTypeSymbol type:
+                    return type;
+            }
         }
 
         return null;
@@ -117,9 +126,6 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
     private static IOperation? GetReceiver(IPropertyReferenceOperation reference, ref int start)
     {
         var instance = reference.Instance;
-        while (instance is IConversionOperation { IsImplicit: true } conversion)
-            instance = conversion.Operand;
-
         if (instance is not IConditionalAccessInstanceOperation)
             return instance;
 
@@ -144,7 +150,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
 
     private static bool IsTestContext(INamedTypeSymbol? type, string ns, string? outerNs)
     {
-        if (type is not { Name: "TestContext", ContainingType: null, ContainingNamespace: { IsGlobalNamespace: false } inner } || inner.Name != ns)
+        if (type is not { Name: "TestContext", Arity: 0, ContainingType: null, ContainingNamespace: { IsGlobalNamespace: false } inner } || inner.Name != ns)
             return false;
 
         var outer = inner.ContainingNamespace;

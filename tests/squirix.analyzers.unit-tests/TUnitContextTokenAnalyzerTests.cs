@@ -51,6 +51,16 @@ public sealed class TUnitContextTokenAnalyzerTests
                                              public TestExecution Execution { get; } = new TestExecution();
                                          }
                                      }
+
+                                     namespace Outer.TUnit.Core
+                                     {
+                                         class TestContext
+                                         {
+                                             public static TestContext? Current { get; } = new TestContext();
+
+                                             public Other.Core.TestExecution Execution { get; } = new Other.Core.TestExecution();
+                                         }
+                                     }
                                      """;
 
     /// <summary>Returns every spelling of the TUnit token access that must be reported in full.</summary>
@@ -64,6 +74,11 @@ public sealed class TUnitContextTokenAnalyzerTests
         "(TestContext.Current)?.Execution.CancellationToken",
         "TUnit.Core.TestContext.Current!.Execution.CancellationToken",
         "global::TUnit.Core.TestContext.Current?.Execution.CancellationToken",
+        "(TestContext.Current?.Execution)?.CancellationToken",
+        "(TestContext.Current?.Execution)!.CancellationToken",
+        "(TestContext.Current?.Execution!).CancellationToken",
+        "Context.Current!.Execution.CancellationToken",
+        "Current!.Execution.CancellationToken",
     ];
 
     /// <summary>Returns expressions that look like the TUnit token access but must not be reported.</summary>
@@ -73,6 +88,7 @@ public sealed class TUnitContextTokenAnalyzerTests
         "TestContext.Current!.Execution",
         "Other.Core.TestContext.Current!.Execution.CancellationToken",
         "Other.Core.TestContext.Current?.CancellationToken",
+        "Outer.TUnit.Core.TestContext.Current!.Execution.CancellationToken",
     ];
 
     [Test]
@@ -162,6 +178,17 @@ public sealed class TUnitContextTokenAnalyzerTests
     }
 
     [Test]
+    public async Task FlagsUseInTopLevelStatements(CancellationToken cancellationToken)
+    {
+        var source = Wrap("var token = TestContext.Current!.Execution.CancellationToken;");
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
     public async Task AllowsTokenFromLocalContext(CancellationToken cancellationToken)
     {
         var source = Wrap("class C { void M() { var context = TestContext.Current!; var token = context.Execution.CancellationToken; } }");
@@ -181,5 +208,6 @@ public sealed class TUnitContextTokenAnalyzerTests
         _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    private static string Wrap(string code) => "using TUnit.Core;\n\n" + code + TUnitStub;
+    private static string Wrap(string code) =>
+        "using TUnit.Core;\nusing static TUnit.Core.TestContext;\nusing Context = TUnit.Core.TestContext;\n\n" + code + TUnitStub;
 }

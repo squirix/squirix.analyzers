@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
@@ -8,54 +9,141 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
 {
     private const string RuleId = "SQR0017";
 
-    private const string TestContextStub = """
+    private const string Usings = """
+                                  using Xunit;
+                                  using static Xunit.TestContext;
+                                  using Context = Xunit.TestContext;
 
 
-                                           #nullable enable
-                                           namespace Xunit
-                                           {
-                                               interface ITestContext
-                                               {
-                                                   System.Threading.CancellationToken CancellationToken { get; }
+                                  """;
 
-                                                   object? Test { get; }
-                                               }
+    private const string XunitStub = """
 
-                                               sealed class TestContext : ITestContext
-                                               {
-                                                   public static ITestContext? Current { get; } = new TestContext();
 
-                                                   public System.Threading.CancellationToken CancellationToken => System.Threading.CancellationToken.None;
+                                     #nullable enable
+                                     namespace Xunit
+                                     {
+                                         interface ITestContext
+                                         {
+                                             System.Threading.CancellationToken CancellationToken { get; }
 
-                                                   public object? Test => null;
-                                               }
-                                           }
+                                             object? Test { get; }
+                                         }
 
-                                           class Other
-                                           {
-                                               public static Other? Current { get; } = new Other();
+                                         sealed class TestContext : ITestContext
+                                         {
+                                             public static ITestContext? Current { get; } = new TestContext();
 
-                                               public System.Threading.CancellationToken CancellationToken => System.Threading.CancellationToken.None;
-                                           }
-                                           """;
+                                             public System.Threading.CancellationToken CancellationToken => default;
+
+                                             public object? Test => null;
+                                         }
+
+                                         sealed class TestContext<T>
+                                         {
+                                             public static TestContext<T>? Current { get; } = new TestContext<T>();
+
+                                             public System.Threading.CancellationToken CancellationToken => default;
+                                         }
+                                     }
+
+                                     namespace Xunit.Sub
+                                     {
+                                         sealed class TestContext
+                                         {
+                                             public static TestContext? Current { get; } = new TestContext();
+
+                                             public System.Threading.CancellationToken CancellationToken => default;
+                                         }
+                                     }
+
+                                     namespace My.Xunit
+                                     {
+                                         sealed class TestContext
+                                         {
+                                             public static TestContext? Current { get; } = new TestContext();
+
+                                             public System.Threading.CancellationToken CancellationToken => default;
+                                         }
+                                     }
+
+                                     class Other
+                                     {
+                                         public static Other? Current { get; } = new Other();
+
+                                         public System.Threading.CancellationToken CancellationToken => default;
+                                     }
+                                     """;
+
+    /// <summary>Returns every spelling of the xUnit token access that must be reported in full.</summary>
+    public static IEnumerable<string> ReportedAccesses() =>
+    [
+        "TestContext.Current.CancellationToken",
+        "TestContext.Current!.CancellationToken",
+        "TestContext.Current?.CancellationToken",
+        "(TestContext.Current).CancellationToken",
+        "(TestContext.Current!).CancellationToken",
+        "Xunit.TestContext.Current.CancellationToken",
+        "global::Xunit.TestContext.Current!.CancellationToken",
+        "global::Xunit.TestContext.Current?.CancellationToken",
+        "Context.Current!.CancellationToken",
+        "Current!.CancellationToken",
+    ];
+
+    /// <summary>Returns expressions that look like the xUnit token access but must not be reported.</summary>
+    public static IEnumerable<string> AllowedExpressions() =>
+    [
+        "TestContext.Current?.Test",
+        "TestContext.Current!.Test",
+        "Other.Current!.CancellationToken",
+        "Other.Current?.CancellationToken",
+        "My.Xunit.TestContext.Current!.CancellationToken",
+        "Xunit.Sub.TestContext.Current?.CancellationToken",
+        "Xunit.TestContext<int>.Current!.CancellationToken",
+    ];
+
+    /// <summary>Returns code that reads the token where no shared token member is in reach.</summary>
+    public static IEnumerable<string> ReportedPlaces() =>
+    [
+        "class C { System.Func<System.Threading.CancellationToken> M() => () => TestContext.Current!.CancellationToken; }",
+        "class C { void M() { Local(); static void Local() { var token = TestContext.Current!.CancellationToken; } } }",
+        "class C { private readonly bool _cancelled = TestContext.Current!.CancellationToken.IsCancellationRequested; }",
+        "class Base { } class Derived : Base { void M() { var token = TestContext.Current!.CancellationToken; } }",
+        "class Base { protected System.Threading.SemaphoreSlim Gate => null!; } class Derived : Base { void M() { var token = TestContext.Current!.CancellationToken; } }",
+        "class Outer { private System.Threading.CancellationToken Token => default; class Inner { void M() { var token = TestContext.Current!.CancellationToken; } } }",
+        "static class Outer { class Inner { void M() { var token = TestContext.Current!.CancellationToken; } } }",
+    ];
+
+    /// <summary>Returns code that reads the token where the rule does not apply.</summary>
+    public static IEnumerable<string> AllowedPlaces() =>
+    [
+        "class C { private System.Threading.CancellationToken SharedToken => default; void M() { var token = TestContext.Current!.CancellationToken; } }",
+        "class C { private System.Threading.CancellationToken _token; void M() { _token = TestContext.Current!.CancellationToken; } }",
+        "class Base { protected System.Threading.CancellationToken SharedToken => default; } class Derived : Base { void M() { var token = TestContext.Current!.CancellationToken; } }",
+        "static class C { static void M() { var token = TestContext.Current!.CancellationToken; } }",
+        "struct S { void M() { var token = TestContext.Current!.CancellationToken; } }",
+        "var token = TestContext.Current!.CancellationToken;",
+        "class C { void M() { var context = TestContext.Current!; var token = context.CancellationToken; } }",
+    ];
 
     [Test]
-    public async Task AllowsDeclaredSharedTokenOfAnyName(CancellationToken cancellationToken)
+    [MethodDataSource(nameof(ReportedAccesses))]
+    public async Task FlagsTokenReadFromCurrentContext(string access, CancellationToken cancellationToken)
     {
-        const string source = """
-                              using Xunit;
+        var source = Wrap("class C { void M() { var token = " + access + "; } }");
 
-                              class C
-                              {
-                                  private System.Threading.CancellationToken SharedToken
-                                      => System.Threading.CancellationToken.None;
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
-                                  void M()
-                                  {
-                                      var token = TestContext.Current.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+        _ = await Assert.That(source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length)).IsEqualTo(access);
+    }
+
+    [Test]
+    [MethodDataSource(nameof(AllowedExpressions))]
+    public async Task AllowsOtherExpressions(string expression, CancellationToken cancellationToken)
+    {
+        var source = Wrap("class C { void M() { var value = " + expression + "; } }");
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
@@ -63,155 +151,54 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     }
 
     [Test]
-    public async Task AllowsTypeDeclaredCancellationToken(CancellationToken cancellationToken)
+    [MethodDataSource(nameof(ReportedPlaces))]
+    public async Task FlagsUseWithoutSharedToken(string code, CancellationToken cancellationToken)
     {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  private System.Threading.CancellationToken cancellationToken
-                                      => System.Threading.CancellationToken.None;
-
-                                  void M()
-                                  {
-                                      var token = TestContext.Current.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        _ = await Assert.That(diagnostics).IsEmpty();
-    }
-
-    [Test]
-    public async Task AllowsUseWhenBaseClassExposesSharedToken(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class Base
-                              {
-                                  protected System.Threading.CancellationToken SharedToken
-                                      => System.Threading.CancellationToken.None;
-                              }
-
-                              class Derived : Base
-                              {
-                                  void M()
-                                  {
-                                      var token = TestContext.Current.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        _ = await Assert.That(diagnostics).IsEmpty();
-    }
-
-    [Test]
-    public async Task DoesNotFlagPreviousUseInsideStaticClass(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              static class C
-                              {
-                                  static void M()
-                                  {
-                                      var token = TestContext.Current.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        _ = await Assert.That(diagnostics).IsEmpty();
-    }
-
-    [Test]
-    public async Task FlagsBaseNonTokenThreadingType(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class Base
-                              {
-                                  protected System.Threading.SemaphoreSlim Semaphore
-                                      => null!;
-                              }
-
-                              class Derived : Base
-                              {
-                                  void M()
-                                  {
-                                      var token = TestContext.Current.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), Wrap(code), cancellationToken);
 
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
     [Test]
-    public async Task FlagsDirectTestContextTokenUse(CancellationToken cancellationToken)
+    [MethodDataSource(nameof(AllowedPlaces))]
+    public async Task AllowsUseWhereRuleDoesNotApply(string code, CancellationToken cancellationToken)
     {
-        const string source = """
-                              using Xunit;
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), Wrap(code), cancellationToken);
 
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = TestContext.Current.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AdvisesTheSharedBaseClassToken(CancellationToken cancellationToken)
+    {
+        var source = Wrap("class C { void M() { var token = TestContext.Current!.CancellationToken; } }");
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
         _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo(
             "Do not use TestContext.Current.CancellationToken directly; consume the shared CancellationToken exposed by a base class instead");
     }
 
     [Test]
-    public async Task FlagsUseWhenBaseClassDoesNotExposeToken(CancellationToken cancellationToken)
+    public async Task FlagsChainedUseUpToTheToken(CancellationToken cancellationToken)
     {
-        const string source = """
-                              using Xunit;
-
-                              class Base
-                              {
-                              }
-
-                              class Derived : Base
-                              {
-                                  void M()
-                                  {
-                                      var token = TestContext.Current.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
+        var source = Wrap("class C { void M() { var cancelled = TestContext.Current?.CancellationToken.IsCancellationRequested; } }");
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+        _ = await Assert.That(source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length))
+            .IsEqualTo("TestContext.Current?.CancellationToken");
     }
 
+    /// <summary>A class that only shares the name with the test framework type is not a test context.</summary>
     [Test]
-    public async Task FlagsNullForgivingTokenUse(CancellationToken cancellationToken)
+    public async Task AllowsLookAlikeInGlobalNamespace(CancellationToken cancellationToken)
     {
         const string source = """
-                              using Xunit;
-
+                              #nullable enable
                               class C
                               {
                                   void M()
@@ -219,259 +206,19 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
                                       var token = TestContext.Current!.CancellationToken;
                                   }
                               }
-                              """ + TestContextStub;
 
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
-    }
-
-    [Test]
-    public async Task FlagsNullConditionalTokenUse(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
+                              class TestContext
                               {
-                                  void M()
-                                  {
-                                      var token = TestContext.Current?.CancellationToken;
-                                  }
+                                  public static TestContext? Current { get; } = new TestContext();
+
+                                  public System.Threading.CancellationToken CancellationToken => default;
                               }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
-    }
-
-    [Test]
-    public async Task FlagsNullConditionalChainedUse(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = TestContext.Current?.CancellationToken.IsCancellationRequested;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
-    }
-
-    [Test]
-    public async Task FlagsParenthesizedTokenUse(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = (TestContext.Current).CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
-    }
-
-    [Test]
-    public async Task FlagsParenthesizedForgivingUse(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = (TestContext.Current!).CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
-    }
-
-    [Test]
-    public async Task FlagsQualifiedTokenUse(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = Xunit.TestContext.Current.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
-    }
-
-    [Test]
-    public async Task FlagsGlobalQualifiedTokenUse(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = global::Xunit.TestContext.Current!.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
-    }
-
-    [Test]
-    public async Task FlagsGlobalQualifiedNamespaceUse(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = global::Xunit.TestContext.Current?.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
-        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
-    }
-
-    [Test]
-    public async Task AllowsTokenFromLocalContext(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var ctx = TestContext.Current!;
-                                      var token = ctx.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
+                              """;
 
         var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
 
         _ = await Assert.That(diagnostics).IsEmpty();
     }
 
-    [Test]
-    public async Task AllowsNullConditionalOtherMember(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = TestContext.Current?.Test;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        _ = await Assert.That(diagnostics).IsEmpty();
-    }
-
-    [Test]
-    public async Task AllowsNullForgivingOtherMember(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = TestContext.Current!.Test;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        _ = await Assert.That(diagnostics).IsEmpty();
-    }
-
-    [Test]
-    public async Task AllowsUnrelatedCurrentType(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = Other.Current!.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        _ = await Assert.That(diagnostics).IsEmpty();
-    }
-
-    [Test]
-    public async Task AllowsUnrelatedConditionalCurrent(CancellationToken cancellationToken)
-    {
-        const string source = """
-                              using Xunit;
-
-                              class C
-                              {
-                                  void M()
-                                  {
-                                      var token = Other.Current?.CancellationToken;
-                                  }
-                              }
-                              """ + TestContextStub;
-
-        var diagnostics = await AnalyzerRunner.RunAsync(new NoDirectTestContextCancelTokenAnalyzer(), source, cancellationToken);
-
-        _ = await Assert.That(diagnostics).IsEmpty();
-    }
+    private static string Wrap(string code) => Usings + code + XunitStub;
 }
