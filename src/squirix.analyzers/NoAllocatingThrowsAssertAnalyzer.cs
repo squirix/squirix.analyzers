@@ -180,14 +180,17 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// Returns the previous link of a call chain: what an invocation or member access is applied to, the inside of
-    /// parentheses, of a null-forgiving operator and of an await, and for a link that follows <c language="csharp">?.</c>
-    /// the expression before it.
+    /// parentheses, of a cast, of a null-forgiving operator and of an await, and for a link that follows
+    /// <c language="csharp">?.</c> the expression before it. A whole <c language="csharp">a?.b</c> expression continues
+    /// with its last link.
     /// </summary>
     private static ExpressionSyntax? GetReceiver(ExpressionSyntax expression) => expression switch
     {
         InvocationExpressionSyntax call => call.Expression,
         MemberAccessExpressionSyntax access => access.Expression,
         MemberBindingExpressionSyntax binding => GetConditionalReceiver(binding),
+        ConditionalAccessExpressionSyntax conditional => conditional.WhenNotNull,
+        CastExpressionSyntax cast => cast.Expression,
         ParenthesizedExpressionSyntax parenthesized => parenthesized.Expression,
         PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression => suppression.Operand,
         AwaitExpressionSyntax awaited => awaited.Expression,

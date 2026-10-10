@@ -209,6 +209,8 @@ public sealed class ThrowsAssertChainTests
         "_ = new Func<Task>(() => _cache.GetAsync(key)).Should().ThrowAsync<InvalidOperationException>();",
         "FluentActions.Invoking(() => _cache.Get(key))?.Should().Throw<InvalidOperationException>();",
         "_cache?.Invoking(c => c.Get(key)).Should().Throw<InvalidOperationException>();",
+        "(FluentActions.Invoking(() => _cache.Get(key))?.Should())!.Throw<InvalidOperationException>();",
+        "((ActionAssertions)FluentActions.Invoking(() => _cache.Get(key)).Should()).Throw<InvalidOperationException>();",
         "_ = FluentActions.Awaiting(() => _cache.GetAsync(key)).Should().ThrowWithinAsync<InvalidOperationException>();",
         "Lib.DelegateAsserts.ThrowAny(() => _cache.Get(key));",
         "Lib.DelegateAsserts.ThrowExactly(() => _cache.Get(key));",
