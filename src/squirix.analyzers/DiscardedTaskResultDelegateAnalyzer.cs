@@ -53,15 +53,15 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeCoalesce(OperationAnalysisContext context)
     {
         var coalesce = (ICoalesceOperation)context.Operation;
-        if (FindLosses(context, null, coalesce.Value.Type, coalesce.Type) && !IsUnderExplicitCast(coalesce, coalesce.Type))
-            _ = FindLosses(context, coalesce.Value.Syntax, coalesce.Value.Type, coalesce.Type);
+        if (FindLosses(null, coalesce.Value.Type, coalesce.Type) && !IsUnderExplicitCast(coalesce, coalesce.Type))
+            _ = FindLosses(new LossSink(context, coalesce.Value.Syntax), coalesce.Value.Type, coalesce.Type);
     }
 
     /// <summary>Reports a delegate that returns Task&lt;T&gt; and is implicitly used as one that returns Task.</summary>
     private static void AnalyzeConversion(OperationAnalysisContext context)
     {
         var conversion = (IConversionOperation)context.Operation;
-        if (!conversion.IsImplicit || !conversion.Conversion.Exists || !FindLosses(context, null, conversion.Operand.Type, conversion.Type))
+        if (!conversion.IsImplicit || !conversion.Conversion.Exists || !FindLosses(null, conversion.Operand.Type, conversion.Type))
             return;
 
         // Comparing two delegates, or two tuples of them, converts one side but passes it nowhere.
@@ -69,7 +69,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
             return;
 
         if (!IsUnderExplicitCast(conversion, conversion.Type))
-            _ = FindLosses(context, conversion.Syntax, conversion.Operand.Type, conversion.Type);
+            _ = FindLosses(new LossSink(context, conversion.Syntax), conversion.Operand.Type, conversion.Type);
     }
 
     /// <summary>
@@ -80,7 +80,11 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeDeconstruction(OperationAnalysisContext context)
     {
         var deconstruction = (IDeconstructionAssignmentOperation)context.Operation;
-        _ = FindLosses(context, deconstruction.Value.Syntax, deconstruction.Value.Type, deconstruction.Target.Type);
+        if (deconstruction.Syntax is not AssignmentExpressionSyntax syntax || deconstruction.SemanticModel is not { } model)
+            return;
+
+        var sink = new LossSink(context, deconstruction.Value.Syntax);
+        ReportDeconstruction(sink, model.GetDeconstructionInfo(syntax), deconstruction.Value.Type, deconstruction.Target);
     }
 
     private static void AnalyzeDelegateCreation(OperationAnalysisContext context)
@@ -111,8 +115,15 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static void AnalyzeLoop(OperationAnalysisContext context)
     {
-        if (context.Operation is not IForEachLoopOperation { Syntax: CommonForEachStatementSyntax syntax } loop)
+        if (context.Operation is not IForEachLoopOperation { Syntax: CommonForEachStatementSyntax syntax } loop || loop.SemanticModel is not { } model)
             return;
+
+        // A loop that takes each element apart follows the rules of a deconstruction, part by part.
+        if (syntax is ForEachVariableStatementSyntax parts)
+        {
+            ReportDeconstruction(new LossSink(context, loop.Collection.Syntax), model.GetDeconstructionInfo(parts), model.GetForEachStatementInfo(syntax).ElementType, loop.LoopControlVariable);
+            return;
+        }
 
         // Only a variable declared as a Task-returning delegate, or as a tuple that may hold one, is worth binding the loop for.
         var written = loop.LoopControlVariable is IVariableDeclaratorOperation variable ? variable.Symbol.Type : loop.LoopControlVariable.Type;
@@ -120,13 +131,13 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         if (written == null || (declared is not INamedTypeSymbol { IsTupleType: true } && !ReturnsPlainTask(declared, out _)))
             return;
 
-        var element = loop.SemanticModel?.GetForEachStatementInfo(syntax).ElementType;
-        if (element == null || !FindLosses(context, null, element, declared))
+        var element = model.GetForEachStatementInfo(syntax).ElementType;
+        if (element == null || !FindLosses(null, element, declared))
             return;
 
         // The loop records a tuple conversion as explicit even when an implicit one exists, so the pair is classified again.
         if (context.Compilation.ClassifyConversion(element, written) is { Exists: true, IsImplicit: true })
-            _ = FindLosses(context, loop.Collection.Syntax, element, declared);
+            _ = FindLosses(new LossSink(context, loop.Collection.Syntax), element, declared);
     }
 
     /// <summary>Reports a spread element whose items lose their result in the collection they are copied into.</summary>
@@ -137,8 +148,8 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
             return;
 
         var item = GetItemType(spread.Parent?.Type);
-        if (FindLosses(context, null, spread.ElementType, item) && !IsUnderExplicitCast(spread, item))
-            _ = FindLosses(context, spread.Operand.Syntax, spread.ElementType, item);
+        if (FindLosses(null, spread.ElementType, item) && !IsUnderExplicitCast(spread, item))
+            _ = FindLosses(new LossSink(context, spread.Operand.Syntax), spread.ElementType, item);
     }
 
     /// <summary>
@@ -269,6 +280,47 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
+    /// Reports the parts of a value that is taken apart into targets, where a part loses its result in its target. A part
+    /// comes from an element of a tuple or from an out parameter of the Deconstruct method the compiler chose, and may be
+    /// taken apart further. A discard receives nothing, whatever type is written for it.
+    /// </summary>
+    private static void ReportDeconstruction(LossSink sink, DeconstructionInfo info, ITypeSymbol? source, IOperation target)
+    {
+        if (target is IDeclarationExpressionOperation declaration)
+            target = declaration.Expression;
+
+        switch (target)
+        {
+            case IDiscardOperation:
+                return;
+            case ITupleOperation targets when targets.Elements.Length == info.Nested.Length:
+                for (var index = 0; index < targets.Elements.Length; index++)
+                    ReportDeconstruction(sink, info.Nested[index], GetPartType(info, source, index), targets.Elements[index]);
+
+                return;
+            default:
+                _ = FindLosses(sink, source, target.Type);
+                return;
+        }
+    }
+
+    /// <summary>Returns the type of one part of a value that is taken apart: an out parameter of its Deconstruct method, or a tuple element.</summary>
+    private static ITypeSymbol? GetPartType(DeconstructionInfo info, ITypeSymbol? source, int index)
+    {
+        if (info.Method is not { } method)
+            return Unwrap(source) is INamedTypeSymbol { IsTupleType: true } tuple && index < tuple.TupleElements.Length ? tuple.TupleElements[index].Type : null;
+
+        // An extension Deconstruct takes the value itself first; the parts are its out parameters, in order.
+        foreach (var parameter in method.Parameters)
+        {
+            if (parameter.RefKind == RefKind.Out && index-- == 0)
+                return parameter.Type;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Reports where a returned value turns from Task&lt;T&gt; into Task. The compiler converts either the whole value
     /// or, when its branches have different types, each branch on its own, so the search follows the value into the
     /// branches of conditional, switch and null-coalescing expressions, and through a conversion that only gives such
@@ -349,10 +401,10 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// Returns whether a value of the source type, used as the target type, loses a result: a delegate that returns
-    /// Task&lt;T&gt; used as one that returns Task, or a tuple with such elements. With a place given, every loss is reported
-    /// there, one diagnostic for each element of a tuple that loses its result.
+    /// Task&lt;T&gt; used as one that returns Task, or a tuple with such elements. With a sink given, every loss is reported
+    /// to it, one for each element of a tuple that loses its result.
     /// </summary>
-    private static bool FindLosses(OperationAnalysisContext context, SyntaxNode? place, ITypeSymbol? source, ITypeSymbol? target)
+    private static bool FindLosses(LossSink? sink, ITypeSymbol? source, ITypeSymbol? target)
     {
         source = Unwrap(source);
         target = Unwrap(target);
@@ -361,9 +413,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
             if (!TryGetDelegateResultType(source, out var result))
                 return false;
 
-            if (place != null)
-                Report(context, place, delegateType, result);
-
+            sink?.Add(delegateType, result);
             return true;
         }
 
@@ -376,11 +426,11 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         var found = false;
         for (var index = 0; index < sourceTuple.TupleElements.Length; index++)
         {
-            if (!FindLosses(context, place, sourceTuple.TupleElements[index].Type, targetTuple.TupleElements[index].Type))
+            if (!FindLosses(sink, sourceTuple.TupleElements[index].Type, targetTuple.TupleElements[index].Type))
                 continue;
 
-            // Without a place the answer is enough; with one, the remaining elements still have to be reported.
-            if (place == null)
+            // Without a sink the answer is enough; with one, the remaining elements still have to be reported.
+            if (sink == null)
                 return true;
 
             found = true;
@@ -422,4 +472,34 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     /// <summary>Returns the type inside a nullable value type, such as a nullable tuple; any other type as it is.</summary>
     private static ITypeSymbol? Unwrap(ITypeSymbol? type) =>
         type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable ? nullable.TypeArguments[0] : type;
+
+    /// <summary>
+    /// Collects the losses found for one expression and reports each once: two elements of a tuple that lose the same
+    /// result to the same delegate would otherwise give two identical diagnostics at one place.
+    /// </summary>
+    private sealed class LossSink
+    {
+        private readonly OperationAnalysisContext _context;
+        private readonly SyntaxNode _place;
+        private List<(INamedTypeSymbol DelegateType, string Result)>? _reported;
+
+        public LossSink(OperationAnalysisContext context, SyntaxNode place)
+        {
+            _context = context;
+            _place = place;
+        }
+
+        public void Add(INamedTypeSymbol delegateType, string result)
+        {
+            _reported ??= [];
+            foreach (var (reportedDelegate, reportedResult) in _reported)
+            {
+                if (reportedResult == result && SymbolEqualityComparer.Default.Equals(reportedDelegate, delegateType))
+                    return;
+            }
+
+            _reported.Add((delegateType, result));
+            Report(_context, _place, delegateType, result);
+        }
+    }
 }

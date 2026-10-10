@@ -23,6 +23,16 @@ public sealed class DiscardedTaskResultFormsTests
                                   {
                                       delegate T Maker<out T>();
 
+                                      sealed class Holder(Func<Task<bool>> work)
+                                      {
+                                          public void Deconstruct(out Func<Task<bool>> first, out int second) => (first, second) = (work, 0);
+                                      }
+
+                                      internal sealed class Extended(Func<Task<bool>> work)
+                                      {
+                                          public Func<Task<bool>> Work => work;
+                                      }
+
                                       sealed class Wrapper
                                       {
                                           public static explicit operator Wrapper(Func<Task> work) => new Wrapper();
@@ -44,6 +54,11 @@ public sealed class DiscardedTaskResultFormsTests
     private const string Suffix = """
 
                                       }
+                                  }
+
+                                  static class ExtendedParts
+                                  {
+                                      public static void Deconstruct(this C.Extended item, out Func<Task<bool>> first, out int second) => (first, second) = (item.Work, 0);
                                   }
                                   """;
 
@@ -94,7 +109,15 @@ public sealed class DiscardedTaskResultFormsTests
         ("var pairs = new List<(Func<Task<bool>>, int)> { (save, mode) }; foreach ((Func<Task> work, var n) in pairs) return work; return mode;", "pairs"),
         ("(Func<Task<bool>>, int) pair = (save, mode); ((Func<Task> work, int n), int m) = (pair, mode); return work;", "(pair, mode)"),
         ("(Func<Task<bool>>, int) Get() => (save, mode); ((Func<Task> work, int n), int m) = (Get(), mode); return work;", "(Get(), mode)"),
-        ("(Func<Task<bool>>, int) pair = (save, mode); (Func<Task> _, int n) = pair; return n;", "pair"),
+        ("var kv = new KeyValuePair<string, Func<Task<bool>>>(\"k\", save); (string k, Func<Task> work) = kv; return work;", "kv"),
+        ("var kv = new KeyValuePair<string, Func<Task<bool>>>(\"k\", save); string k; Func<Task> work; (k, work) = kv; return work;", "kv"),
+        ("var map = new Dictionary<string, Func<Task<bool>>> { [\"k\"] = save }; foreach ((string k, Func<Task> work) in map) return work; return mode;", "map"),
+        ("var item = new Holder(save); (Func<Task> work, int n) = item; return work;", "item"),
+        ("var item = new Extended(save); (Func<Task> work, int n) = item; return work;", "item"),
+        ("var kv = new KeyValuePair<string, (Func<Task<bool>>, int)>(\"k\", (save, mode)); (string k, (Func<Task> work, int n)) = kv; return work;", "kv"),
+        ("var pair = (new KeyValuePair<string, Func<Task<bool>>>(\"k\", save), mode); ((string k, Func<Task> work), int n) = pair; return work;", "pair"),
+        ("var both = (save, save); (Func<Task>, Func<Task>) lost = both; return lost;", "both"),
+        ("var both = (save, save); (Func<Task> a, Func<Task> b) = both; return a;", "both"),
         ("Func<Task> nothing = RunNothing; var o = (object)(primary ? save : nothing, mode); return o;", "save"),
         ("Func<Task> nothing = RunNothing; var all = (object[])[primary ? save : nothing]; return all;", "save"),
     ];
@@ -112,7 +135,6 @@ public sealed class DiscardedTaskResultFormsTests
         "Func<Task<int>> count = () => Task.FromResult(1); (Func<Task>, Func<Task>) lost = (save, count); return lost;",
         "Func<Task<int>> count = () => Task.FromResult(1); var both = (save, count); (Func<Task>, Func<Task>) lost = both; return lost;",
         "Func<Task<int>> count = () => Task.FromResult(1); var both = (save, count); (Func<Task> a, Func<Task> b) = both; return a;",
-        "var both = (save, save); (Func<Task>, Func<Task>) lost = both; return lost;",
     ];
 
     /// <summary>Returns method bodies where no result is lost, or where the code says so itself.</summary>
@@ -151,7 +173,13 @@ public sealed class DiscardedTaskResultFormsTests
         "var lost = ((Func<Task>, int))(save, mode); return lost;",
         "var lost = ((Func<Task>, int))(save, mode)!; return lost;",
         "(Func<Task>, int) other = (RunNothing, mode); var lost = ((Func<Task>, int))(primary ? (save, mode) : other); return lost;",
-        "var kv = new KeyValuePair<string, Func<Task<bool>>>(\"k\", save); (string k, Func<Task> work) = kv; return work;",
+        "(Func<Task<bool>>, int) pair = (save, mode); (Func<Task> _, int n) = pair; return n;",
+        "(Func<Task<bool>>, int) pair = (save, mode); (_, int n) = pair; return n;",
+        "var pairs = new List<(Func<Task<bool>>, int)> { (save, mode) }; foreach ((Func<Task> _, int n) in pairs) return n; return mode;",
+        "var kv = new KeyValuePair<string, Func<Task<bool>>>(\"k\", save); (string k, Func<Task> _) = kv; return k;",
+        "var kv = new KeyValuePair<string, Func<Task<bool>>>(\"k\", save); var (k, work) = kv; return work;",
+        "var kv = new KeyValuePair<string, Func<Task<bool>>>(\"k\", save); (string k, Func<Task<bool>> work) = kv; return work;",
+        "var map = new Dictionary<string, Func<Task<bool>>> { [\"k\"] = save }; foreach (var (k, work) in map) return work; return mode;",
         "var lost = ((Func<Task>, int))(primary ? (save, mode) : (save, 0)); return lost;",
         "var all = (Func<Task>[])[save, save]; return all;",
         "var typed = new List<Func<Task<bool>>> { save }; var all = (Func<Task>[])[..typed, save]; return all;",
