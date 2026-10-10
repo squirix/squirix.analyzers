@@ -394,6 +394,123 @@ public sealed class DefensiveStructCopyAnalyzerTests
         }
         """, cancellationToken);
 
+    /// <summary>The readonly before ref only fixes where the reference points, so the member runs on the original struct.</summary>
+    [Test]
+    public async Task AllowsReadOnlyRefField(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        ref struct Writer
+        {
+            private readonly ref Counter _counter;
+
+            public Writer(ref Counter counter) => _counter = ref counter;
+
+            public int M() => _counter.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsRefFieldInsideReadOnlyMember(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        ref struct Writer
+        {
+            private ref Counter _counter;
+
+            public Writer(ref Counter counter) => _counter = ref counter;
+
+            public readonly int M() => _counter.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsRefFieldOfReadOnlyVariable(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        struct Inner { public Counter Deep; }
+
+        ref struct Writer
+        {
+            public ref Counter Direct;
+            public ref Inner Nested;
+        }
+
+        class C
+        {
+            int M(in Writer writer) => writer.Direct.Next() + writer.Nested.Deep.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsRefReadOnlyField(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("""
+            ref struct Reader
+            {
+                private ref readonly Counter _counter;
+
+                public Reader(ref Counter counter) => _counter = ref counter;
+
+                public int M() => _counter.Next();
+            }
+            """, null, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("'Next' is not readonly, so calling it on the readonly '_counter' runs on a hidden copy of 'Counter'");
+    }
+
+    [Test]
+    public async Task FlagsReadOnlyRefReadOnlyField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        readonly ref struct Reader
+        {
+            private readonly ref readonly Counter _counter;
+
+            public Reader(ref Counter counter) => _counter = ref counter;
+
+            public int M() => _counter.Next();
+        }
+        """, cancellationToken);
+
+    /// <summary>The struct behind a ref readonly field cannot be changed even while its holder is being initialized.</summary>
+    [Test]
+    public async Task FlagsRefReadOnlyFieldInConstructor(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        readonly ref struct Reader
+        {
+            private readonly ref readonly Counter _counter;
+
+            public Reader(ref Counter counter)
+            {
+                _counter = ref counter;
+                _ = _counter.Next();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsFieldBehindRefReadOnlyField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        struct Inner { public Counter Deep; }
+
+        ref struct Reader
+        {
+            public ref readonly Inner Nested;
+        }
+
+        class C
+        {
+            int M(Reader reader) => reader.Nested.Deep.Next();
+        }
+        """, cancellationToken);
+
+    /// <summary>A ref field makes its struct writable, but not the readonly fields inside that struct.</summary>
+    [Test]
+    public async Task FlagsReadOnlyFieldBehindRefField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        struct Inner { public readonly Counter Deep; }
+
+        ref struct Writer
+        {
+            public ref Inner Nested;
+        }
+
+        class C
+        {
+            int M(Writer writer) => writer.Nested.Deep.Next();
+        }
+        """, cancellationToken);
+
     [Test]
     public async Task SkipsUnknownSizeWithConfiguredSize(CancellationToken cancellationToken)
     {

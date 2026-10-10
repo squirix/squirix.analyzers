@@ -110,6 +110,17 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
     private static ISymbol? GetReadOnlyField(IFieldReferenceOperation reference, ISymbol containingSymbol)
     {
         var field = reference.Field;
+
+        // For a ref field, 'readonly' before 'ref' only fixes where the reference points. Whether the struct behind it can
+        // change depends on the kind of reference alone, not on the holder and not on the object being initialized.
+        switch (field.RefKind)
+        {
+            case RefKind.Ref:
+                return null;
+            case RefKind.RefReadOnly:
+                return field;
+        }
+
         if (field.IsReadOnly)
             return IsStillWritable(reference, containingSymbol) ? null : field;
 
