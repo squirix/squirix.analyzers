@@ -1,30 +1,34 @@
 using System;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Squirix.Analyzers;
 
 /// <summary>
-/// Forbids direct use of <c language="csharp">TestContext.Current.CancellationToken</c> inside non-static classes.
-/// A class may use it directly only when itself or one of its base classes exposes a shared
-/// <c language="csharp">CancellationToken</c> member, so derived tests do not access TestContext directly everywhere.
+/// Forbids reading the test cancellation token from <c language="csharp">TestContext.Current</c>.
+/// For xUnit, <c language="csharp">TestContext.Current.CancellationToken</c> is reported inside non-static classes unless the class or one of its
+/// base classes exposes a shared <c language="csharp">CancellationToken</c> member. For TUnit,
+/// <c language="csharp">TestContext.Current.Execution.CancellationToken</c> is always reported, because TUnit passes the token to the test method.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
 {
     private const string DiagnosticId = "SQR0017";
+    private const string TUnitAccess = "TestContext.Current.Execution.CancellationToken";
+    private const string TUnitAdvice = "take the CancellationToken parameter of the test method and pass it down instead";
+    private const string XunitAccess = "TestContext.Current.CancellationToken";
+    private const string XunitAdvice = "consume the shared CancellationToken exposed by a base class instead";
 
-    private static readonly LocalizableString Description = "TestContext.Current.CancellationToken must not be used directly unless the class or one of its " +
-                                                            "base classes exposes a shared CancellationToken member. Prefer consuming that shared token from derived tests.";
+    private static readonly LocalizableString Description = "The test cancellation token must not be read from TestContext.Current. With xUnit, consume a shared " +
+                                                            "CancellationToken member exposed by the class or one of its base classes. With TUnit, take the " +
+                                                            "CancellationToken parameter of the test method.";
 
-    private static readonly LocalizableString MessageFormat =
-        "Do not use TestContext.Current.CancellationToken directly; consume the shared CancellationToken exposed by a base class instead";
+    private static readonly LocalizableString MessageFormat = "Do not use {0} directly; {1}";
 
-    private static readonly LocalizableString Title = "Avoid direct use of TestContext.Current.CancellationToken";
+    private static readonly LocalizableString Title = "Avoid reading the cancellation token from TestContext.Current";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
 
     /// <inheritdoc />
@@ -38,44 +42,29 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
 
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeMemberAccess, SyntaxKind.SimpleMemberAccessExpression, SyntaxKind.MemberBindingExpression);
+        context.RegisterOperationAction(AnalyzePropertyReference, OperationKind.PropertyReference);
     }
 
-    private static void AnalyzeMemberAccess(SyntaxNodeAnalysisContext context)
+    private static void AnalyzePropertyReference(OperationAnalysisContext context)
     {
-        var node = context.Node;
+        var token = (IPropertyReferenceOperation)context.Operation;
+        if (token.Property.Name != "CancellationToken" || !IsCancellationTokenType(token.Property.Type))
+            return;
 
-        Location? location;
-        switch (node)
+        var start = token.Syntax.SpanStart;
+        var receiver = GetReceiver(token, ref start);
+        if (IsCurrentOf(receiver, "Xunit", null))
         {
-            case MemberAccessExpressionSyntax access when IsTestContextCancellationToken(access):
-                location = access.GetLocation();
-                break;
-            case MemberBindingExpressionSyntax binding:
-                location = GetConditionalAccessLocation(binding);
-                break;
-            default:
-                return;
+            if (GetContainingType(context.ContainingSymbol) is { IsStatic: false, TypeKind: TypeKind.Class } type && !ExposesSharedCancellationToken(type))
+                Report(context, token, start, XunitAccess, XunitAdvice);
+
+            return;
         }
 
-        if (location is null)
-            return;
-
-        var typeDeclaration = GetEnclosingType(node);
-        if (typeDeclaration is null)
-            return;
-
-        var symbol = context.SemanticModel.GetDeclaredSymbol(typeDeclaration, context.CancellationToken);
-        if (symbol is null)
-            return;
-
-        if (symbol.IsStatic || symbol.TypeKind != TypeKind.Class)
-            return;
-
-        if (ExposesSharedCancellationToken(symbol))
-            return;
-
-        context.ReportDiagnostic(Diagnostic.Create(Rule, location));
+        if (receiver is IPropertyReferenceOperation { Property.Name: "Execution" } execution
+            && IsTestContext(execution.Property.ContainingType, "Core", "TUnit")
+            && IsCurrentOf(GetReceiver(execution, ref start), "Core", "TUnit"))
+            Report(context, token, start, TUnitAccess, TUnitAdvice);
     }
 
     private static bool DeclaresCancellationTokenMember(INamedTypeSymbol symbol)
@@ -110,90 +99,61 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static TypeDeclarationSyntax? GetEnclosingType(SyntaxNode node)
+    private static INamedTypeSymbol? GetContainingType(ISymbol? symbol)
     {
-        for (var current = node.Parent; current is not null; current = current.Parent)
+        for (var current = symbol; current is not null; current = current.ContainingSymbol)
         {
-            if (current is TypeDeclarationSyntax type)
+            if (current is INamedTypeSymbol type)
                 return type;
         }
 
         return null;
     }
 
-    private static bool IsCancellationTokenType(ITypeSymbol? type)
+    /// <summary>
+    /// Returns the operation a property is read from. For <c language="csharp">a?.B</c> that is <c language="csharp">a</c>, and
+    /// <paramref name="start" /> moves back to where the whole conditional access begins.
+    /// </summary>
+    private static IOperation? GetReceiver(IPropertyReferenceOperation reference, ref int start)
     {
-        if (type is not { Name: "CancellationToken" })
-            return false;
+        var instance = reference.Instance;
+        while (instance is IConversionOperation { IsImplicit: true } conversion)
+            instance = conversion.Operand;
 
-        var threading = type.ContainingNamespace;
-        var system = threading?.ContainingNamespace;
-        return threading is { Name: "Threading" } && system is { Name: "System", IsGlobalNamespace: false } && system.ContainingNamespace.IsGlobalNamespace;
-    }
+        if (instance is not IConditionalAccessInstanceOperation)
+            return instance;
 
-    private static Location? GetConditionalAccessLocation(MemberBindingExpressionSyntax binding)
-    {
-        if (binding.Name.Identifier.Text != "CancellationToken")
-            return null;
-
-        SyntaxNode child = binding;
-        for (var parent = binding.Parent; parent is not null; child = parent, parent = parent.Parent)
+        var child = instance;
+        for (var parent = instance.Parent; parent is not null; child = parent, parent = parent.Parent)
         {
-            switch (parent)
-            {
-                case ConditionalAccessExpressionSyntax conditional when conditional.WhenNotNull == child:
-                    return IsTestContextCurrent(conditional.Expression)
-                        ? Location.Create(conditional.SyntaxTree, TextSpan.FromBounds(conditional.Expression.SpanStart, binding.Span.End))
-                        : null;
-                case ConditionalAccessExpressionSyntax conditional when conditional.Expression == child:
-                case MemberAccessExpressionSyntax access when access.Expression == child:
-                case InvocationExpressionSyntax invocation when invocation.Expression == child:
-                case ElementAccessExpressionSyntax element when element.Expression == child:
-                    continue;
-                default:
-                    return null;
-            }
+            if (parent is not IConditionalAccessOperation conditional || conditional.WhenNotNull != child)
+                continue;
+
+            start = Math.Min(start, conditional.Syntax.SpanStart);
+            return conditional.Operation;
         }
 
         return null;
     }
 
-    private static bool IsNamespaceQualifier(ExpressionSyntax expression) => expression switch
-    {
-        IdentifierNameSyntax => true,
-        AliasQualifiedNameSyntax => true,
-        MemberAccessExpressionSyntax access => IsNamespaceQualifier(access.Expression),
-        _ => false,
-    };
+    private static bool IsCancellationTokenType(ITypeSymbol? type) =>
+        type is { Name: "CancellationToken", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } };
 
-    private static bool IsTestContextCancellationToken(MemberAccessExpressionSyntax node) =>
-        node.Name.Identifier.Text == "CancellationToken" && IsTestContextCurrent(node.Expression);
+    private static bool IsCurrentOf(IOperation? operation, string ns, string? outerNs) =>
+        operation is IPropertyReferenceOperation { Property: { Name: "Current", IsStatic: true } current } && IsTestContext(current.ContainingType, ns, outerNs);
 
-    private static bool IsTestContextCurrent(ExpressionSyntax expression)
+    private static bool IsTestContext(INamedTypeSymbol? type, string ns, string? outerNs)
     {
-        while (true)
-        {
-            switch (expression)
-            {
-                case ParenthesizedExpressionSyntax parenthesized:
-                    expression = parenthesized.Expression;
-                    continue;
-                case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression:
-                    expression = suppression.Operand;
-                    continue;
-                case MemberAccessExpressionSyntax { Name.Identifier.Text: "Current" } current:
-                    return IsTestContextType(current.Expression);
-                default:
-                    return false;
-            }
-        }
+        if (type is not { Name: "TestContext", ContainingType: null, ContainingNamespace: { IsGlobalNamespace: false } inner } || inner.Name != ns)
+            return false;
+
+        var outer = inner.ContainingNamespace;
+        return outerNs is null ? outer.IsGlobalNamespace : outer.Name == outerNs && outer.ContainingNamespace is { IsGlobalNamespace: true };
     }
 
-    private static bool IsTestContextType(ExpressionSyntax expression) => expression switch
+    private static void Report(OperationAnalysisContext context, IPropertyReferenceOperation token, int start, string access, string advice)
     {
-        IdentifierNameSyntax { Identifier.Text: "TestContext" } => true,
-        AliasQualifiedNameSyntax { Name.Identifier.Text: "TestContext" } => true,
-        MemberAccessExpressionSyntax { Name.Identifier.Text: "TestContext" } qualified => IsNamespaceQualifier(qualified.Expression),
-        _ => false,
-    };
+        var location = Location.Create(token.Syntax.SyntaxTree, TextSpan.FromBounds(start, token.Syntax.Span.End));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, location, access, advice));
+    }
 }

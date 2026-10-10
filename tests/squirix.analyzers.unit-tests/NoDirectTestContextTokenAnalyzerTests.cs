@@ -12,15 +12,22 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
 
 
                                            #nullable enable
-                                           namespace TUnit.Core
+                                           namespace Xunit
                                            {
-                                               class TestContext
+                                               interface ITestContext
                                                {
-                                                   public static TestContext? Current { get; } = new TestContext();
+                                                   System.Threading.CancellationToken CancellationToken { get; }
 
-                                                   public string Id { get; } = "id";
+                                                   object? Test { get; }
+                                               }
+
+                                               sealed class TestContext : ITestContext
+                                               {
+                                                   public static ITestContext? Current { get; } = new TestContext();
 
                                                    public System.Threading.CancellationToken CancellationToken => System.Threading.CancellationToken.None;
+
+                                                   public object? Test => null;
                                                }
                                            }
 
@@ -30,21 +37,14 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
 
                                                public System.Threading.CancellationToken CancellationToken => System.Threading.CancellationToken.None;
                                            }
-
-                                           class TestContext
-                                           {
-                                               public static TestContext? Current { get; } = new TestContext();
-
-                                               public string Id { get; } = "id";
-
-                                               public System.Threading.CancellationToken CancellationToken => System.Threading.CancellationToken.None;
-                                           }
                                            """;
 
     [Test]
     public async Task AllowsDeclaredSharedTokenOfAnyName(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   private System.Threading.CancellationToken SharedToken
@@ -66,6 +66,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task AllowsTypeDeclaredCancellationToken(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   private System.Threading.CancellationToken cancellationToken
@@ -87,6 +89,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task AllowsUseWhenBaseClassExposesSharedToken(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class Base
                               {
                                   protected System.Threading.CancellationToken SharedToken
@@ -111,6 +115,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task DoesNotFlagPreviousUseInsideStaticClass(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               static class C
                               {
                                   static void M()
@@ -129,6 +135,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsBaseNonTokenThreadingType(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class Base
                               {
                                   protected System.Threading.SemaphoreSlim Semaphore
@@ -154,6 +162,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsDirectTestContextTokenUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
@@ -167,12 +177,16 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
 
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo(
+            "Do not use TestContext.Current.CancellationToken directly; consume the shared CancellationToken exposed by a base class instead");
     }
 
     [Test]
     public async Task FlagsUseWhenBaseClassDoesNotExposeToken(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class Base
                               {
                               }
@@ -196,6 +210,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsNullForgivingTokenUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
@@ -215,6 +231,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsNullConditionalTokenUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
@@ -234,6 +252,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsNullConditionalChainedUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
@@ -253,6 +273,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsParenthesizedTokenUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
@@ -272,6 +294,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsParenthesizedForgivingUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
@@ -291,11 +315,13 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsQualifiedTokenUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
                                   {
-                                      var token = TUnit.Core.TestContext.Current.CancellationToken;
+                                      var token = Xunit.TestContext.Current.CancellationToken;
                                   }
                               }
                               """ + TestContextStub;
@@ -310,11 +336,13 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsGlobalQualifiedTokenUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
                                   {
-                                      var token = global::TestContext.Current!.CancellationToken;
+                                      var token = global::Xunit.TestContext.Current!.CancellationToken;
                                   }
                               }
                               """ + TestContextStub;
@@ -329,11 +357,13 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task FlagsGlobalQualifiedNamespaceUse(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
                                   {
-                                      var token = global::TUnit.Core.TestContext.Current?.CancellationToken;
+                                      var token = global::Xunit.TestContext.Current?.CancellationToken;
                                   }
                               }
                               """ + TestContextStub;
@@ -348,6 +378,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task AllowsTokenFromLocalContext(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
@@ -364,14 +396,16 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     }
 
     [Test]
-    public async Task AllowsNullConditionalId(CancellationToken cancellationToken)
+    public async Task AllowsNullConditionalOtherMember(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
                                   {
-                                      var token = TestContext.Current?.Id;
+                                      var token = TestContext.Current?.Test;
                                   }
                               }
                               """ + TestContextStub;
@@ -382,14 +416,16 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     }
 
     [Test]
-    public async Task AllowsNullForgivingId(CancellationToken cancellationToken)
+    public async Task AllowsNullForgivingOtherMember(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
                                   {
-                                      var token = TestContext.Current!.Id;
+                                      var token = TestContext.Current!.Test;
                                   }
                               }
                               """ + TestContextStub;
@@ -403,6 +439,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task AllowsUnrelatedCurrentType(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()
@@ -421,6 +459,8 @@ public sealed class NoDirectTestContextTokenAnalyzerTests
     public async Task AllowsUnrelatedConditionalCurrent(CancellationToken cancellationToken)
     {
         const string source = """
+                              using Xunit;
+
                               class C
                               {
                                   void M()

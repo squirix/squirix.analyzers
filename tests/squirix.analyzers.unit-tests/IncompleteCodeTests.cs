@@ -195,11 +195,16 @@ public sealed class IncompleteCodeTests
 
                                                    namespace TUnit.Core
                                                    {
+                                                       class TestExecution
+                                                       {
+                                                           public System.Threading.CancellationToken CancellationToken => default;
+                                                       }
+
                                                        class TestContext
                                                        {
                                                            public static TestContext? Current { get; } = new TestContext();
 
-                                                           public System.Threading.CancellationToken CancellationToken => default;
+                                                           public TestExecution Execution { get; } = new TestExecution();
                                                        }
                                                    }
 
@@ -251,7 +256,7 @@ public sealed class IncompleteCodeTests
                                                        {
                                                            Func<Task> f = () => GetAsync();
                                                            await Task.Factory.StartNew(async () => await Task.Delay(1));
-                                                           var token = TestContext.Current!.CancellationToken;
+                                                           var token = TestContext.Current!.Execution.CancellationToken;
                                                            var options = new GrpcChannelOptions { HttpHandler = new SocketsHttpHandler() };
                                                            var broken = Unknown.Call(1,
                                                        }

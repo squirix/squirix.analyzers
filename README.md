@@ -62,7 +62,7 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0014`](docs/rules/SQR0014.md) | Style       | `PreferEqualityOperatorAnalyzer`          | Prefer != over is-not when comparing to a constant.                  |
 | [`SQR0015`](docs/rules/SQR0015.md) | Concurrency | `NoBoolDisposedFieldAnalyzer`             | Dispose guard must be an int flag via Interlocked.                   |
 | [`SQR0016`](docs/rules/SQR0016.md) | Concurrency | `NoBoolDisposedFieldAnalyzer`             | int dispose flag only via Interlocked/Volatile.                      |
-| [`SQR0017`](docs/rules/SQR0017.md) | Usage       | `NoDirectTestContextCancelTokenAnalyzer`  | Don't use TestContext.Current.CancellationToken directly.            |
+| [`SQR0017`](docs/rules/SQR0017.md) | Usage       | `NoDirectTestContextCancelTokenAnalyzer`  | Don't read the cancellation token from TestContext.Current.          |
 | [`SQR0018`](docs/rules/SQR0018.md) | Style       | `RequireMultilineIfBodyBracesAnalyzer`    | Require braces on multi-line if/else bodies.                         |
 | [`SQR0019`](docs/rules/SQR0019.md) | Usage       | `NoAllocatingThrowsAssertAnalyzer`        | Avoid allocating exception assert invocations.                       |
 | [`SQR0020`](docs/rules/SQR0020.md) | Usage       | `MergeDuplicateCatchBlocksAnalyzer`       | Merge consecutive catch blocks with identical bodies.                |
