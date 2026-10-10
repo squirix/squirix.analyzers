@@ -622,6 +622,116 @@ public sealed class DefensiveStructCopyAnalyzerTests
         }
         """, cancellationToken);
 
+    /// <summary>In a constructor the readonly fields are still writable, and so is a ref conditional over them.</summary>
+    [Test]
+    public async Task AllowsRefConditionalInConstructor(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        class C
+        {
+            private readonly Counter _a;
+            private readonly Counter _b;
+
+            C(bool first) => _ = (first ? ref _a : ref _b).Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsRefConditionalOverInlineArrays(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Counters { private Counter _first; }
+
+        class C
+        {
+            private readonly Counters _fixed;
+            private Counters _items;
+
+            int M(bool first) => (first ? ref _items : ref _fixed)[0].Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsFieldOfInlineArrayElement(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        struct Wrap { public Counter Inner; }
+
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Wraps { private Wrap _first; }
+
+        class C
+        {
+            private readonly Wraps _wraps;
+
+            int M() => _wraps[0].Inner.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task ReportsInlineArrayHolder(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("""
+            [System.Runtime.CompilerServices.InlineArray(2)]
+            struct Counters { private Counter _first; }
+
+            class C
+            {
+                private readonly Counters _items;
+
+                int M() => _items[1].Next();
+            }
+            """, null, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("'Next' is not readonly, so calling it on the readonly '_items' runs on a hidden copy of 'Counter'");
+    }
+
+    /// <summary>The compiler warns about a plain call on this in a readonly member, but not about these two forms.</summary>
+    [Test]
+    public async Task FlagsThisBehindElementOrConditional(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("""
+            [System.Runtime.CompilerServices.InlineArray(2)]
+            struct Counters
+            {
+                private Counter _first;
+
+                public readonly int First() => this[0].Next();
+            }
+
+            struct Pair
+            {
+                public int Count;
+
+                public int Next() => ++Count;
+
+                public readonly int Either(bool first, ref Pair other) => (first ? ref this : ref other).Next();
+            }
+            """, null, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        foreach (var diagnostic in diagnostics)
+            _ = await Assert.That(diagnostic.GetMessage()).Contains("the readonly 'this'");
+    }
+
+    [Test]
+    public async Task AllowsThisInWritableMember(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Counters
+        {
+            private Counter _first;
+
+            public Counters(int start) => _ = this[0].Next();
+
+            public int First() => this[0].Next();
+        }
+
+        struct Pair
+        {
+            public int Count;
+
+            public int Next() => ++Count;
+
+            public int Either(bool first, ref Pair other) => (first ? ref this : ref other).Next();
+        }
+        """, cancellationToken);
+
     [Test]
     public async Task SkipsUnknownSizeWithConfiguredSize(CancellationToken cancellationToken)
     {

@@ -84,7 +84,8 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
             return;
 
         var typeName = type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-        context.ReportDiagnostic(Diagnostic.Create(Rule, GetLocation(context.Operation), memberName, variable.Name, typeName));
+        var variableName = variable is INamedTypeSymbol ? "this" : variable.Name;
+        context.ReportDiagnostic(Diagnostic.Create(Rule, GetLocation(context.Operation), memberName, variableName, typeName));
     }
 
     private static Location GetLocation(IOperation operation)
@@ -106,13 +107,26 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
         IFieldReferenceOperation field => GetReadOnlyField(field, containingSymbol),
 
         // An element of an inline array is part of the array struct, so it is as readonly as the variable that holds the array.
-        IInlineArrayAccessOperation element => GetReadOnlyVariable(element.Instance, containingSymbol),
+        IInlineArrayAccessOperation element => GetReadOnlyHolder(element.Instance, containingSymbol),
 
         // A ref conditional is readonly as soon as one of its branches is, whichever branch is taken.
-        IConditionalOperation { IsRef: true } conditional => GetReadOnlyVariable(conditional.WhenTrue, containingSymbol) ??
-                                                             (conditional.WhenFalse == null ? null : GetReadOnlyVariable(conditional.WhenFalse, containingSymbol)),
+        IConditionalOperation { IsRef: true } conditional => GetReadOnlyHolder(conditional.WhenTrue, containingSymbol) ??
+                                                             (conditional.WhenFalse == null ? null : GetReadOnlyHolder(conditional.WhenFalse, containingSymbol)),
         _ => null,
     };
+
+    /// <summary>
+    /// Returns the readonly variable behind an inline-array holder or a ref conditional branch. Unlike a plain receiver,
+    /// these can be <c language="csharp">this</c> inside a readonly member, and the compiler gives no warning of its own there.
+    /// For <c language="csharp">this</c> the struct type stands in, as the only symbol there is to return.
+    /// </summary>
+    private static ISymbol? GetReadOnlyHolder(IOperation holder, ISymbol containingSymbol)
+    {
+        if (holder is IInstanceReferenceOperation { Type.IsValueType: true } && containingSymbol is IMethodSymbol { IsReadOnly: true, MethodKind: not MethodKind.Constructor })
+            return containingSymbol.ContainingType;
+
+        return GetReadOnlyVariable(holder, containingSymbol);
+    }
 
     private static ISymbol? GetReadOnlyField(IFieldReferenceOperation reference, ISymbol containingSymbol)
     {
