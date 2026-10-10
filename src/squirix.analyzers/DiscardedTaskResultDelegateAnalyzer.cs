@@ -73,13 +73,17 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// Reports a tuple value taken apart into targets that lose a result, as in <c language="csharp">(Func&lt;Task&gt; work, int n) = pair</c>.
-    /// The parts are converted one by one, and none of those conversions has a node. An element of a tuple literal
-    /// that is converted where it stands already has the type of its target, so it is not reported a second time here.
+    /// Reports a value taken apart into targets that lose a result, as in <c language="csharp">(Func&lt;Task&gt; work, int n) = pair</c>:
+    /// a tuple, or a value with a Deconstruct method. The parts are converted one by one, and none of those conversions
+    /// has a node. An element of a tuple literal that is converted where it stands already has the type of its target,
+    /// so it is not reported a second time here.
     /// </summary>
     private static void AnalyzeDeconstruction(OperationAnalysisContext context)
     {
         var deconstruction = (IDeconstructionAssignmentOperation)context.Operation;
+        if (!HoldsPlainTaskDelegate(deconstruction.Target.Type))
+            return;
+
         if (deconstruction.Syntax is not AssignmentExpressionSyntax syntax || deconstruction.SemanticModel is not { } model)
             return;
 
@@ -121,7 +125,11 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         // A loop that takes each element apart follows the rules of a deconstruction, part by part.
         if (syntax is ForEachVariableStatementSyntax parts)
         {
-            ReportDeconstruction(new LossSink(context, loop.Collection.Syntax), model.GetDeconstructionInfo(parts), model.GetForEachStatementInfo(syntax).ElementType, loop.LoopControlVariable);
+            if (!HoldsPlainTaskDelegate(loop.LoopControlVariable.Type))
+                return;
+
+            var taken = model.GetForEachStatementInfo(syntax).ElementType;
+            ReportDeconstruction(new LossSink(context, loop.Collection.Syntax), model.GetDeconstructionInfo(parts), taken, loop.LoopControlVariable);
             return;
         }
 
@@ -150,6 +158,44 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         var item = GetItemType(spread.Parent?.Type);
         if (FindLosses(null, spread.ElementType, item) && !IsUnderExplicitCast(spread, item))
             _ = FindLosses(new LossSink(context, spread.Operand.Syntax), spread.ElementType, item);
+    }
+
+    /// <summary>Returns the type of one part of a value that is taken apart: an out parameter of its Deconstruct method, or a tuple element.</summary>
+    private static ITypeSymbol? GetPartType(DeconstructionInfo info, ITypeSymbol? source, int index)
+    {
+        if (info.Method is not { } method)
+            return source is INamedTypeSymbol { IsTupleType: true } tuple && index < tuple.TupleElements.Length ? tuple.TupleElements[index].Type : null;
+
+        // An extension Deconstruct takes the value itself first; the parts are its out parameters, in order.
+        foreach (var parameter in method.Parameters)
+        {
+            if (parameter.RefKind == RefKind.Out && index-- == 0)
+                return parameter.Type;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns whether the type is a delegate that returns Task, or a tuple that holds one at any depth. Only such a
+    /// target can lose a result, so anything else is not worth binding a deconstruction for.
+    /// </summary>
+    private static bool HoldsPlainTaskDelegate(ITypeSymbol? type)
+    {
+        type = Unwrap(type);
+        if (ReturnsPlainTask(type, out _))
+            return true;
+
+        if (type is not INamedTypeSymbol { IsTupleType: true } tuple)
+            return false;
+
+        foreach (var element in tuple.TupleElements)
+        {
+            if (HoldsPlainTaskDelegate(element.Type))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -195,6 +241,9 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         right = Unwrap(right);
         return left != null && right != null && at.SemanticModel is { } model && model.Compilation.ClassifyConversion(left, right).IsIdentity;
     }
+
+    private static string GetDisplayName(INamedTypeSymbol delegateType) =>
+        delegateType.WithNullableAnnotation(NullableAnnotation.None).ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 
     private static bool IsNamed(ITypeSymbol type, string name, bool generic) =>
         type is INamedTypeSymbol { ContainingNamespace: { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } } } named
@@ -275,49 +324,34 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         while (lost is ParenthesizedExpressionSyntax parenthesized)
             lost = parenthesized.Expression;
 
-        var name = delegateType.WithNullableAnnotation(NullableAnnotation.None).ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-        context.ReportDiagnostic(Diagnostic.Create(Rule, lost.GetLocation(), name, result));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, lost.GetLocation(), GetDisplayName(delegateType), result));
     }
 
     /// <summary>
     /// Reports the parts of a value that is taken apart into targets, where a part loses its result in its target. A part
     /// comes from an element of a tuple or from an out parameter of the Deconstruct method the compiler chose, and may be
-    /// taken apart further. A discard receives nothing, whatever type is written for it.
+    /// taken apart further. A part that goes to a discard is not converted for anyone, whatever type is written for it.
     /// </summary>
     private static void ReportDeconstruction(LossSink sink, DeconstructionInfo info, ITypeSymbol? source, IOperation target)
     {
         if (target is IDeclarationExpressionOperation declaration)
             target = declaration.Expression;
 
+        // The property builds a new array on every read.
+        var nested = info.Nested;
         switch (target)
         {
             case IDiscardOperation:
                 return;
-            case ITupleOperation targets when targets.Elements.Length == info.Nested.Length:
-                for (var index = 0; index < targets.Elements.Length; index++)
-                    ReportDeconstruction(sink, info.Nested[index], GetPartType(info, source, index), targets.Elements[index]);
+            case ITupleOperation targets when targets.Elements.Length == nested.Length:
+                for (var index = 0; index < nested.Length; index++)
+                    ReportDeconstruction(sink, nested[index], GetPartType(info, source, index), targets.Elements[index]);
 
                 return;
             default:
                 _ = FindLosses(sink, source, target.Type);
                 return;
         }
-    }
-
-    /// <summary>Returns the type of one part of a value that is taken apart: an out parameter of its Deconstruct method, or a tuple element.</summary>
-    private static ITypeSymbol? GetPartType(DeconstructionInfo info, ITypeSymbol? source, int index)
-    {
-        if (info.Method is not { } method)
-            return Unwrap(source) is INamedTypeSymbol { IsTupleType: true } tuple && index < tuple.TupleElements.Length ? tuple.TupleElements[index].Type : null;
-
-        // An extension Deconstruct takes the value itself first; the parts are its out parameters, in order.
-        foreach (var parameter in method.Parameters)
-        {
-            if (parameter.RefKind == RefKind.Out && index-- == 0)
-                return parameter.Type;
-        }
-
-        return null;
     }
 
     /// <summary>
@@ -475,13 +509,14 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// Collects the losses found for one expression and reports each once: two elements of a tuple that lose the same
-    /// result to the same delegate would otherwise give two identical diagnostics at one place.
+    /// result to the same delegate would otherwise give two diagnostics with the same text at one place. Losses are
+    /// told apart by that text, the delegate name and the result as the message shows them.
     /// </summary>
     private sealed class LossSink
     {
         private readonly OperationAnalysisContext _context;
         private readonly SyntaxNode _place;
-        private List<(INamedTypeSymbol DelegateType, string Result)>? _reported;
+        private List<(string DelegateName, string Result)>? _reported;
 
         public LossSink(OperationAnalysisContext context, SyntaxNode place)
         {
@@ -491,14 +526,15 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
         public void Add(INamedTypeSymbol delegateType, string result)
         {
+            var name = GetDisplayName(delegateType);
             _reported ??= [];
-            foreach (var (reportedDelegate, reportedResult) in _reported)
+            foreach (var (reportedName, reportedResult) in _reported)
             {
-                if (reportedResult == result && SymbolEqualityComparer.Default.Equals(reportedDelegate, delegateType))
+                if (reportedName == name && reportedResult == result)
                     return;
             }
 
-            _reported.Add((delegateType, result));
+            _reported.Add((name, result));
             Report(_context, _place, delegateType, result);
         }
     }
