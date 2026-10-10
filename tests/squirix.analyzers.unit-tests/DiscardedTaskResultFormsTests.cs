@@ -143,6 +143,8 @@ public sealed class DiscardedTaskResultFormsTests
         "Func<Task<int>> count = () => Task.FromResult(1); var both = (save, count); (Func<Task>, Func<Task>) lost = both; return lost;",
         "Func<Task<int>> count = () => Task.FromResult(1); var both = (save, count); (Func<Task> a, Func<Task> b) = both; return a;",
         "Maker<Task<bool>> maker = SaveAsync; var both = (save, maker); (Func<Task> a, Maker<Task> b) = both; return a;",
+
+        // The elements of a literal are converted where they stand: each is reported at itself, and the two do not share one diagnostic.
         "(Func<Task> a, Func<Task> b) = (save, save); return a;",
     ];
 
