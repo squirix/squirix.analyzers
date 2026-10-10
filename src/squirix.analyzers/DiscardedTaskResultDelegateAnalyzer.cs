@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -39,32 +41,34 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         context.RegisterOperationAction(AnalyzeDelegateCreation, OperationKind.DelegateCreation);
         context.RegisterOperationAction(AnalyzeConversion, OperationKind.Conversion);
         context.RegisterOperationAction(AnalyzeCoalesce, OperationKind.Coalesce);
+        context.RegisterOperationAction(AnalyzeLoop, OperationKind.Loop);
+        context.RegisterOperationAction(AnalyzeSpread, OperationKind.Spread);
     }
 
     /// <summary>
-    /// Reports the left operand of a null-coalescing expression when it is a delegate that returns Task&lt;T&gt; and the
-    /// expression is one that returns Task. That conversion is part of the operation and has no node of its own.
+    /// Reports the left operand of a null-coalescing expression when using it as the type of the whole expression
+    /// loses a result. That conversion is part of the operation and has no node of its own.
     /// </summary>
     private static void AnalyzeCoalesce(OperationAnalysisContext context)
     {
         var coalesce = (ICoalesceOperation)context.Operation;
-        if (ReturnsPlainTask(coalesce.Type, out var delegateType) && TryGetDelegateResultType(coalesce.Value.Type, out var result))
-            Report(context, coalesce.Value, delegateType, result);
+        if (TryGetLostResult(coalesce.Value.Type, coalesce.Type, out var delegateType, out var result) && !IsUnderExplicitCast(coalesce))
+            Report(context, coalesce.Value.Syntax, delegateType, result);
     }
 
     /// <summary>Reports a delegate that returns Task&lt;T&gt; and is implicitly used as one that returns Task.</summary>
     private static void AnalyzeConversion(OperationAnalysisContext context)
     {
         var conversion = (IConversionOperation)context.Operation;
-        if (!conversion.IsImplicit || !conversion.Conversion.Exists || !ReturnsPlainTask(conversion.Type, out var delegateType))
+        if (!conversion.IsImplicit || !conversion.Conversion.Exists || !TryGetLostResult(conversion.Operand.Type, conversion.Type, out var delegateType, out var result))
             return;
 
         // Comparing two delegates converts one of them, but passes it nowhere.
         if (conversion.Parent is IBinaryOperation { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals })
             return;
 
-        if (TryGetDelegateResultType(conversion.Operand.Type, out var result))
-            Report(context, conversion.Operand, delegateType, result);
+        if (!IsUnderExplicitCast(conversion))
+            Report(context, conversion.Syntax, delegateType, result);
     }
 
     private static void AnalyzeDelegateCreation(OperationAnalysisContext context)
@@ -77,17 +81,47 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         {
             case IMethodReferenceOperation reference:
                 if (TryGetResultType(reference.Method.ReturnType, out var methodResult))
-                    Report(context, reference, delegateType, methodResult);
+                    Report(context, reference.Syntax, delegateType, methodResult);
 
                 break;
             case IAnonymousFunctionOperation { Symbol.IsAsync: false } function:
                 ReportReturns(context, function.Body, delegateType);
                 break;
             case { } target when TryGetDelegateResultType(target.Type, out var delegateResult):
-                Report(context, target, delegateType, delegateResult);
+                Report(context, target.Syntax, delegateType, delegateResult);
                 break;
         }
     }
+
+    /// <summary>Reports a foreach whose declared variable type loses the result of the elements; that conversion has no node either.</summary>
+    private static void AnalyzeLoop(OperationAnalysisContext context)
+    {
+        if (context.Operation is not IForEachLoopOperation { LoopControlVariable: IVariableDeclaratorOperation variable, Syntax: CommonForEachStatementSyntax syntax } loop)
+            return;
+
+        var info = loop.SemanticModel?.GetForEachStatementInfo(syntax);
+        if (info is { ElementConversion: { Exists: true, IsImplicit: true } } && TryGetLostResult(info.Value.ElementType, variable.Symbol.Type, out var delegateType, out var result))
+            Report(context, loop.Collection.Syntax, delegateType, result);
+    }
+
+    /// <summary>Reports a spread element whose items lose their result in the collection they are copied into.</summary>
+    private static void AnalyzeSpread(OperationAnalysisContext context)
+    {
+        var spread = (ISpreadOperation)context.Operation;
+        if (!spread.ElementConversion.Exists || !spread.ElementConversion.IsImplicit)
+            return;
+
+        if (TryGetLostResult(spread.ElementType, GetItemType(spread.Parent?.Type), out var delegateType, out var result))
+            Report(context, spread.Operand.Syntax, delegateType, result);
+    }
+
+    /// <summary>Returns the item type of an array or of a collection type with one type argument, such as a list or a span.</summary>
+    private static ITypeSymbol? GetItemType(ITypeSymbol? collection) => collection switch
+    {
+        IArrayTypeSymbol array => array.ElementType,
+        INamedTypeSymbol { TypeArguments.Length: 1 } named => named.TypeArguments[0],
+        _ => null,
+    };
 
     private static bool IsNamed(ITypeSymbol type, string name, bool generic) =>
         type is INamedTypeSymbol { ContainingNamespace: { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } } } named
@@ -98,8 +132,48 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
     private static bool IsTaskLike(ITypeSymbol type) => IsNamed(type, "Task", false) || IsNamed(type, "Task", true) || IsNamed(type, "ValueTask", false) || IsNamed(type, "ValueTask", true);
 
-    private static void Report(OperationAnalysisContext context, IOperation lost, INamedTypeSymbol delegateType, string result) =>
-        context.ReportDiagnostic(Diagnostic.Create(Rule, lost.Syntax.GetLocation(), delegateType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), result));
+    /// <summary>
+    /// Returns whether an explicit cast covers the value: directly, or through the branches of conditional, switch and
+    /// null-coalescing expressions. Such a cast states the intent for every branch under it.
+    /// </summary>
+    private static bool IsUnderExplicitCast(IOperation value)
+    {
+        for (var current = value; current.Parent is { } parent; current = parent)
+        {
+            switch (parent)
+            {
+                case IConversionOperation conversion:
+                    if (!conversion.IsImplicit)
+                        return true;
+
+                    break;
+                case IConditionalOperation conditional when conditional.Condition != current:
+                case ISwitchExpressionArmOperation arm when arm.Value == current:
+                case ISwitchExpressionOperation switchExpression when switchExpression.Value != current:
+                case ICoalesceOperation:
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Reports at the expression as written: with the checked and null-forgiving wrappers that have no operation of
+    /// their own, and without the parentheses around the whole.
+    /// </summary>
+    private static void Report(OperationAnalysisContext context, SyntaxNode lost, INamedTypeSymbol delegateType, string result)
+    {
+        while (lost.Parent is ParenthesizedExpressionSyntax or CheckedExpressionSyntax or PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression })
+            lost = lost.Parent;
+
+        while (lost is ParenthesizedExpressionSyntax parenthesized)
+            lost = parenthesized.Expression;
+
+        context.ReportDiagnostic(Diagnostic.Create(Rule, lost.GetLocation(), delegateType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), result));
+    }
 
     /// <summary>
     /// Reports where a returned value turns from Task&lt;T&gt; into Task. The compiler converts either the whole value
@@ -113,7 +187,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         {
             case IConversionOperation { IsImplicit: true } conversion when IsPlainTask(conversion.Type):
                 if (TryGetResultType(conversion.Operand.Type, out var result))
-                    Report(context, conversion.Operand, delegateType, result);
+                    Report(context, conversion.Syntax, delegateType, result);
                 else
                     ReportLostResults(context, conversion.Operand, delegateType);
 
@@ -130,7 +204,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
             case ICoalesceOperation coalesce:
                 // The conversion of the left operand is part of the operation and has no node of its own.
                 if (IsPlainTask(coalesce.Type) && TryGetResultType(coalesce.Value.Type, out var left))
-                    Report(context, coalesce.Value, delegateType, left);
+                    Report(context, coalesce.Value.Syntax, delegateType, left);
 
                 ReportLostResults(context, coalesce.WhenNull, delegateType);
                 break;
@@ -180,9 +254,46 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         return type is INamedTypeSymbol { DelegateInvokeMethod: { } invoke } && TryGetResultType(invoke.ReturnType, out result);
     }
 
+    /// <summary>
+    /// Returns whether a value of the source type, used as the target type, loses a result: a delegate that returns
+    /// Task&lt;T&gt; used as one that returns Task, or a tuple with such an element.
+    /// </summary>
+    private static bool TryGetLostResult(ITypeSymbol? source, ITypeSymbol? target, out INamedTypeSymbol delegateType, out string result)
+    {
+        result = string.Empty;
+        if (ReturnsPlainTask(target, out delegateType))
+            return TryGetDelegateResultType(source, out result);
+
+        if (source is not INamedTypeSymbol { IsTupleType: true } sourceTuple || target is not INamedTypeSymbol { IsTupleType: true } targetTuple)
+            return false;
+
+        if (sourceTuple.TupleElements.Length != targetTuple.TupleElements.Length)
+            return false;
+
+        for (var index = 0; index < sourceTuple.TupleElements.Length; index++)
+        {
+            if (TryGetLostResult(sourceTuple.TupleElements[index].Type, targetTuple.TupleElements[index].Type, out delegateType, out result))
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool TryGetResultType(ITypeSymbol? type, out string result)
     {
         result = string.Empty;
+        if (type is ITypeParameterSymbol parameter)
+        {
+            // A type parameter is a Task<T> when one of its constraints is.
+            foreach (var constraint in parameter.ConstraintTypes)
+            {
+                if (TryGetResultType(constraint, out result))
+                    return true;
+            }
+
+            return false;
+        }
+
         var current = type;
         while (current != null && !IsNamed(current, "Task", true))
             current = current.BaseType;

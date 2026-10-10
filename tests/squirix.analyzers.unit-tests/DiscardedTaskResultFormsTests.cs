@@ -63,6 +63,14 @@ public sealed class DiscardedTaskResultFormsTests
         ("Maker<Task<bool>> maker = SaveAsync; Maker<Task> lost = maker; return lost;", "maker"),
         ("Func<Task> f = () => primary ? (mode == 0 ? SaveAsync() : SaveCopyAsync()) : Task.CompletedTask; return f;", "mode == 0 ? SaveAsync() : SaveCopyAsync()"),
         ("Func<Task<bool>>? maybe = save; Func<Task> nothing = RunNothing; Func<Task> f = maybe ?? nothing; return f;", "maybe"),
+        ("Func<Task> f = () => checked(SaveAsync()); return f;", "checked(SaveAsync())"),
+        ("Func<Task> f = () => cached!; return f;", "cached!"),
+        ("foreach (Func<Task> f in new[] { save }) return f; return mode;", "new[] { save }"),
+        ("var typed = new List<Func<Task<bool>>> { save }; Func<Task>[] all = [..typed]; return all;", "typed"),
+        ("var typed = new List<Func<Task<bool>>> { save }; List<Func<Task>> all = [..typed]; return all;", "typed"),
+        ("(Func<Task<bool>>, int) pair = (save, mode); (Func<Task>, int) lost = pair; return lost;", "pair"),
+        ("Func<Task> Wrap<T>(T value) where T : Task<bool> => () => value; return Wrap(SaveAsync());", "value"),
+        ("Func<Task> Pass<T>(Func<T> make) where T : Task<bool> => make; return Pass(save);", "make"),
     ];
 
     /// <summary>Returns method bodies with two lost results: branches of different result types have no common type but Task.</summary>
@@ -93,6 +101,14 @@ public sealed class DiscardedTaskResultFormsTests
         "Func<Task> f = RunNothing; return save == f || f != save;",
         "IEnumerable<Func<Task>> all = new List<Func<Task<bool>>> { save }; return all;",
         "Delegate d = save; object o = save; return d ?? o;",
+        "Func<Task> nothing = RunNothing; var f = (Func<Task>)(primary ? save : nothing); return f;",
+        "Func<Task<bool>>? maybe = save; Func<Task> nothing = RunNothing; var f = (Func<Task>)(maybe ?? nothing); return f;",
+        "Func<Task> nothing = RunNothing; var f = (Func<Task>)(mode switch { 0 => save, _ => nothing }); return f;",
+        "foreach (Func<Task<bool>> f in new[] { save }) return f; return mode;",
+        "foreach (var f in new[] { save }) return f; return mode;",
+        "var typed = new List<Func<Task<bool>>> { save }; Func<Task<bool>>[] all = [..typed]; return all;",
+        "(Func<Task<bool>>, int) pair = (save, mode); (Func<Task<bool>>, long) wide = pair; return wide;",
+        "Func<Task> Wrap<T>(T value) where T : Task => () => value; return Wrap(RunNothing());",
     ];
 
     [Test]
