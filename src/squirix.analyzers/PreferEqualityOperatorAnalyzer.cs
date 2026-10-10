@@ -94,6 +94,27 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         return type.SpecialType != SpecialType.System_Object && type.TypeKind != TypeKind.Dynamic;
     }
 
+    /// <summary>
+    /// Returns whether an interface constraint, or an interface it inherits, declares a static abstract or virtual equality operator.
+    /// For a type parameter with such a constraint, '==' binds to the operator of the type argument.
+    /// </summary>
+    private static bool DeclaresInterfaceEqualityOperator(ITypeSymbol constraint)
+    {
+        if (constraint.TypeKind != TypeKind.Interface)
+            return false;
+
+        if (HasEqualityOperatorMembers(constraint))
+            return true;
+
+        foreach (var inherited in constraint.AllInterfaces)
+        {
+            if (HasEqualityOperatorMembers(inherited))
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool HasEqualityOperatorMembers(ITypeSymbol type)
     {
         if (type is not INamedTypeSymbol named)
@@ -114,7 +135,7 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         {
             foreach (var constraint in typeParameter.ConstraintTypes)
             {
-                if (HasUserDefinedEqualityOperator(constraint))
+                if (HasUserDefinedEqualityOperator(constraint) || DeclaresInterfaceEqualityOperator(constraint))
                     return true;
             }
 

@@ -53,6 +53,11 @@ public sealed class OmitOuterLoopBracesAnalyzer : DiagnosticAnalyzer
         if (!LoopStatementSyntaxHelpers.IsLoopStatement(only))
             return;
 
+        // The 'while (...)' that closes a do loop keeps a following else away from the body.
+        var followedByElse = context.Node is not DoStatementSyntax && BraceRemovalGuards.IsFollowedByElse(context.Node);
+        if (!BraceRemovalGuards.CanRemoveBraces(block, followedByElse))
+            return;
+
         var loopKind = LoopStatementSyntaxHelpers.GetLoopKindName(context.Node);
         context.ReportDiagnostic(Diagnostic.Create(Rule, block.OpenBraceToken.GetLocation(), loopKind));
     }
