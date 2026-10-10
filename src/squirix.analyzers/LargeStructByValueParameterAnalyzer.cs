@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace Squirix.Analyzers;
 
@@ -43,18 +45,55 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
         context.RegisterCompilationStartAction(static start =>
         {
             var sizes = new StructSizeEstimator();
-            start.RegisterSyntaxNodeAction(node => AnalyzeDeclaration(node, sizes), SyntaxKind.MethodDeclaration, SyntaxKind.ConstructorDeclaration,
-                SyntaxKind.OperatorDeclaration, SyntaxKind.ConversionOperatorDeclaration);
+            var families = new ConcurrentDictionary<INamedTypeSymbol, TypeFamily>(SymbolEqualityComparer.Default);
+            start.RegisterSymbolStartAction(type => AnalyzeType(type, sizes, families), SymbolKind.NamedType);
         });
     }
 
-    private static void AnalyzeDeclaration(SyntaxNodeAnalysisContext context, StructSizeEstimator sizes)
+    /// <summary>
+    /// Analyzes the methods a type declares, and holds each finding back until its outermost type and everything nested
+    /// in it has been seen: a method that is also used there as a method group must keep its signature, because a
+    /// delegate type fixes it.
+    /// </summary>
+    private static void AnalyzeType(SymbolStartAnalysisContext context, StructSizeEstimator sizes, ConcurrentDictionary<INamedTypeSymbol, TypeFamily> families)
+    {
+        var type = (INamedTypeSymbol)context.Symbol;
+        var outermost = type;
+        while (outermost.ContainingType != null)
+            outermost = outermost.ContainingType;
+
+        var family = families.GetOrAdd(outermost, static _ => new TypeFamily());
+        context.RegisterSyntaxNodeAction(node => AnalyzeDeclaration(node, sizes, type, family.Findings), SyntaxKind.MethodDeclaration, SyntaxKind.ConstructorDeclaration,
+            SyntaxKind.OperatorDeclaration, SyntaxKind.ConversionOperatorDeclaration);
+        context.RegisterOperationAction(operation => RecordMethodGroup(operation, family.UsedAsGroup), OperationKind.MethodReference);
+
+        // The outermost type ends after the types nested in it, so by then every use in the family is known.
+        if (type.ContainingType != null)
+            return;
+
+        context.RegisterSymbolEndAction(end =>
+        {
+            _ = families.TryRemove(outermost, out _);
+            while (family.Findings.TryDequeue(out var finding))
+            {
+                if (!family.UsedAsGroup.ContainsKey(finding.Method))
+                    end.ReportDiagnostic(finding.Diagnostic);
+            }
+        });
+    }
+
+    private static void AnalyzeDeclaration(SyntaxNodeAnalysisContext context, StructSizeEstimator sizes, INamedTypeSymbol scope,
+        ConcurrentQueue<(IMethodSymbol Method, Diagnostic Diagnostic)> findings)
     {
         var declaration = (BaseMethodDeclarationSyntax)context.Node;
         if (!HasByValueParameter(declaration) || !HasBody(declaration) || declaration.Modifiers.Any(SyntaxKind.AsyncKeyword))
             return;
 
         if (context.SemanticModel.GetDeclaredSymbol(declaration, context.CancellationToken) is not { } method || !CanChangeParameters(method))
+            return;
+
+        // The declarations of a nested type are seen by the enclosing type as well; each type answers for its own methods.
+        if (!SymbolEqualityComparer.Default.Equals(method.ContainingType, scope))
             return;
 
         var maxSize = 0;
@@ -85,7 +124,7 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
             if (location != null)
             {
                 var typeName = type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-                context.ReportDiagnostic(Diagnostic.Create(Rule, location, parameter.Name, typeName, size));
+                findings.Enqueue((Normalize(method), Diagnostic.Create(Rule, location, parameter.Name, typeName, size)));
             }
         }
     }
@@ -193,6 +232,29 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    /// <summary>Returns the symbol a method is known by wherever it is used: unconstructed, unreduced, and the definition part of a partial method.</summary>
+    private static IMethodSymbol Normalize(IMethodSymbol method)
+    {
+        method = (method.ReducedFrom ?? method).OriginalDefinition;
+        return method.PartialDefinitionPart ?? method;
+    }
+
+    /// <summary>
+    /// Records a method that is used as a value: converted to a delegate, subscribed to an event, or taken the address
+    /// of. A name in <c language="csharp">nameof</c> uses nothing.
+    /// </summary>
+    private static void RecordMethodGroup(OperationAnalysisContext context, ConcurrentDictionary<IMethodSymbol, bool> usedAsGroup)
+    {
+        var reference = (IMethodReferenceOperation)context.Operation;
+        for (var parent = reference.Parent; parent != null; parent = parent.Parent)
+        {
+            if (parent is INameOfOperation)
+                return;
+        }
+
+        _ = usedAsGroup.TryAdd(Normalize(reference.Method), true);
+    }
+
     // Data flow does not treat 'ref' passed to a 'ref readonly' parameter as a write, but 'ref' on an 'in' parameter does not compile.
     private static bool IsPassedByReference(BaseMethodDeclarationSyntax declaration, string parameterName)
     {
@@ -208,4 +270,12 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
     private static bool IsUntouched(DataFlowAnalysis? flow, IParameterSymbol parameter) =>
         flow is { Succeeded: true } && !flow.WrittenInside.Contains(parameter) && !flow.Captured.Contains(parameter) && !flow.UnsafeAddressTaken.Contains(parameter);
+
+    /// <summary>What has been found so far in an outermost type and the types nested in it.</summary>
+    private sealed class TypeFamily
+    {
+        public ConcurrentQueue<(IMethodSymbol Method, Diagnostic Diagnostic)> Findings { get; } = new();
+
+        public ConcurrentDictionary<IMethodSymbol, bool> UsedAsGroup { get; } = new(SymbolEqualityComparer.Default);
+    }
 }
