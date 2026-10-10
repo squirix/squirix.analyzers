@@ -58,10 +58,10 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
         if (ifStatement.Parent is ElseClauseSyntax)
             return;
 
-        if (!ChainAllowsOmittingBraces(ifStatement, BraceRemovalGuards.IsFollowedByElse(ifStatement)))
+        var followedByElse = BraceRemovalGuards.IsFollowedByElse(ifStatement);
+        if (!ChainAllowsOmittingBraces(ifStatement, followedByElse))
             return;
 
-        var followedByElse = BraceRemovalGuards.IsFollowedByElse(ifStatement);
         var current = ifStatement;
         while (true)
         {
