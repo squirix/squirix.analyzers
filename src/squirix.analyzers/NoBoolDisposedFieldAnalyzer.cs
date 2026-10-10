@@ -115,6 +115,7 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         if (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node)
             operand = memberAccess;
 
+        operand = SkipParenthesesAndRefConditionals(operand);
         if (operand.Parent is not ArgumentSyntax argument || argument.Expression != operand)
             return false;
 
@@ -169,5 +170,27 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Climbs from the flag to the expression that stands for the same reference: out of parentheses, and out of a
+    /// ref conditional when the flag is one of its branches, as in <c language="csharp">ref (first ? ref a._disposed : ref b._disposed)</c>.
+    /// </summary>
+    private static SyntaxNode SkipParenthesesAndRefConditionals(SyntaxNode operand)
+    {
+        while (true)
+        {
+            switch (operand.Parent)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    operand = parenthesized;
+                    continue;
+                case RefExpressionSyntax { Parent: ConditionalExpressionSyntax conditional } branch when conditional.WhenTrue == branch || conditional.WhenFalse == branch:
+                    operand = conditional;
+                    continue;
+                default:
+                    return operand;
+            }
+        }
     }
 }
