@@ -104,6 +104,13 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
         IInvocationOperation { TargetMethod.ReturnsByRefReadonly: true } call => call.TargetMethod,
         IPropertyReferenceOperation { Property.ReturnsByRefReadonly: true } property => property.Property,
         IFieldReferenceOperation field => GetReadOnlyField(field, containingSymbol),
+
+        // An element of an inline array is part of the array struct, so it is as readonly as the variable that holds the array.
+        IInlineArrayAccessOperation element => GetReadOnlyVariable(element.Instance, containingSymbol),
+
+        // A ref conditional is readonly as soon as one of its branches is, whichever branch is taken.
+        IConditionalOperation { IsRef: true } conditional => GetReadOnlyVariable(conditional.WhenTrue, containingSymbol) ??
+                                                             (conditional.WhenFalse == null ? null : GetReadOnlyVariable(conditional.WhenFalse, containingSymbol)),
         _ => null,
     };
 
