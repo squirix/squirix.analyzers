@@ -1,17 +1,17 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
 namespace Squirix.Analyzers;
 
 /// <summary>
-/// Flags a non-async lambda, anonymous method or method group that returns <c>Task&lt;T&gt;</c> while the target delegate
-/// returns non-generic <c>Task</c> (SQR0032). <c>Task&lt;T&gt;</c> converts implicitly to <c>Task</c>, so the
-/// <c>T</c> result is silently lost. The compiler rejects this only for async lambdas.
+/// Flags a <c>Task&lt;T&gt;</c> that silently becomes a non-generic <c>Task</c> on its way out of a delegate (SQR0032):
+/// in a value returned by a non-async lambda or anonymous method, in a method group, and in a delegate that returns
+/// <c>Task&lt;T&gt;</c> used as one that returns <c>Task</c>. The <c>T</c> result is lost, and the compiler rejects
+/// this only for async lambdas.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
@@ -37,53 +37,56 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterOperationAction(AnalyzeDelegateCreation, OperationKind.DelegateCreation);
+        context.RegisterOperationAction(AnalyzeConversion, OperationKind.Conversion);
+        context.RegisterOperationAction(AnalyzeCoalesce, OperationKind.Coalesce);
     }
 
-    private static void AnalyzeBlock(OperationAnalysisContext context, SemanticModel semanticModel, BlockSyntax block, INamedTypeSymbol delegateType)
+    /// <summary>
+    /// Reports the left operand of a null-coalescing expression when it is a delegate that returns Task&lt;T&gt; and the
+    /// expression is one that returns Task. That conversion is part of the operation and has no node of its own.
+    /// </summary>
+    private static void AnalyzeCoalesce(OperationAnalysisContext context)
     {
-        foreach (var node in block.DescendantNodes(static child => child is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)))
-        {
-            if (node is ReturnStatementSyntax { Expression: { } returned })
-                ReportReturned(context, semanticModel, returned, delegateType);
-        }
+        var coalesce = (ICoalesceOperation)context.Operation;
+        if (ReturnsPlainTask(coalesce.Type, out var delegateType) && TryGetDelegateResultType(coalesce.Value.Type, out var result))
+            Report(context, coalesce.Value, delegateType, result);
+    }
+
+    /// <summary>Reports a delegate that returns Task&lt;T&gt; and is implicitly used as one that returns Task.</summary>
+    private static void AnalyzeConversion(OperationAnalysisContext context)
+    {
+        var conversion = (IConversionOperation)context.Operation;
+        if (!conversion.IsImplicit || !conversion.Conversion.Exists || !ReturnsPlainTask(conversion.Type, out var delegateType))
+            return;
+
+        // Comparing two delegates converts one of them, but passes it nowhere.
+        if (conversion.Parent is IBinaryOperation { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals })
+            return;
+
+        if (TryGetDelegateResultType(conversion.Operand.Type, out var result))
+            Report(context, conversion.Operand, delegateType, result);
     }
 
     private static void AnalyzeDelegateCreation(OperationAnalysisContext context)
     {
         var creation = (IDelegateCreationOperation)context.Operation;
-        if (creation.Type is not INamedTypeSymbol { DelegateInvokeMethod: { } invoke } delegateType || !IsPlainTask(invoke.ReturnType))
+        if (!ReturnsPlainTask(creation.Type, out var delegateType))
             return;
 
         switch (creation.Target)
         {
             case IMethodReferenceOperation reference:
                 if (TryGetResultType(reference.Method.ReturnType, out var methodResult))
-                    context.ReportDiagnostic(Diagnostic.Create(Rule, reference.Syntax.GetLocation(), GetDelegateName(delegateType), methodResult));
+                    Report(context, reference, delegateType, methodResult);
 
                 break;
-            case IAnonymousFunctionOperation { Symbol.IsAsync: false } function when function.Syntax is AnonymousFunctionExpressionSyntax syntax:
-                AnalyzeFunction(context, syntax, delegateType);
+            case IAnonymousFunctionOperation { Symbol.IsAsync: false } function:
+                ReportReturns(context, function.Body, delegateType);
                 break;
-            case { Type: INamedTypeSymbol { DelegateInvokeMethod: { } sourceInvoke } } source when TryGetResultType(sourceInvoke.ReturnType, out var delegateResult):
-                context.ReportDiagnostic(Diagnostic.Create(Rule, source.Syntax.GetLocation(), GetDelegateName(delegateType), delegateResult));
+            case { } target when TryGetDelegateResultType(target.Type, out var delegateResult):
+                Report(context, target, delegateType, delegateResult);
                 break;
         }
-    }
-
-    private static void AnalyzeFunction(OperationAnalysisContext context, AnonymousFunctionExpressionSyntax function, INamedTypeSymbol delegateType)
-    {
-        var semanticModel = context.Operation.SemanticModel;
-        if (semanticModel == null)
-            return;
-
-        if (function.Body is ExpressionSyntax expressionBody)
-        {
-            ReportReturned(context, semanticModel, expressionBody, delegateType);
-            return;
-        }
-
-        if (function.Body is BlockSyntax block)
-            AnalyzeBlock(context, semanticModel, block, delegateType);
     }
 
     private static bool IsNamed(ITypeSymbol type, string name, bool generic) =>
@@ -91,39 +94,93 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         && named.Name == name
         && named.IsGenericType == generic;
 
-    private static bool IsPlainTask(ITypeSymbol type) => IsNamed(type, "Task", false);
+    private static bool IsPlainTask(ITypeSymbol? type) => type != null && IsNamed(type, "Task", false);
 
     private static bool IsTaskLike(ITypeSymbol type) => IsNamed(type, "Task", false) || IsNamed(type, "Task", true) || IsNamed(type, "ValueTask", false) || IsNamed(type, "ValueTask", true);
 
-    private static string GetDelegateName(INamedTypeSymbol delegateType) => delegateType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+    private static void Report(OperationAnalysisContext context, IOperation lost, INamedTypeSymbol delegateType, string result) =>
+        context.ReportDiagnostic(Diagnostic.Create(Rule, lost.Syntax.GetLocation(), delegateType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), result));
 
-    private static void ReportReturned(OperationAnalysisContext context, SemanticModel semanticModel, ExpressionSyntax returned, INamedTypeSymbol delegateType)
+    /// <summary>
+    /// Reports where a returned value turns from Task&lt;T&gt; into Task. The compiler converts either the whole value
+    /// or, when its branches have different types, each branch on its own, so the search follows the value into the
+    /// branches of conditional, switch and null-coalescing expressions, and through a conversion that only gives such
+    /// an expression its Task type. An explicit cast states the intent and ends it.
+    /// </summary>
+    private static void ReportLostResults(OperationAnalysisContext context, IOperation? value, INamedTypeSymbol delegateType)
     {
-        switch (returned)
+        switch (value)
         {
-            case ParenthesizedExpressionSyntax parenthesized:
-                ReportReturned(context, semanticModel, parenthesized.Expression, delegateType);
-                return;
-            case ConditionalExpressionSyntax conditional:
-                ReportReturned(context, semanticModel, conditional.WhenTrue, delegateType);
-                ReportReturned(context, semanticModel, conditional.WhenFalse, delegateType);
-                return;
-            case SwitchExpressionSyntax switchExpression:
+            case IConversionOperation { IsImplicit: true } conversion when IsPlainTask(conversion.Type):
+                if (TryGetResultType(conversion.Operand.Type, out var result))
+                    Report(context, conversion.Operand, delegateType, result);
+                else
+                    ReportLostResults(context, conversion.Operand, delegateType);
+
+                break;
+            case IConditionalOperation conditional:
+                ReportLostResults(context, conditional.WhenTrue, delegateType);
+                ReportLostResults(context, conditional.WhenFalse, delegateType);
+                break;
+            case ISwitchExpressionOperation switchExpression:
                 foreach (var arm in switchExpression.Arms)
-                    ReportReturned(context, semanticModel, arm.Expression, delegateType);
+                    ReportLostResults(context, arm.Value, delegateType);
 
-                return;
+                break;
+            case ICoalesceOperation coalesce:
+                // The conversion of the left operand is part of the operation and has no node of its own.
+                if (IsPlainTask(coalesce.Type) && TryGetResultType(coalesce.Value.Type, out var left))
+                    Report(context, coalesce.Value, delegateType, left);
+
+                ReportLostResults(context, coalesce.WhenNull, delegateType);
+                break;
         }
-
-        var info = semanticModel.GetTypeInfo(returned, context.CancellationToken);
-        if (info.Type == null || info.ConvertedType == null || !IsPlainTask(info.ConvertedType))
-            return;
-
-        if (TryGetResultType(info.Type, out var result))
-            context.ReportDiagnostic(Diagnostic.Create(Rule, returned.GetLocation(), GetDelegateName(delegateType), result));
     }
 
-    private static bool TryGetResultType(ITypeSymbol type, out string result)
+    /// <summary>
+    /// Visits every return of the function itself; nested lambdas and local functions have their own returns. The walk
+    /// keeps its own stack, because an operation tree can be deeper than the call stack allows.
+    /// </summary>
+    private static void ReportReturns(OperationAnalysisContext context, IOperation body, INamedTypeSymbol delegateType)
+    {
+        var pending = new Stack<IOperation>();
+        pending.Push(body);
+        while (pending.Count > 0)
+        {
+            foreach (var child in pending.Pop().ChildOperations)
+            {
+                switch (child)
+                {
+                    case IAnonymousFunctionOperation or ILocalFunctionOperation:
+                        break;
+                    case IReturnOperation returned:
+                        ReportLostResults(context, returned.ReturnedValue, delegateType);
+                        break;
+                    default:
+                        pending.Push(child);
+                        break;
+                }
+            }
+        }
+    }
+
+    private static bool ReturnsPlainTask(ITypeSymbol? type, out INamedTypeSymbol delegateType)
+    {
+        delegateType = null!;
+        if (type is not INamedTypeSymbol { DelegateInvokeMethod: { } invoke } named || !IsPlainTask(invoke.ReturnType))
+            return false;
+
+        delegateType = named;
+        return true;
+    }
+
+    private static bool TryGetDelegateResultType(ITypeSymbol? type, out string result)
+    {
+        result = string.Empty;
+        return type is INamedTypeSymbol { DelegateInvokeMethod: { } invoke } && TryGetResultType(invoke.ReturnType, out result);
+    }
+
+    private static bool TryGetResultType(ITypeSymbol? type, out string result)
     {
         result = string.Empty;
         var current = type;
