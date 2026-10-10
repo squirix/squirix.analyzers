@@ -199,6 +199,71 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
     }
 
     /// <summary>The call receives a reference to whichever flag the condition picks, so both branches are guarded.</summary>
+    /// <summary>These wrappers leave the operand the same reference to the flag.</summary>
+    [Test]
+    public async Task AllowsCheckedAndNullForgivingOperand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose() => Interlocked.Exchange(ref checked(_disposed), 1);
+
+                                  void Reset() => Interlocked.Exchange(ref unchecked((this._disposed)), 0);
+
+                                  bool IsDisposed() => Volatile.Read(in _disposed!) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>Volatile.Read takes its location by readonly reference, so the flag is passed by reference without a keyword too.</summary>
+    [Test]
+    public async Task AllowsReferenceOperandWithoutKeyword(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  bool IsDisposed() => Volatile.Read(_disposed) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>Until a call binds, the rule cannot tell whether it guards the flag.</summary>
+    [Test]
+    public async Task LeavesCallThatDoesNotBindAlone(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose() => Missing.Exchange(ref _disposed, 1);
+
+                                  bool IsDisposed() => _disposed != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunOnIncompleteCodeAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(6);
+    }
+
     [Test]
     public async Task AllowsRefConditionalOperand(CancellationToken cancellationToken)
     {
