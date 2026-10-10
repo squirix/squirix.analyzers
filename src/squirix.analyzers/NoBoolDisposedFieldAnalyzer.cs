@@ -100,22 +100,27 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
     private static bool IsDisposedFieldName(string name) => string.Equals(name, "_disposed", StringComparison.Ordinal);
 
     /// <summary>
-    /// Returns whether the access leaves the flag to Interlocked or Volatile: the flag itself, and not its value, is
-    /// what such a method receives by reference. The question is asked of the bound operation, so the spelling of the
-    /// operand (a qualifier, parentheses, <c language="csharp">checked</c>, the null-forgiving operator) does not matter.
+    /// Returns whether the access needs no report. That is so when the flag itself, and not its value, is what an
+    /// Interlocked or Volatile method receives by reference; the question is asked of the bound operation, so the
+    /// spelling of the operand (a qualifier, parentheses, <c language="csharp">checked</c>, the null-forgiving operator)
+    /// does not matter. It is also so when the expression that uses the flag does not bind, and inside nameof.
     /// </summary>
     private static bool IsGuarded(IFieldReferenceOperation reference)
     {
         // A ref conditional yields the reference of the branch it picks, so the flag in a branch shares the fate of the
-        // whole conditional. The flag in its condition is read.
+        // whole conditional. The flag cannot be the condition itself: an int there does not bind as a ref conditional.
         IOperation operand = reference;
-        while (operand.Parent is IConditionalOperation { IsRef: true } conditional && conditional.Condition != operand)
+        while (operand.Parent is IConditionalOperation { IsRef: true } conditional)
             operand = conditional;
 
         return operand.Parent switch
         {
             IArgumentOperation { Parameter.RefKind: RefKind.Ref or RefKind.In or RefKind.RefReadOnlyParameter, Parent: IInvocationOperation invocation } =>
                 IsInterlockedOrVolatile(invocation.TargetMethod.ContainingType),
+
+            // With a dynamic argument the call binds at run time, but the type and the way the flag is passed are known.
+            IDynamicInvocationOperation { Operation: IDynamicMemberReferenceOperation member } call =>
+                IsInterlockedOrVolatile(member.ContainingType) && IsPassedByReference(call, operand),
 
             // Code that does not bind says nothing about how the flag is accessed.
             IInvalidOperation => true,
@@ -135,6 +140,17 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsInterlockedOrVolatile(INamedTypeSymbol? type) =>
+    private static bool IsInterlockedOrVolatile(ITypeSymbol? type) =>
         type is { Name: "Interlocked" or "Volatile", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } };
+
+    private static bool IsPassedByReference(IDynamicInvocationOperation call, IOperation operand)
+    {
+        for (var index = 0; index < call.Arguments.Length; index++)
+        {
+            if (ReferenceEquals(call.Arguments[index], operand))
+                return call.GetArgumentRefKind(index) is RefKind.Ref or RefKind.In;
+        }
+
+        return false;
+    }
 }
