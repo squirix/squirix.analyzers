@@ -213,6 +213,8 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
 
                                   void CloseOne(bool mine, bool first, C a, C b) =>
                                       Interlocked.Exchange(ref (mine ? ref _disposed : ref (first ? ref (a._disposed) : ref b._disposed)), 1);
+
+                                  static void CloseBare(bool first, C a, C b) => Interlocked.Exchange(ref first ? ref a._disposed : ref b._disposed, 1);
                               }
                               """;
 
@@ -242,6 +244,29 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
 
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(IntRuleId);
+    }
+
+    /// <summary>Only the ref operand is guarded; as the value argument the flags are read.</summary>
+    [Test]
+    public async Task FlagsRefConditionalAsInterlockedValue(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+                                  private int _state;
+
+                                  static void Copy(bool first, C a, C b) => Interlocked.Exchange(ref a._state, (first ? ref a._disposed : ref b._disposed));
+
+                                  void CopyOwn() => Interlocked.Exchange(ref _state, (_disposed));
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(3);
     }
 
     [Test]
