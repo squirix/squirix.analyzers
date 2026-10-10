@@ -109,10 +109,10 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
     private static bool IsGuardedByInterlockedOrVolatile(SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         // The flag is guarded only when it is itself the ref/in operand of an Interlocked/Volatile
-        // call (optionally qualified as this._disposed). Any other occurrence inside the call's
-        // arguments, such as Interlocked.Exchange(ref _disposed, _disposed + 1), is a plain read.
+        // call, on this instance or another one (this._disposed, other._disposed). Any other occurrence
+        // inside the call's arguments, such as Interlocked.Exchange(ref _disposed, _disposed + 1), is a plain read.
         var operand = node;
-        if (node.Parent is MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } memberAccess && memberAccess.Name == node)
+        if (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node)
             operand = memberAccess;
 
         if (operand.Parent is not ArgumentSyntax argument || argument.Expression != operand)
