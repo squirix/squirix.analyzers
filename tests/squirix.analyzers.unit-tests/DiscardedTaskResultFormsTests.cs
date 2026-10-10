@@ -86,6 +86,17 @@ public sealed class DiscardedTaskResultFormsTests
         ("var pairs = new List<(Func<Task<bool>>, int)> { (save, mode) }; foreach ((Func<Task>, int) p in pairs) return p; return mode;", "pairs"),
         ("Func<Task> nothing = RunNothing; var o = (object)(primary ? save : nothing); return o;", "save"),
         ("var w = (Wrapper)save; return w;", "save"),
+        ("(Func<Task<bool>>, int) pair = (save, mode); (Func<Task> work, int n) = pair; return work;", "pair"),
+        ("(Func<Task<bool>>, int) pair = (save, mode); Func<Task> work; int n; (work, n) = pair; return work;", "pair"),
+        ("(Func<Task<bool>>, int) pair = (save, mode); (Func<Task> work, int n) = (save, mode); return work;", "save"),
+        ("((Func<Task<bool>>, int), int) deep = ((save, mode), mode); ((Func<Task> work, int n), int m) = deep; return work;", "deep"),
+        ("var pairs = new List<(Func<Task<bool>>, int)> { (save, mode) }; foreach ((Func<Task> work, int n) in pairs) return work; return mode;", "pairs"),
+        ("var pairs = new List<(Func<Task<bool>>, int)> { (save, mode) }; foreach ((Func<Task> work, var n) in pairs) return work; return mode;", "pairs"),
+        ("(Func<Task<bool>>, int) pair = (save, mode); ((Func<Task> work, int n), int m) = (pair, mode); return work;", "(pair, mode)"),
+        ("(Func<Task<bool>>, int) Get() => (save, mode); ((Func<Task> work, int n), int m) = (Get(), mode); return work;", "(Get(), mode)"),
+        ("(Func<Task<bool>>, int) pair = (save, mode); (Func<Task> _, int n) = pair; return n;", "pair"),
+        ("Func<Task> nothing = RunNothing; var o = (object)(primary ? save : nothing, mode); return o;", "save"),
+        ("Func<Task> nothing = RunNothing; var all = (object[])[primary ? save : nothing]; return all;", "save"),
     ];
 
     /// <summary>Returns method bodies with two lost results: branches of different result types have no common type but Task.</summary>
@@ -98,6 +109,10 @@ public sealed class DiscardedTaskResultFormsTests
         "Func<Task> f = () => { if (primary) return SaveAsync(); return mode switch { 0 => SaveAsync(), _ => SaveCopyAsync() }; }; return f;",
         "Func<Task> f = () => cached ?? cached ?? Task.CompletedTask; return f;",
         "Func<Task<int>> count = () => Task.FromResult(1); Func<Task> f = primary ? save : count; return f;",
+        "Func<Task<int>> count = () => Task.FromResult(1); (Func<Task>, Func<Task>) lost = (save, count); return lost;",
+        "Func<Task<int>> count = () => Task.FromResult(1); var both = (save, count); (Func<Task>, Func<Task>) lost = both; return lost;",
+        "Func<Task<int>> count = () => Task.FromResult(1); var both = (save, count); (Func<Task> a, Func<Task> b) = both; return a;",
+        "var both = (save, save); (Func<Task>, Func<Task>) lost = both; return lost;",
     ];
 
     /// <summary>Returns method bodies where no result is lost, or where the code says so itself.</summary>
@@ -133,6 +148,16 @@ public sealed class DiscardedTaskResultFormsTests
         "var typed = new List<Func<Task<bool>>> { save }; List<object> all = [..typed]; return all;",
         "var typed = new List<Func<Task<bool>>> { save }; Func<Task>[] all = [..(IEnumerable<Func<Task>>)typed]; return all;",
         "var typed = new List<Func<Task<bool>>> { save }; foreach (Func<Task> f in (IEnumerable<Func<Task>>)typed) return f; return mode;",
+        "var lost = ((Func<Task>, int))(save, mode); return lost;",
+        "var lost = ((Func<Task>, int))(save, mode)!; return lost;",
+        "(Func<Task>, int) other = (RunNothing, mode); var lost = ((Func<Task>, int))(primary ? (save, mode) : other); return lost;",
+        "var kv = new KeyValuePair<string, Func<Task<bool>>>(\"k\", save); (string k, Func<Task> work) = kv; return work;",
+        "var lost = ((Func<Task>, int))(primary ? (save, mode) : (save, 0)); return lost;",
+        "var all = (Func<Task>[])[save, save]; return all;",
+        "var typed = new List<Func<Task<bool>>> { save }; var all = (Func<Task>[])[..typed, save]; return all;",
+        "(Func<Task<bool>>, int) pair = (save, mode); var (work, n) = pair; return work;",
+        "(Func<Task<bool>>, int) pair = (save, mode); (Func<Task<bool>> work, long n) = pair; return work;",
+        "var pairs = new List<(Func<Task<bool>>, int)> { (save, mode) }; foreach ((Func<Task<bool>> work, long n) in pairs) return work; return mode;",
     ];
 
     [Test]

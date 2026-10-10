@@ -41,6 +41,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         context.RegisterOperationAction(AnalyzeDelegateCreation, OperationKind.DelegateCreation);
         context.RegisterOperationAction(AnalyzeConversion, OperationKind.Conversion);
         context.RegisterOperationAction(AnalyzeCoalesce, OperationKind.Coalesce);
+        context.RegisterOperationAction(AnalyzeDeconstruction, OperationKind.DeconstructionAssignment);
         context.RegisterOperationAction(AnalyzeLoop, OperationKind.Loop);
         context.RegisterOperationAction(AnalyzeSpread, OperationKind.Spread);
     }
@@ -52,15 +53,15 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeCoalesce(OperationAnalysisContext context)
     {
         var coalesce = (ICoalesceOperation)context.Operation;
-        if (TryGetLostResult(coalesce.Value.Type, coalesce.Type, out var delegateType, out var result) && !IsUnderExplicitCast(coalesce, coalesce.Type))
-            Report(context, coalesce.Value.Syntax, delegateType, result);
+        if (FindLosses(context, null, coalesce.Value.Type, coalesce.Type) && !IsUnderExplicitCast(coalesce, coalesce.Type))
+            _ = FindLosses(context, coalesce.Value.Syntax, coalesce.Value.Type, coalesce.Type);
     }
 
     /// <summary>Reports a delegate that returns Task&lt;T&gt; and is implicitly used as one that returns Task.</summary>
     private static void AnalyzeConversion(OperationAnalysisContext context)
     {
         var conversion = (IConversionOperation)context.Operation;
-        if (!conversion.IsImplicit || !conversion.Conversion.Exists || !TryGetLostResult(conversion.Operand.Type, conversion.Type, out var delegateType, out var result))
+        if (!conversion.IsImplicit || !conversion.Conversion.Exists || !FindLosses(context, null, conversion.Operand.Type, conversion.Type))
             return;
 
         // Comparing two delegates, or two tuples of them, converts one side but passes it nowhere.
@@ -68,7 +69,18 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
             return;
 
         if (!IsUnderExplicitCast(conversion, conversion.Type))
-            Report(context, conversion.Syntax, delegateType, result);
+            _ = FindLosses(context, conversion.Syntax, conversion.Operand.Type, conversion.Type);
+    }
+
+    /// <summary>
+    /// Reports a tuple value taken apart into targets that lose a result, as in <c language="csharp">(Func&lt;Task&gt; work, int n) = pair</c>.
+    /// The parts are converted one by one, and none of those conversions has a node. An element of a tuple literal
+    /// that is converted where it stands already has the type of its target, so it is not reported a second time here.
+    /// </summary>
+    private static void AnalyzeDeconstruction(OperationAnalysisContext context)
+    {
+        var deconstruction = (IDeconstructionAssignmentOperation)context.Operation;
+        _ = FindLosses(context, deconstruction.Value.Syntax, deconstruction.Value.Type, deconstruction.Target.Type);
     }
 
     private static void AnalyzeDelegateCreation(OperationAnalysisContext context)
@@ -93,24 +105,28 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    /// <summary>Reports a foreach whose declared variable type loses the result of the elements; that conversion has no node either.</summary>
+    /// <summary>
+    /// Reports a foreach whose declared variable, or the targets it takes each element apart into, lose the result of the
+    /// elements; that conversion has no node either.
+    /// </summary>
     private static void AnalyzeLoop(OperationAnalysisContext context)
     {
-        if (context.Operation is not IForEachLoopOperation { LoopControlVariable: IVariableDeclaratorOperation variable, Syntax: CommonForEachStatementSyntax syntax } loop)
+        if (context.Operation is not IForEachLoopOperation { Syntax: CommonForEachStatementSyntax syntax } loop)
             return;
 
         // Only a variable declared as a Task-returning delegate, or as a tuple that may hold one, is worth binding the loop for.
-        var declared = Unwrap(variable.Symbol.Type);
-        if (declared is not INamedTypeSymbol { IsTupleType: true } && !ReturnsPlainTask(declared, out _))
+        var written = loop.LoopControlVariable is IVariableDeclaratorOperation variable ? variable.Symbol.Type : loop.LoopControlVariable.Type;
+        var declared = Unwrap(written);
+        if (written == null || (declared is not INamedTypeSymbol { IsTupleType: true } && !ReturnsPlainTask(declared, out _)))
             return;
 
         var element = loop.SemanticModel?.GetForEachStatementInfo(syntax).ElementType;
-        if (element == null || !TryGetLostResult(element, declared, out var delegateType, out var result))
+        if (element == null || !FindLosses(context, null, element, declared))
             return;
 
         // The loop records a tuple conversion as explicit even when an implicit one exists, so the pair is classified again.
-        if (context.Compilation.ClassifyConversion(element, variable.Symbol.Type) is { Exists: true, IsImplicit: true })
-            Report(context, loop.Collection.Syntax, delegateType, result);
+        if (context.Compilation.ClassifyConversion(element, written) is { Exists: true, IsImplicit: true })
+            _ = FindLosses(context, loop.Collection.Syntax, element, declared);
     }
 
     /// <summary>Reports a spread element whose items lose their result in the collection they are copied into.</summary>
@@ -120,8 +136,9 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         if (!spread.ElementConversion.Exists || !spread.ElementConversion.IsImplicit || spread.ElementConversion.IsIdentity)
             return;
 
-        if (TryGetLostResult(spread.ElementType, GetItemType(spread.Parent?.Type), out var delegateType, out var result))
-            Report(context, spread.Operand.Syntax, delegateType, result);
+        var item = GetItemType(spread.Parent?.Type);
+        if (FindLosses(context, null, spread.ElementType, item) && !IsUnderExplicitCast(spread, item))
+            _ = FindLosses(context, spread.Operand.Syntax, spread.ElementType, item);
     }
 
     /// <summary>
@@ -160,6 +177,14 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
     private static bool IsEnumerableOfT(INamedTypeSymbol type) => type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T;
 
+    /// <summary>Returns whether two types are the same apart from tuple element names and nullable annotations.</summary>
+    private static bool IsSameType(IOperation at, ITypeSymbol? left, ITypeSymbol? right)
+    {
+        left = Unwrap(left);
+        right = Unwrap(right);
+        return left != null && right != null && at.SemanticModel is { } model && model.Compilation.ClassifyConversion(left, right).IsIdentity;
+    }
+
     private static bool IsNamed(ITypeSymbol type, string name, bool generic) =>
         type is INamedTypeSymbol { ContainingNamespace: { Name: "Tasks", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } } } named
         && named.Name == name
@@ -193,7 +218,8 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     /// <summary>
     /// Returns whether an explicit cast to the type that loses the result covers the value: directly, or through the
     /// branches of conditional, switch and null-coalescing expressions. Such a cast states the intent for every branch
-    /// under it. A cast to anything else, or a user-defined conversion, says nothing about the result.
+    /// under it. A cast to anything else, or a user-defined conversion, says nothing about the result. For an element
+    /// of a tuple literal or of a collection expression, the type that loses the result is that of the whole literal.
     /// </summary>
     private static bool IsUnderExplicitCast(IOperation value, ITypeSymbol? lossy)
     {
@@ -203,13 +229,20 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
             {
                 case IConversionOperation conversion:
                     if (!conversion.IsImplicit)
-                        return conversion.OperatorMethod == null && SymbolEqualityComparer.Default.Equals(Unwrap(conversion.Type), Unwrap(lossy));
+                        return conversion.OperatorMethod == null && IsSameType(conversion, conversion.Type, lossy);
 
+                    break;
+                case ITupleOperation or ICollectionExpressionOperation:
+                    // A cast over the literal covers the element only while the element still has the type that loses the result.
+                    if (current is not ISpreadOperation && !IsSameType(current, current.Type, lossy))
+                        return false;
+
+                    lossy = parent.Type;
                     break;
                 case IConditionalOperation conditional when conditional.Condition != current:
                 case ISwitchExpressionArmOperation arm when arm.Value == current:
                 case ISwitchExpressionOperation switchExpression when switchExpression.Value != current:
-                case ICoalesceOperation:
+                case ICoalesceOperation or ISpreadOperation:
                     break;
                 default:
                     return false;
@@ -316,15 +349,23 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// Returns whether a value of the source type, used as the target type, loses a result: a delegate that returns
-    /// Task&lt;T&gt; used as one that returns Task, or a tuple with such an element.
+    /// Task&lt;T&gt; used as one that returns Task, or a tuple with such elements. With a place given, every loss is reported
+    /// there, one diagnostic for each element of a tuple that loses its result.
     /// </summary>
-    private static bool TryGetLostResult(ITypeSymbol? source, ITypeSymbol? target, out INamedTypeSymbol delegateType, out string result)
+    private static bool FindLosses(OperationAnalysisContext context, SyntaxNode? place, ITypeSymbol? source, ITypeSymbol? target)
     {
-        result = string.Empty;
         source = Unwrap(source);
         target = Unwrap(target);
-        if (ReturnsPlainTask(target, out delegateType))
-            return TryGetDelegateResultType(source, out result);
+        if (ReturnsPlainTask(target, out var delegateType))
+        {
+            if (!TryGetDelegateResultType(source, out var result))
+                return false;
+
+            if (place != null)
+                Report(context, place, delegateType, result);
+
+            return true;
+        }
 
         if (source is not INamedTypeSymbol { IsTupleType: true } sourceTuple || target is not INamedTypeSymbol { IsTupleType: true } targetTuple)
             return false;
@@ -332,13 +373,20 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         if (sourceTuple.TupleElements.Length != targetTuple.TupleElements.Length)
             return false;
 
+        var found = false;
         for (var index = 0; index < sourceTuple.TupleElements.Length; index++)
         {
-            if (TryGetLostResult(sourceTuple.TupleElements[index].Type, targetTuple.TupleElements[index].Type, out delegateType, out result))
+            if (!FindLosses(context, place, sourceTuple.TupleElements[index].Type, targetTuple.TupleElements[index].Type))
+                continue;
+
+            // Without a place the answer is enough; with one, the remaining elements still have to be reported.
+            if (place == null)
                 return true;
+
+            found = true;
         }
 
-        return false;
+        return found;
     }
 
     private static bool TryGetResultType(ITypeSymbol? type, out string result)
