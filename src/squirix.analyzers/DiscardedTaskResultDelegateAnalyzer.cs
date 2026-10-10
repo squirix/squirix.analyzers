@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -37,16 +38,32 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterOperationAction(AnalyzeDelegateCreation, OperationKind.DelegateCreation);
         context.RegisterOperationAction(AnalyzeConversion, OperationKind.Conversion);
+        context.RegisterOperationAction(AnalyzeCoalesce, OperationKind.Coalesce);
+    }
+
+    /// <summary>
+    /// Reports the left operand of a null-coalescing expression when it is a delegate that returns Task&lt;T&gt; and the
+    /// expression is one that returns Task. That conversion is part of the operation and has no node of its own.
+    /// </summary>
+    private static void AnalyzeCoalesce(OperationAnalysisContext context)
+    {
+        var coalesce = (ICoalesceOperation)context.Operation;
+        if (ReturnsPlainTask(coalesce.Type, out var delegateType) && TryGetDelegateResultType(coalesce.Value.Type, out var result))
+            Report(context, coalesce.Value, delegateType, result);
     }
 
     /// <summary>Reports a delegate that returns Task&lt;T&gt; and is implicitly used as one that returns Task.</summary>
     private static void AnalyzeConversion(OperationAnalysisContext context)
     {
         var conversion = (IConversionOperation)context.Operation;
-        if (!conversion.IsImplicit || !ReturnsPlainTask(conversion.Type, out var delegateType))
+        if (!conversion.IsImplicit || !conversion.Conversion.Exists || !ReturnsPlainTask(conversion.Type, out var delegateType))
             return;
 
-        if (conversion.Operand.Type is INamedTypeSymbol { DelegateInvokeMethod: { } source } && TryGetResultType(source.ReturnType, out var result))
+        // Comparing two delegates converts one of them, but passes it nowhere.
+        if (conversion.Parent is IBinaryOperation { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals })
+            return;
+
+        if (TryGetDelegateResultType(conversion.Operand.Type, out var result))
             Report(context, conversion.Operand, delegateType, result);
     }
 
@@ -66,7 +83,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
             case IAnonymousFunctionOperation { Symbol.IsAsync: false } function:
                 ReportReturns(context, function.Body, delegateType);
                 break;
-            case { Type: INamedTypeSymbol { DelegateInvokeMethod: { } source } } target when TryGetResultType(source.ReturnType, out var delegateResult):
+            case { } target when TryGetDelegateResultType(target.Type, out var delegateResult):
                 Report(context, target, delegateType, delegateResult);
                 break;
         }
@@ -87,14 +104,19 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     /// <summary>
     /// Reports where a returned value turns from Task&lt;T&gt; into Task. The compiler converts either the whole value
     /// or, when its branches have different types, each branch on its own, so the search follows the value into the
-    /// branches of conditional, switch and null-coalescing expressions. An explicit cast states the intent and ends it.
+    /// branches of conditional, switch and null-coalescing expressions, and through a conversion that only gives such
+    /// an expression its Task type. An explicit cast states the intent and ends it.
     /// </summary>
     private static void ReportLostResults(OperationAnalysisContext context, IOperation? value, INamedTypeSymbol delegateType)
     {
         switch (value)
         {
-            case IConversionOperation { IsImplicit: true } conversion when IsPlainTask(conversion.Type) && TryGetResultType(conversion.Operand.Type, out var result):
-                Report(context, conversion.Operand, delegateType, result);
+            case IConversionOperation { IsImplicit: true } conversion when IsPlainTask(conversion.Type):
+                if (TryGetResultType(conversion.Operand.Type, out var result))
+                    Report(context, conversion.Operand, delegateType, result);
+                else
+                    ReportLostResults(context, conversion.Operand, delegateType);
+
                 break;
             case IConditionalOperation conditional:
                 ReportLostResults(context, conditional.WhenTrue, delegateType);
@@ -115,21 +137,29 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    /// <summary>Visits every return of the function itself; nested lambdas and local functions have their own returns.</summary>
-    private static void ReportReturns(OperationAnalysisContext context, IOperation operation, INamedTypeSymbol delegateType)
+    /// <summary>
+    /// Visits every return of the function itself; nested lambdas and local functions have their own returns. The walk
+    /// keeps its own stack, because an operation tree can be deeper than the call stack allows.
+    /// </summary>
+    private static void ReportReturns(OperationAnalysisContext context, IOperation body, INamedTypeSymbol delegateType)
     {
-        foreach (var child in operation.ChildOperations)
+        var pending = new Stack<IOperation>();
+        pending.Push(body);
+        while (pending.Count > 0)
         {
-            switch (child)
+            foreach (var child in pending.Pop().ChildOperations)
             {
-                case IAnonymousFunctionOperation or ILocalFunctionOperation:
-                    break;
-                case IReturnOperation returned:
-                    ReportLostResults(context, returned.ReturnedValue, delegateType);
-                    break;
-                default:
-                    ReportReturns(context, child, delegateType);
-                    break;
+                switch (child)
+                {
+                    case IAnonymousFunctionOperation or ILocalFunctionOperation:
+                        break;
+                    case IReturnOperation returned:
+                        ReportLostResults(context, returned.ReturnedValue, delegateType);
+                        break;
+                    default:
+                        pending.Push(child);
+                        break;
+                }
             }
         }
     }
@@ -142,6 +172,12 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
 
         delegateType = named;
         return true;
+    }
+
+    private static bool TryGetDelegateResultType(ITypeSymbol? type, out string result)
+    {
+        result = string.Empty;
+        return type is INamedTypeSymbol { DelegateInvokeMethod: { } invoke } && TryGetResultType(invoke.ReturnType, out result);
     }
 
     private static bool TryGetResultType(ITypeSymbol? type, out string result)
