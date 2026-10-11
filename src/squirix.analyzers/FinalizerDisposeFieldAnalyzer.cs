@@ -29,7 +29,8 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
         "Field '{0}' is dereferenced outside the disposing branch of Dispose(bool); it is null when the finalizer runs after a constructor threw";
 
     private static readonly LocalizableString Title = "Do not dereference a field outside the disposing branch of a finalizable Dispose(bool)";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Reliability", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Reliability", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

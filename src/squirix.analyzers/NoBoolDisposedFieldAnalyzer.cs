@@ -40,9 +40,11 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         "Dispose flag '{0}' is read or written without Interlocked/Volatile; use Interlocked.Exchange/CompareExchange or Volatile.Read/Write";
 
     private static readonly LocalizableString IntTitle = "Dispose guard must be accessed through Interlocked or Volatile";
-    private static readonly DiagnosticDescriptor BoolRule = new(BoolRuleId, BoolTitle, BoolMessage, Category, DiagnosticSeverity.Warning, true, BoolDescription);
+    private static readonly DiagnosticDescriptor BoolRule = new(BoolRuleId, BoolTitle, BoolMessage, Category, DiagnosticSeverity.Warning, true, BoolDescription,
+        HelpLinks.For(BoolRuleId));
 
-    private static readonly DiagnosticDescriptor IntRule = new(IntRuleId, IntTitle, IntMessage, Category, DiagnosticSeverity.Warning, true, IntDescription);
+    private static readonly DiagnosticDescriptor IntRule = new(IntRuleId, IntTitle, IntMessage, Category, DiagnosticSeverity.Warning, true, IntDescription,
+        HelpLinks.For(IntRuleId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [BoolRule, IntRule];

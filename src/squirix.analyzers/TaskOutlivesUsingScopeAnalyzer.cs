@@ -27,7 +27,8 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "'{0}' is not awaited before '{1}' is disposed at the end of its using scope";
     private static readonly LocalizableString Title = "Await tasks that use a resource before its using scope ends";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Reliability", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Reliability", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

@@ -29,7 +29,7 @@ public sealed class CoalesceThrowHelperAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString Title = "Prefer a throw-helper method over null-coalescing throw";
 
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Info, true, Description, HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

@@ -28,7 +28,8 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "'{0}' is not readonly, so calling it on the readonly '{1}' runs on a hidden copy of '{2}'";
     private static readonly LocalizableString Title = "Do not call non-readonly struct members through readonly variables";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Performance", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Performance", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

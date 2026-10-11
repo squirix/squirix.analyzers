@@ -23,7 +23,7 @@ public sealed class TooManyFieldsAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Type '{0}' has {1} fields (limit {2}); prefer splitting state or introducing collaborators";
     private static readonly LocalizableString Title = "Avoid types with too many fields";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Design", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Design", DiagnosticSeverity.Info, true, Description, HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

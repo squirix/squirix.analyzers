@@ -30,7 +30,8 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
                                                               "e.g. 'catch (Exception ex) when (ex is {0})'";
 
     private static readonly LocalizableString Title = "Merge duplicate catch blocks with identical bodies";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

@@ -29,7 +29,8 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString MessageFormat = "Do not use {0} directly; {1}";
 
     private static readonly LocalizableString Title = "Avoid reading the cancellation token from TestContext.Current";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

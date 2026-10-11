@@ -29,7 +29,8 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "GrpcChannelOptions.{0} is set to a disposable owned here but DisposeHttpClient is not set";
     private static readonly LocalizableString Title = "Set DisposeHttpClient when GrpcChannelOptions receives an owned handler or client";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Usage", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

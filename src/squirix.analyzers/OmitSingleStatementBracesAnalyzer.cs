@@ -22,7 +22,8 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Omit braces from '{0}' when the body is a single single-line statement";
     private static readonly LocalizableString Title = "Omit braces from single-line single-statement body";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

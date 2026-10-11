@@ -26,7 +26,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value{1}";
 
     private static readonly LocalizableString Title = "Avoid redundant default argument values";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description, HelpLinks.For(DiagnosticId));
 
     private static readonly HashSet<SyntaxKind> RedundantDefaultCandidateKinds =
     [
