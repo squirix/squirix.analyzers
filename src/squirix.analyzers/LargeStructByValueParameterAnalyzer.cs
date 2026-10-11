@@ -59,6 +59,7 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
         var maxSize = 0;
         var checkedSignature = false;
+        var checkedUses = false;
         foreach (var parameter in method.Parameters)
         {
             if (parameter.RefKind != RefKind.None || parameter.IsParams || parameter.Type is not INamedTypeSymbol { TypeKind: TypeKind.Struct, IsReadOnly: true } type)
@@ -72,7 +73,7 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
             if (!checkedSignature)
             {
-                if (ImplementsInterfaceMember(method) || IsUsedAsMethodGroup(method, context.SemanticModel, context.CancellationToken))
+                if (ImplementsInterfaceMember(method))
                     return;
 
                 checkedSignature = true;
@@ -80,6 +81,15 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
             if (HasByReferenceOverload(method, parameter) || !CanBeReadOnlyReference(parameter, declaration, context.SemanticModel))
                 continue;
+
+            // The search for uses reads the whole type, so it comes last and once. Only an ordinary method has a name to be used by.
+            if (!checkedUses)
+            {
+                if (declaration is MethodDeclarationSyntax && IsUsedAsMethodGroup(method, context.SemanticModel, context.CancellationToken))
+                    return;
+
+                checkedUses = true;
+            }
 
             var location = GetLocation(parameter, context.CancellationToken);
             if (location != null)
@@ -234,6 +244,9 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    private static bool IsUntouched(DataFlowAnalysis? flow, IParameterSymbol parameter) =>
+        flow is { Succeeded: true } && !flow.WrittenInside.Contains(parameter) && !flow.Captured.Contains(parameter) && !flow.UnsafeAddressTaken.Contains(parameter);
+
     /// <summary>
     /// Returns whether the method is used as a value somewhere in its outermost type or in a type nested there:
     /// converted to a delegate, subscribed to an event, or taken the address of. A delegate type fixes the signature of
@@ -262,9 +275,6 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
         return false;
     }
-
-    private static bool IsUntouched(DataFlowAnalysis? flow, IParameterSymbol parameter) =>
-        flow is { Succeeded: true } && !flow.WrittenInside.Contains(parameter) && !flow.Captured.Contains(parameter) && !flow.UnsafeAddressTaken.Contains(parameter);
 
     /// <summary>Returns the symbol a method is known by wherever it is used: unconstructed, unreduced, and the definition part of a partial method.</summary>
     private static IMethodSymbol Normalize(IMethodSymbol method)
