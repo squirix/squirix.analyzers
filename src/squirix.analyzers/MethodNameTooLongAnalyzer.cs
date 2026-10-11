@@ -78,17 +78,15 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
             return true;
 
         var type = symbol.ContainingType;
-        if (type is null)
+        if (type == null)
             return false;
 
         foreach (var contract in type.AllInterfaces)
-        {
             foreach (var member in contract.GetMembers(symbol.Name))
             {
                 if (SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), symbol))
                     return true;
             }
-        }
 
         return false;
     }

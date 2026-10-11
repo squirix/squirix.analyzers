@@ -1,3 +1,12 @@
+## Release 0.1.13
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+SQR0034 | Style    | Warning  |
+SQR0035 | Style    | Warning  |
+
 ## Release 0.1.12
 
 ### New Rules

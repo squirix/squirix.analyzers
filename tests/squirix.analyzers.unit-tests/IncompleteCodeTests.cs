@@ -4,6 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Squirix.Analyzers.UnitTests.Support;
+using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Squirix.Analyzers.UnitTests;
 
@@ -181,6 +183,7 @@ public sealed class IncompleteCodeTests
 
     private const string ValidShapesNextToErrors = """
                                                    #nullable enable
+                                                   global using System.Text;
                                                    using System;
                                                    using System.Net.Http;
                                                    using System.Threading.Tasks;
@@ -214,6 +217,8 @@ public sealed class IncompleteCodeTests
                                                    readonly struct Large { public readonly long A, B, C; }
 
                                                    struct Mutable { public long A; public void Touch() { } }
+
+                                                   class Holder(int size) { public int Size => size; }
 
                                                    class Base : IDisposable
                                                    {

@@ -60,7 +60,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         context.RegisterOperationAction(operationContext => AnalyzeMethodGroup(operationContext, types), OperationKind.DelegateCreation);
     }
 
-    private static void AnalyzeAwait(OperationAnalysisContext context, TaskTypes types)
+    private static void AnalyzeAwait(in OperationAnalysisContext context, TaskTypes types)
     {
         var awaitOperation = (IAwaitOperation)context.Operation;
         if (!IsResultDiscarded(awaitOperation))
@@ -74,7 +74,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
             Report(context, operand);
     }
 
-    private static void AnalyzeConversion(OperationAnalysisContext context, TaskTypes types)
+    private static void AnalyzeConversion(in OperationAnalysisContext context, TaskTypes types)
     {
         var conversion = (IConversionOperation)context.Operation;
         if (!conversion.IsImplicit || !SymbolEqualityComparer.Default.Equals(conversion.Type, types.Task))
@@ -87,22 +87,20 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
 
     private static bool IsWhenAnyOrigin(IOperation operation, TaskTypes types, CancellationToken cancellationToken, int depth)
     {
-        if (depth > MaxOriginDepth)
-            return false;
-
-        return operation switch
-        {
-            IInvocationOperation { TargetMethod.Name: "WhenAny" } invocation => SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, types.Task),
-            IInvocationOperation { TargetMethod.Name: "ConfigureAwait" or "WaitAsync", Instance: { } instance } => IsWhenAnyOrigin(instance, types, cancellationToken, depth + 1),
-            IConversionOperation conversion => IsWhenAnyOrigin(conversion.Operand, types, cancellationToken, depth + 1),
-            IConditionalOperation conditional => IsWhenAnyOriginOrNull(conditional.WhenTrue, types, cancellationToken, depth + 1)
-                                   && conditional.WhenFalse != null
-                                   && IsWhenAnyOriginOrNull(conditional.WhenFalse, types, cancellationToken, depth + 1),
-            ICoalesceOperation coalesce => IsWhenAnyOriginOrNull(coalesce.Value, types, cancellationToken, depth + 1)
-                                   && IsWhenAnyOriginOrNull(coalesce.WhenNull, types, cancellationToken, depth + 1),
-            ILocalReferenceOperation { Local.DeclaringSyntaxReferences.Length: > 0 } reference => operation.SemanticModel != null && AreAllAssignmentsWhenAnyOrigin(reference.Local, operation.SemanticModel, types, cancellationToken, depth + 1),
-            _ => false,
-        };
+        return depth <= MaxOriginDepth
+            && operation switch
+            {
+                IInvocationOperation { TargetMethod.Name: "WhenAny" } invocation => SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, types.Task),
+                IInvocationOperation { TargetMethod.Name: "ConfigureAwait" or "WaitAsync", Instance: { } instance } => IsWhenAnyOrigin(instance, types, cancellationToken, depth + 1),
+                IConversionOperation conversion => IsWhenAnyOrigin(conversion.Operand, types, cancellationToken, depth + 1),
+                IConditionalOperation conditional => IsWhenAnyOriginOrNull(conditional.WhenTrue, types, cancellationToken, depth + 1)
+                                       && conditional.WhenFalse != null
+                                       && IsWhenAnyOriginOrNull(conditional.WhenFalse, types, cancellationToken, depth + 1),
+                ICoalesceOperation coalesce => IsWhenAnyOriginOrNull(coalesce.Value, types, cancellationToken, depth + 1)
+                                       && IsWhenAnyOriginOrNull(coalesce.WhenNull, types, cancellationToken, depth + 1),
+                ILocalReferenceOperation { Local.DeclaringSyntaxReferences.Length: > 0 } reference => operation.SemanticModel != null && AreAllAssignmentsWhenAnyOrigin(reference.Local, operation.SemanticModel, types, cancellationToken, depth + 1),
+                _ => false,
+            };
     }
 
     private static bool IsWhenAnyOriginOrNull(IOperation operation, TaskTypes types, CancellationToken cancellationToken, int depth)
@@ -110,10 +108,9 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         while (operation is IConversionOperation conversion)
             operation = conversion.Operand;
 
-        if (operation is IDefaultValueOperation || operation is { ConstantValue: { HasValue: true, Value: null } })
-            return true;
-
-        return IsWhenAnyOrigin(operation, types, cancellationToken, depth);
+        return operation is IDefaultValueOperation
+            || operation is { ConstantValue: { HasValue: true, Value: null } }
+            || IsWhenAnyOrigin(operation, types, cancellationToken, depth);
     }
 
     private static bool AreAllAssignmentsWhenAnyOrigin(ILocalSymbol local, SemanticModel semanticModel, TaskTypes types, CancellationToken cancellationToken, int depth)
@@ -176,7 +173,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         return operation != null && IsWhenAnyOriginOrNull(operation, types, cancellationToken, depth + 1);
     }
 
-    private static void AnalyzeWait(OperationAnalysisContext context, TaskTypes types)
+    private static void AnalyzeWait(in OperationAnalysisContext context, TaskTypes types)
     {
         var invocation = (IInvocationOperation)context.Operation;
         if (invocation is not { TargetMethod.Name: "Wait", Instance: { } instance } || !SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, types.Task))
@@ -186,7 +183,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
             Report(context, instance);
     }
 
-    private static void AnalyzeMethodGroup(OperationAnalysisContext context, TaskTypes types)
+    private static void AnalyzeMethodGroup(in OperationAnalysisContext context, TaskTypes types)
     {
         var creation = (IDelegateCreationOperation)context.Operation;
         if (creation.Target is not IMethodReferenceOperation reference)
@@ -207,7 +204,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         _ => false,
     };
 
-    private static void Report(OperationAnalysisContext context, IOperation nested)
+    private static void Report(in OperationAnalysisContext context, IOperation nested)
     {
         var name = nested is IInvocationOperation invocation ? invocation.TargetMethod.Name : nested.Syntax.ToString();
         context.ReportDiagnostic(Diagnostic.Create(Rule, nested.Syntax.GetLocation(), name));
@@ -236,10 +233,8 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
                 return false;
 
             var definition = named.OriginalDefinition;
-            if (!SymbolEqualityComparer.Default.Equals(definition, TaskOfT) && !SymbolEqualityComparer.Default.Equals(definition, _valueTaskOfT))
-                return false;
-
-            return IsTask(named.TypeArguments[0]);
+            return (SymbolEqualityComparer.Default.Equals(definition, TaskOfT) || SymbolEqualityComparer.Default.Equals(definition, _valueTaskOfT))
+                && IsTask(named.TypeArguments[0]);
         }
 
         private bool IsTask(ITypeSymbol type)

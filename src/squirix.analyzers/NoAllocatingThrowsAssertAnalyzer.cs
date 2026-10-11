@@ -221,10 +221,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
             return false;
 
         var operation = semanticModel.GetOperation(function, cancellationToken);
-        if (operation is null)
-            return false;
-
-        return CapturesOuterState(operation, function.Span, semanticModel, [], cancellationToken);
+        return operation != null && CapturesOuterState(operation, function.Span, semanticModel, [], cancellationToken);
     }
 
     private static bool CapturesOuterState(IOperation operation, TextSpan scope, SemanticModel semanticModel, HashSet<ISymbol> visitedFunctions, CancellationToken cancellationToken)
@@ -278,7 +275,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
                 return true;
 
             var operation = semanticModel.GetOperation(syntax, cancellationToken);
-            if (operation is not null && CapturesOuterState(operation, syntax.Span, semanticModel, visitedFunctions, cancellationToken))
+            if (operation != null && CapturesOuterState(operation, syntax.Span, semanticModel, visitedFunctions, cancellationToken))
                 return true;
         }
 
@@ -308,7 +305,7 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>Returns whether the matched method belongs to a mocking library, where it sets a call up to throw and asserts nothing.</summary>
-    private static bool IsMockSetup(SyntaxNodeAnalysisContext context)
+    private static bool IsMockSetup(in SyntaxNodeAnalysisContext context)
     {
         if (context.SemanticModel.GetSymbolInfo(context.Node, context.CancellationToken).Symbol is not IMethodSymbol method)
             return false;
@@ -321,19 +318,17 @@ public sealed class NoAllocatingThrowsAssertAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>Returns whether the invoked method is a static method of a type other than the enclosing ones and their bases.</summary>
-    private static bool IsImportedStaticMethod(SyntaxNodeAnalysisContext context)
+    private static bool IsImportedStaticMethod(in SyntaxNodeAnalysisContext context)
     {
         if (context.SemanticModel.GetSymbolInfo(context.Node, context.CancellationToken).Symbol is not IMethodSymbol { IsStatic: true, MethodKind: MethodKind.Ordinary } method)
             return false;
 
         for (var enclosing = context.ContainingSymbol?.ContainingType; enclosing != null; enclosing = enclosing.ContainingType)
-        {
             for (var type = enclosing; type != null; type = type.BaseType)
             {
                 if (SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, method.ContainingType.OriginalDefinition))
                     return false;
             }
-        }
 
         return true;
     }

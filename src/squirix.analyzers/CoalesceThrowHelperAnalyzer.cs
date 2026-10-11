@@ -56,9 +56,7 @@ public sealed class CoalesceThrowHelperAnalyzer : DiagnosticAnalyzer
         if (throwExpression.Expression is ObjectCreationExpressionSyntax creation &&
             context.SemanticModel.GetSymbolInfo(creation, context.CancellationToken).Symbol is IMethodSymbol { ContainingType.Name: "ArgumentNullException" } constructor &&
             constructor.ContainingType.ContainingNamespace?.ToDisplayString() == "System")
-        {
             return;
-        }
 
         context.ReportDiagnostic(Diagnostic.Create(Rule, coalesce.OperatorToken.GetLocation()));
     }
