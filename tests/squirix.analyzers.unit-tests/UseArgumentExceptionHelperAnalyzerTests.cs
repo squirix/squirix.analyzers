@@ -325,4 +325,94 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'; pass '\"value\"' as the second argument to keep the parameter name");
     }
+
+    /// <summary>Whatever the guarded expression is, the helper would name the parameter after its text.</summary>
+    [Test]
+    public async Task AdvisesExplicitNameForOtherShapes(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              #nullable enable
+                              class Options
+                              {
+                                  public string Name { get; set; } = "";
+                              }
+
+                              class C
+                              {
+                                  void M(Options? options, string[] args)
+                                  {
+                                      if (string.IsNullOrEmpty(options?.Name))
+                                          throw new System.ArgumentException("Required.", nameof(options.Name));
+
+                                      if (string.IsNullOrWhiteSpace(args[0]))
+                                          throw new System.ArgumentException("Required.", nameof(args));
+
+                                      if (string.IsNullOrEmpty((options!.Name)))
+                                          throw new System.ArgumentException("Required.", nameof(
+                                              options.Name));
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(3);
+        _ = await Assert.That(diagnostics[0].GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'; pass 'nameof(options.Name)' as the second argument to keep the parameter name");
+        _ = await Assert.That(diagnostics[1].GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrWhiteSpace' instead of an 'if' check with 'throw'; pass 'nameof(args)' as the second argument to keep the parameter name");
+        _ = await Assert.That(diagnostics[2].GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'; pass 'nameof(options.Name)' as the second argument to keep the parameter name");
+    }
+
+    [Test]
+    public async Task AdvisesExplicitNameForConstant(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              #nullable enable
+                              class Options
+                              {
+                                  public string Name { get; set; } = "";
+                              }
+
+                              class C
+                              {
+                                  private const string NameKey = "Name";
+
+                                  void M(Options options)
+                                  {
+                                      if (string.IsNullOrEmpty(options.Name))
+                                          throw new System.ArgumentException("Required.", NameKey);
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'; pass 'NameKey' as the second argument to keep the parameter name");
+    }
+
+    /// <summary>The compiler leaves parentheses and the null-forgiving operator out of the captured text.</summary>
+    [Test]
+    public async Task ReportsPlainAdviceForWrappedName(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              #nullable enable
+                              class C
+                              {
+                                  void M(string? value)
+                                  {
+                                      if (string.IsNullOrEmpty((value)))
+                                          throw new System.ArgumentException("Required.", nameof(value));
+
+                                      if (string.IsNullOrEmpty(value!))
+                                          throw new System.ArgumentException("Required.", "value");
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        _ = await Assert.That(diagnostics[0].GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'");
+        _ = await Assert.That(diagnostics[1].GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'");
+    }
 }

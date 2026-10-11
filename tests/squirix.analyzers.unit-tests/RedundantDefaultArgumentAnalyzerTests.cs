@@ -513,4 +513,132 @@ public sealed class RedundantDefaultArgumentAnalyzerTests
 
         _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
     }
+
+    /// <summary>Without the named argument the positional one after it would move into its place.</summary>
+    [Test]
+    public async Task AllowsNamedBeforePositional(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      Bar(a: 0, 7);
+                                      Bar(0, b: 1, 9);
+                                  }
+
+                                  void Bar(int a = 0, int b = 1, int c = 2)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task FlagsOnlyTailAfterNamedDefault(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M() => Foo(1, b: 0, 5);
+
+                                  void Foo(int a, int b = 0, int c = 5)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("5");
+    }
+
+    /// <summary>A call cut out of its conditional access cannot be bound on its own; the check binds it on the plain receiver.</summary>
+    [Test]
+    public async Task FlagsRunAfterConditionalAccess(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              #nullable enable
+                              class C
+                              {
+                                  public C? Next;
+
+                                  public C[] Items = new C[1];
+
+                                  void M(C? c)
+                                  {
+                                      c?.Foo(1, 0, 5);
+                                      c?.Next?.Foo(1, 2, 5);
+                                      c?.Items[0].Foo(1, c: 5);
+                                      c?.Use(Bar(1, 0, 5), c?.Next);
+                                  }
+
+                                  static int Bar(int a, int b = 0, int c = 5) => a;
+
+                                  void Use(int value, C? other)
+                                  {
+                                  }
+
+                                  void Foo(int a, int b = 0, int c = 5)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(4);
+        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("0, 5");
+        _ = await Assert.That(source.Substring(diagnostics[1].Location.SourceSpan.Start, diagnostics[1].Location.SourceSpan.Length)).IsEqualTo("5");
+        _ = await Assert.That(source.Substring(diagnostics[2].Location.SourceSpan.Start, diagnostics[2].Location.SourceSpan.Length)).IsEqualTo("c: 5");
+        _ = await Assert.That(source.Substring(diagnostics[3].Location.SourceSpan.Start, diagnostics[3].Location.SourceSpan.Length)).IsEqualTo("0, 5");
+    }
+
+    /// <summary>Without the second argument T would be inferred as string, no longer object.</summary>
+    [Test]
+    public async Task FlagsOnlyTailThatKeepsTypeArgument(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M() => Pick("s", default(object), 5);
+
+                                  static string Pick<T>(T a, T? b = default, int c = 5)
+                                      where T : class => string.Empty;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("5");
+    }
+
+    [Test]
+    public async Task FlagsRunInConstructorCalls(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class B
+                              {
+                                  public B(int a, int b = 0, int c = 5, int d = 9)
+                                  {
+                                  }
+
+                                  static B Make() => new B(1, 0, 5, 9);
+
+                                  static B MakeShort() => new(1, 0, 5, 9);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("0, 5, 9");
+        _ = await Assert.That(source.Substring(diagnostics[1].Location.SourceSpan.Start, diagnostics[1].Location.SourceSpan.Length)).IsEqualTo("0, 5, 9");
+    }
 }

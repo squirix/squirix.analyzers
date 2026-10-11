@@ -110,10 +110,10 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             if (!ArgumentEqualsDefault(context, argument.Expression, parameter, defaultValue))
                 continue;
 
-            // A named argument can always be dropped on its own.
+            // A named argument can be dropped on its own unless a positional one follows: that one would move into its place.
             if (argument.NameColon != null)
             {
-                if (RemainsBoundAfterRemoving(context, argumentList, i, 1, withArgumentList, method))
+                if (!HasPositionalArgumentAfter(argumentList, i) && RemainsBoundAfterRemoving(context, argumentList, i, 1, withArgumentList, method))
                     context.ReportDiagnostic(Diagnostic.Create(Rule, argument.GetLocation(), parameter.Name, string.Empty));
 
                 continue;
@@ -275,6 +275,17 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    private static bool HasPositionalArgumentAfter(ArgumentListSyntax argumentList, int index)
+    {
+        for (var i = index + 1; i < argumentList.Arguments.Count; i++)
+        {
+            if (argumentList.Arguments[i].NameColon == null)
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool HasRedundantDefaultCandidate(ArgumentListSyntax? argumentList)
     {
         if (argumentList is null)
@@ -312,11 +323,73 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             rewrittenArgs = rewrittenArgs.RemoveAt(argumentIndex);
 
         var rewrittenList = argumentList.WithArguments(rewrittenArgs);
-        var rewrittenCall = withArgumentList(context.Node, rewrittenList);
-
+        var rewrittenCall = WithoutConditionalAccess(context.Node, withArgumentList(context.Node, rewrittenList));
         var speculative = context.SemanticModel.GetSpeculativeSymbolInfo(context.Node.SpanStart, rewrittenCall, SpeculativeBindingOption.BindAsExpression);
 
-        return speculative.Symbol is IMethodSymbol speculativeMethod && SymbolEqualityComparer.Default.Equals(speculativeMethod.OriginalDefinition, method.OriginalDefinition);
+        // The same method with the same type arguments: without an argument, inference may pick other ones.
+        return speculative.Symbol is IMethodSymbol speculativeMethod && SymbolEqualityComparer.Default.Equals(speculativeMethod, method);
+    }
+
+    /// <summary>
+    /// Returns the <c language="csharp">.Name</c> or <c language="csharp">[index]</c> a call chain starts from when it
+    /// continues a conditional access, as in the <c language="csharp">.Foo</c> of <c language="csharp">c?.Foo(1)</c>.
+    /// </summary>
+    private static ExpressionSyntax? GetLeadingBinding(ExpressionSyntax? expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case MemberBindingExpressionSyntax or ElementBindingExpressionSyntax:
+                    return expression;
+                case InvocationExpressionSyntax invocation:
+                    expression = invocation.Expression;
+                    break;
+                case MemberAccessExpressionSyntax access:
+                    expression = access.Expression;
+                    break;
+                case ElementAccessExpressionSyntax element:
+                    expression = element.Expression;
+                    break;
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    break;
+                case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression:
+                    expression = suppression.Operand;
+                    break;
+                default:
+                    return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Rewrites a call that follows <c language="csharp">?.</c> into a plain one on the same receiver, as in
+    /// <c language="csharp">c?.Foo(1)</c> to <c language="csharp">(c).Foo(1)</c>: a call cut out of its conditional access
+    /// cannot be bound on its own. A call that follows no <c language="csharp">?.</c> is returned as it is.
+    /// </summary>
+    private static ExpressionSyntax WithoutConditionalAccess(SyntaxNode original, ExpressionSyntax call)
+    {
+        var anchor = original;
+        for (var parent = original.Parent; parent != null; parent = parent.Parent)
+        {
+            if (parent is not ConditionalAccessExpressionSyntax conditional || !conditional.WhenNotNull.Span.Contains(anchor.Span))
+                continue;
+
+            var binding = GetLeadingBinding(call);
+            if (binding == null)
+                break;
+
+            var receiver = SyntaxFactory.ParenthesizedExpression(conditional.Expression.WithoutTrivia());
+            ExpressionSyntax access = binding is MemberBindingExpressionSyntax member
+                ? SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, receiver, member.Name)
+                : SyntaxFactory.ElementAccessExpression(receiver, ((ElementBindingExpressionSyntax)binding).ArgumentList);
+
+            call = call.ReplaceNode(binding, access);
+            anchor = conditional;
+        }
+
+        return call;
     }
 
     private static bool TrailingDefaultsCanBeOmitted(ArgumentListSyntax argumentList, int[] argumentToParameter, ImmutableArray<IParameterSymbol> parameters, int startIndex,

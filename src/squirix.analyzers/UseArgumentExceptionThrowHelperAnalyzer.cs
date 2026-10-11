@@ -62,7 +62,7 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
 
         // The helper names the parameter after the text of its argument. Where the guard throws another name, as with
         // 'options.Name' and nameof(options.Name), the name has to be passed to keep it.
-        var advice = explicitName == null ? string.Empty : $"; pass '{explicitName}' as the second argument to keep the parameter name";
+        var advice = explicitName == null ? string.Empty : $"; pass '{explicitName.NormalizeWhitespace()}' as the second argument to keep the parameter name";
         context.ReportDiagnostic(Diagnostic.Create(Rule, ifStatement.IfKeyword.GetLocation(), helperName, advice));
     }
 
@@ -173,15 +173,33 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
         var guarded = syntax.ArgumentList.Arguments[0].Expression;
         var guardedName = GetSimpleName(guarded);
         var thrownName = GetParamNameValue(paramNameExpression);
-        if (guardedName == null || thrownName == null)
-            return true;
-
-        if (!string.Equals(guardedName, thrownName, StringComparison.Ordinal))
+        if (guardedName != null && thrownName != null && !string.Equals(guardedName, thrownName, StringComparison.Ordinal))
             return false;
 
-        if (!string.Equals(guarded.ToString(), thrownName, StringComparison.Ordinal))
+        // A constant gives the thrown name as well, though only for the advice: the guards that are reported stay the same.
+        thrownName ??= context.SemanticModel.GetConstantValue(paramNameExpression, context.CancellationToken).Value as string;
+        if (thrownName != null && !string.Equals(GetCallerExpressionText(guarded), thrownName, StringComparison.Ordinal))
             explicitName = paramNameExpression;
 
         return true;
+    }
+
+    /// <summary>Returns the text the compiler captures for an argument as its caller expression: parentheses and the null-forgiving operator around it are left out.</summary>
+    private static string GetCallerExpressionText(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression:
+                    expression = suppression.Operand;
+                    continue;
+                default:
+                    return expression.ToString();
+            }
+        }
     }
 }
