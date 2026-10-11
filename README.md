@@ -81,6 +81,8 @@ auto-fix (code fix provider) yet.
 | [`SQR0031`](docs/rules/SQR0031.md) | Reliability | `NestedTaskAnalyzer`                      | Unwrap nested tasks before awaiting or returning them.               |
 | [`SQR0032`](docs/rules/SQR0032.md) | Reliability | `DiscardedTaskResultDelegateAnalyzer`     | No `Task<T>` to `Task` conversion in a delegate return.              |
 | [`SQR0033`](docs/rules/SQR0033.md) | Reliability | `FinalizerDisposeFieldAnalyzer`           | No field dereference outside `disposing` in a finalizable type.      |
+| [`SQR0034`](docs/rules/SQR0034.md) | Style       | `NoGlobalUsingAnalyzer`                   | No global using directives, including generated ones.                |
+| [`SQR0035`](docs/rules/SQR0035.md) | Style       | `NoPrimaryConstructorAnalyzer`            | No primary constructors on classes and structs.                      |
 
 ## Building
 
