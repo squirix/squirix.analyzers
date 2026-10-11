@@ -16,7 +16,7 @@ public sealed class NoPrimaryConstructorAnalyzer : DiagnosticAnalyzer
     private const string DiagnosticId = "SQR0035";
 
     private static readonly LocalizableString Description =
-        "Classes and structs declare explicit constructors instead of primary constructors, so parameters are not captured implicitly.";
+        "Classes and structs declare explicit constructors instead of primary constructors, whose parameters are captured implicitly when a member uses them.";
 
     private static readonly LocalizableString MessageFormat = "Type '{0}' uses a primary constructor; declare an explicit constructor instead";
 
