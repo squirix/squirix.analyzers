@@ -40,7 +40,7 @@ internal sealed class StructSizeEstimator
     }
 
     private static int GetFieldOffset(IFieldSymbol field) =>
-        FindAttribute(field, "FieldOffsetAttribute") is { ConstructorArguments: [{ Value: int value }] } ? value : -1;
+        GetSingleArgument(FindAttribute(field, "FieldOffsetAttribute")) is int value ? value : -1;
 
     private static Layout GetFrameworkLayout(INamedTypeSymbol type) => (type.ContainingNamespace?.ToDisplayString(), type.MetadataName) switch
     {
@@ -89,7 +89,10 @@ internal sealed class StructSizeEstimator
     }
 
     // LayoutKind.Explicit is 2; the attribute takes either the enum or a short.
-    private static bool IsExplicit(AttributeData? structLayout) => structLayout is { ConstructorArguments: [{ Value: 2 or (short)2 }] };
+    /// <summary>Returns the only constructor argument of the attribute, or null when there is no attribute or it has another number of them.</summary>
+    private static object? GetSingleArgument(AttributeData? attribute) => attribute is { ConstructorArguments: { Length: 1 } arguments } ? arguments[0].Value : null;
+
+    private static bool IsExplicit(AttributeData? structLayout) => GetSingleArgument(structLayout) is 2 or (short)2;
 
     // A tuple with element names exposes every element twice: as ItemN and under its name.
     private static bool IsTupleAlias(IFieldSymbol field) =>
@@ -124,7 +127,7 @@ internal sealed class StructSizeEstimator
         if (builder.IsEmpty && !inSource)
             return GetFrameworkLayout(type);
 
-        var length = FindAttribute(type, "InlineArrayAttribute") is { ConstructorArguments: [{ Value: int count }] } ? count : 1;
+        var length = GetSingleArgument(FindAttribute(type, "InlineArrayAttribute")) is int count ? count : 1;
         return builder.Build(length, GetIntArgument(structLayout, "Size"));
     }
 

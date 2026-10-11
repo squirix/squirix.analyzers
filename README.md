@@ -83,7 +83,7 @@ auto-fix (code fix provider) yet.
 
 ## Building
 
-Requires the .NET SDK. The analyzer target is `netstandard2.1`; the unit-test project targets `net10.0`.
+Requires the .NET SDK. The analyzer target is `netstandard2.0`; the unit-test project targets `net10.0`.
 
 ```bash
 dotnet build squirix.analyzers.slnx -c Release

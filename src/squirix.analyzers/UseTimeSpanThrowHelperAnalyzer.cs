@@ -136,7 +136,7 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
         {
             case BlockSyntax block:
             {
-                if (block.Statements is not [ThrowStatementSyntax single])
+                if (block.Statements.Count != 1 || block.Statements[0] is not ThrowStatementSyntax single)
                     return false;
 
                 throwStatement = single;

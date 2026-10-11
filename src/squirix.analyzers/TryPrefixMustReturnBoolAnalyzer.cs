@@ -111,6 +111,6 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (!IsSystemThreadingTasks(named.ContainingNamespace))
             return false;
 
-        return named.TypeArguments is [{ SpecialType: SpecialType.System_Boolean }];
+        return named.TypeArguments[0].SpecialType == SpecialType.System_Boolean;
     }
 }
