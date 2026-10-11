@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Squirix.Analyzers;
 
@@ -20,7 +21,9 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString Description = "Omit arguments that equal the parameter default; the default may change at the declaration.";
 
-    private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value";
+    private const string RunAdvice = ", and so do the arguments after it; omit them together";
+
+    private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value{1}";
 
     private static readonly LocalizableString Title = "Avoid redundant default argument values";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
@@ -107,15 +110,29 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             if (!ArgumentEqualsDefault(context, argument.Expression, parameter, defaultValue))
                 continue;
 
-            // Named args can always be dropped. Positional args only when every later
-            // argument is also a redundant optional default (otherwise binding shifts).
-            if (argument.NameColon == null && !TrailingDefaultsCanBeOmitted(argumentList, argumentToParameter, parameters, i, context))
+            // A named argument can always be dropped on its own.
+            if (argument.NameColon != null)
+            {
+                if (RemainsBoundAfterRemoving(context, argumentList, i, 1, withArgumentList, method))
+                    context.ReportDiagnostic(Diagnostic.Create(Rule, argument.GetLocation(), parameter.Name, string.Empty));
+
+                continue;
+            }
+
+            // A positional argument can go only together with everything after it: dropping it alone would hand the
+            // next argument to its parameter. So the rest of the list must be redundant defaults too, and it is
+            // reported once, as one run.
+            if (!TrailingDefaultsCanBeOmitted(argumentList, argumentToParameter, parameters, i, context))
                 continue;
 
-            if (!RemainsBoundAfterRemoving(context, argumentList, i, withArgumentList, method))
+            var count = argumentList.Arguments.Count - i;
+            if (!RemainsBoundAfterRemoving(context, argumentList, i, count, withArgumentList, method))
                 continue;
 
-            context.ReportDiagnostic(Diagnostic.Create(Rule, argument.GetLocation(), parameter.Name));
+            var last = argumentList.Arguments[argumentList.Arguments.Count - 1];
+            var location = Location.Create(argument.SyntaxTree, TextSpan.FromBounds(argument.SpanStart, last.Span.End));
+            context.ReportDiagnostic(Diagnostic.Create(Rule, location, parameter.Name, count > 1 ? RunAdvice : string.Empty));
+            return;
         }
     }
 
@@ -287,10 +304,13 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return EqualsNormalized(typeDefault, defaultValue);
     }
 
-    private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex,
+    private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex, int count,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList, IMethodSymbol method)
     {
-        var rewrittenArgs = argumentList.Arguments.RemoveAt(argumentIndex);
+        var rewrittenArgs = argumentList.Arguments;
+        for (var removed = 0; removed < count; removed++)
+            rewrittenArgs = rewrittenArgs.RemoveAt(argumentIndex);
+
         var rewrittenList = argumentList.WithArguments(rewrittenArgs);
         var rewrittenCall = withArgumentList(context.Node, rewrittenList);
 

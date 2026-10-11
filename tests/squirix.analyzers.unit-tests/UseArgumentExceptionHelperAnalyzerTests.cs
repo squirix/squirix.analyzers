@@ -257,4 +257,72 @@ public sealed class UseArgumentExceptionHelperAnalyzerTests
 
     private static string CreateSource(string throwStatement) =>
         "class C\n{\n    void M(string value, string other)\n    {\n        if (string.IsNullOrEmpty(value))\n            " + throwStatement + "\n    }\n}\n";
+
+    [Test]
+    public async Task ReportsPlainAdviceForParameter(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M(string value)
+                                  {
+                                      if (string.IsNullOrEmpty(value))
+                                          throw new System.ArgumentException("Required.", nameof(value));
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'");
+    }
+
+    /// <summary>The helper would name the parameter 'options.Name', while the guard throws 'Name'.</summary>
+    [Test]
+    public async Task AdvisesExplicitNameForMember(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class Options
+                              {
+                                  public string Name { get; set; } = "";
+                              }
+
+                              class C
+                              {
+                                  void M(Options options)
+                                  {
+                                      if (string.IsNullOrEmpty(options.Name))
+                                          throw new System.ArgumentException("Required.", nameof(options.Name));
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'; pass 'nameof(options.Name)' as the second argument to keep the parameter name");
+    }
+
+    [Test]
+    public async Task AdvisesExplicitNameForLiteral(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private string value = "";
+
+                                  void M()
+                                  {
+                                      if (string.IsNullOrEmpty(this.value))
+                                          throw new System.ArgumentException("Required.", "value");
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new UseArgumentExceptionThrowHelperAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("Use 'ArgumentException.ThrowIfNullOrEmpty' instead of an 'if' check with 'throw'; pass '\"value\"' as the second argument to keep the parameter name");
+    }
 }

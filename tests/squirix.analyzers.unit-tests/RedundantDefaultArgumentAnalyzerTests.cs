@@ -406,4 +406,111 @@ public sealed class RedundantDefaultArgumentAnalyzerTests
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
+
+    /// <summary>Dropping the first of two trailing defaults alone would hand the second one to its parameter, so the run is one finding.</summary>
+    [Test]
+    public async Task FlagsTrailingRunOnce(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M() => Foo(1, 0, 5);
+
+                                  void Foo(int a, int b = 0, int c = 5)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("The parameter 'b' has the same default value, and so do the arguments after it; omit them together");
+        _ = await Assert.That(source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length)).IsEqualTo("0, 5");
+    }
+
+    [Test]
+    public async Task FlagsLastArgumentOfMixedTail(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M() => Foo(1, 2, 5);
+
+                                  void Foo(int a, int b = 0, int c = 5)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("The parameter 'c' has the same default value");
+        _ = await Assert.That(source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length)).IsEqualTo("5");
+    }
+
+    [Test]
+    public async Task AllowsDefaultBeforeAnotherValue(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M() => Foo(1, 0, 7);
+
+                                  void Foo(int a, int b = 0, int c = 5)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>Without both arguments the call would bind to the other overload, so only the last one can go.</summary>
+    [Test]
+    public async Task FlagsSuffixThatKeepsTheOverload(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M() => Foo(1, 0, 5);
+
+                                  void Foo(int a)
+                                  {
+                                  }
+
+                                  void Foo(int a, int b = 0, int c = 5)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("The parameter 'c' has the same default value");
+        _ = await Assert.That(source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length)).IsEqualTo("5");
+    }
+
+    [Test]
+    public async Task FlagsEachNamedDefault(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M() => Foo(1, c: 5, b: 0);
+
+                                  void Foo(int a, int b = 0, int c = 5)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RedundantDefaultArgumentAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+    }
 }
