@@ -134,17 +134,55 @@ jobs:
             -   name: Test
                 run: dotnet test --project tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj --configuration Release --no-build
 
+    framework-compiler:
+        name: Framework compiler
+        runs-on: windows-latest
+        timeout-minutes: 15
+        env:
+            # The minimum supported compiler. Its package also carries the build that runs on .NET Framework, which is the one used here.
+            TOOLSET_VERSION: 5.0.0
+        steps:
+            -   name: Set Git Options
+                run: |
+                    git config --global core.autocrlf false
+                    git config --global core.eol lf
+
+            -   name: Checkout
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    persist-credentials: false
+
+            -   name: Setup .NET
+                uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+                with:
+                    global-json-file: global.json
+
+            -   name: Build Analyzer
+                run: dotnet build src/squirix.analyzers/squirix.analyzers.csproj --configuration Release --output artifacts/analyzer -p:ContinuousIntegrationBuild=true
+
+            # Visual Studio and some MSBuild setups run the compiler on .NET Framework, which loads an analyzer only when it targets netstandard2.0.
+            -   name: Compile Sample With The .NET Framework Compiler
+                shell: pwsh
+                run: |
+                    $package = 'microsoft.net.compilers.toolset'
+                    Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/$package/$env:TOOLSET_VERSION/$package.$env:TOOLSET_VERSION.nupkg" -OutFile toolset.zip
+                    Expand-Archive toolset.zip -DestinationPath toolset
+                    $output = & toolset/tasks/net472/csc.exe -nologo -target:library -out:artifacts/sample.dll -analyzer:artifacts/analyzer/squirix.analyzers.dll tests/squirix.analyzers.framework-compiler/Sample.cs 2>&1 | Out-String
+                    Write-Host $output
+                    if ($output -match 'CS8032') { throw 'The .NET Framework-hosted compiler could not load the analyzer.' }
+                    if ($output -notmatch 'warning SQR0025') { throw 'The analyzer loaded but did not report the expected SQR0025.' }
+
     ci-success:
         name: CI success
         runs-on: ubuntu-latest
         timeout-minutes: 5
-        needs: [build, format, markdownlint, min-sdk]
+        needs: [build, format, markdownlint, min-sdk, framework-compiler]
         if: always()
         steps:
             -   name: Verify Required Checks
                 run: |
                     fail=0
-                    for result in "$RESULT_BUILD" "$RESULT_FORMAT" "$RESULT_MARKDOWNLINT" "$RESULT_MIN_SDK"; do
+                    for result in "$RESULT_BUILD" "$RESULT_FORMAT" "$RESULT_MARKDOWNLINT" "$RESULT_MIN_SDK" "$RESULT_FRAMEWORK_COMPILER"; do
                         case "$result" in
                             success|skipped) ;;
                             *)
@@ -163,3 +201,4 @@ jobs:
                     RESULT_FORMAT: ${{ needs.format.result }}
                     RESULT_MARKDOWNLINT: ${{ needs.markdownlint.result }}
                     RESULT_MIN_SDK: ${{ needs.min-sdk.result }}
+                    RESULT_FRAMEWORK_COMPILER: ${{ needs.framework-compiler.result }}
