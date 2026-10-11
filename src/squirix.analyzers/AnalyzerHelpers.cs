@@ -1,5 +1,7 @@
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Squirix.Analyzers;
@@ -89,8 +91,71 @@ internal static class AnalyzerHelpers
 
         foreach (var attribute in symbol.GetAttributes())
         {
-            var name = attribute.AttributeClass?.Name;
-            if (name is "CompilerGeneratedAttribute" or "GeneratedCodeAttribute")
+            if (IsGeneratedMarker(attribute))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns whether the member is generated, for a rule that asks to run on generated code as well. A partial member
+    /// whose definition a person wrote stays hand-written when a generator adds the implementation: the generator marks
+    /// its own part, the attributes of both parts merge, and the driver then takes the whole member for generated code.
+    /// </summary>
+    internal static bool IsGeneratedMember(SymbolAnalysisContext context)
+    {
+        var symbol = context.Symbol;
+        if (!HasPartialImplementation(symbol))
+            return context.IsGeneratedCode || IsCompilerOrGenerated(symbol);
+
+        // A type marked as generated covers its members, whoever wrote their parts.
+        for (var type = symbol.ContainingType; type != null; type = type.ContainingType)
+        {
+            foreach (var attribute in type.GetAttributes())
+            {
+                if (attribute.AttributeClass?.Name == "GeneratedCodeAttribute")
+                    return true;
+            }
+        }
+
+        // Of the member's own markers only one written on the definition part counts. A definition in a generated file needs no check: the driver drops
+        // what is reported there.
+        foreach (var attribute in symbol.GetAttributes())
+        {
+            if (IsGeneratedMarker(attribute) && IsWrittenOn(attribute, symbol, context.CancellationToken))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasPartialImplementation(ISymbol symbol)
+    {
+        return symbol switch
+        {
+            IMethodSymbol method => method.PartialImplementationPart != null,
+            IPropertySymbol property => property.PartialImplementationPart != null,
+            IEventSymbol @event => @event.PartialImplementationPart != null,
+            _ => false,
+        };
+    }
+
+    private static bool IsGeneratedMarker(AttributeData attribute) => attribute.AttributeClass?.Name is "CompilerGeneratedAttribute" or "GeneratedCodeAttribute";
+
+    private static bool IsWrittenOn(AttributeData attribute, ISymbol symbol, CancellationToken cancellationToken)
+    {
+        if (attribute.ApplicationSyntaxReference is not { } application)
+            return false;
+
+        foreach (var declaration in symbol.DeclaringSyntaxReferences)
+        {
+            if (declaration.SyntaxTree != application.SyntaxTree)
+                continue;
+
+            // A field-like event is declared by its name alone; its attributes sit on the member around it.
+            var member = declaration.GetSyntax(cancellationToken).FirstAncestorOrSelf<MemberDeclarationSyntax>();
+            if ((member?.Span ?? declaration.Span).Contains(application.Span))
                 return true;
         }
 

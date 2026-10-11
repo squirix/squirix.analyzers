@@ -30,7 +30,8 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
         if (context == null)
             throw new ArgumentNullException(nameof(context));
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        // Generated code is analyzed to reach a hand-written partial member whose implementation a generator adds; the rest of it is skipped by hand.
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze);
         context.EnableConcurrentExecution();
         context.RegisterSymbolAction(AnalyzeMember, SymbolKind.Method, SymbolKind.Property, SymbolKind.Event);
     }
@@ -50,7 +51,7 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
         if (!ReferenceEquals(AnalyzerHelpers.GetPartialDefinition(symbol), symbol))
             return;
 
-        if (AnalyzerHelpers.IsCompilerOrGenerated(symbol) || IsNameDictatedByBase(symbol))
+        if (AnalyzerHelpers.IsGeneratedMember(context) || IsNameDictatedByBase(symbol))
             return;
 
         var location = AnalyzerHelpers.GetBestLocation(symbol);
