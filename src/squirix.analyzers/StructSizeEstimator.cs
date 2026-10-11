@@ -88,10 +88,10 @@ internal sealed class StructSizeEstimator
         return size == 0 ? default : new Layout(size, size < PointerSize ? size : PointerSize, false);
     }
 
-    // LayoutKind.Explicit is 2; the attribute takes either the enum or a short.
     /// <summary>Returns the only constructor argument of the attribute, or null when there is no attribute or it has another number of them.</summary>
     private static object? GetSingleArgument(AttributeData? attribute) => attribute is { ConstructorArguments: { Length: 1 } arguments } ? arguments[0].Value : null;
 
+    // LayoutKind.Explicit is 2; the attribute takes either the enum or a short.
     private static bool IsExplicit(AttributeData? structLayout) => GetSingleArgument(structLayout) is 2 or (short)2;
 
     // A tuple with element names exposes every element twice: as ItemN and under its name.

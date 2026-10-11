@@ -23,6 +23,7 @@ published version (`0.1.11` at the time of writing):
 
 The package ships the analyzer assembly under `analyzers/dotnet/cs`, so it is loaded as a Roslyn analyzer at build time.
 The minimum supported toolchain is the .NET 10 SDK (10.0.100): the analyzer is compiled against Roslyn 5.0 and loads in that compiler and any newer one.
+It targets `netstandard2.0`, so a compiler that runs on .NET Framework, as in Visual Studio, loads it as well.
 
 Rules use the default severity from their descriptor. This repository's own `.editorconfig` overrides the severity of
 some `SQR` diagnostics; copy the relevant `dotnet_diagnostic.SQRnnnn.severity` entries into the consuming repository's
