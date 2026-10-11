@@ -804,6 +804,45 @@ public sealed class DefensiveStructCopyAnalyzerTests
         _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
 
+    /// <summary>The size limit makes the rule measure the struct, and the layout attributes are found by name: one that takes an array must not break it.</summary>
+    [Test]
+    public async Task FlagsStructWithLookAlikeLayout(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+
+                              sealed class StructLayoutAttribute : Attribute
+                              {
+                                  public StructLayoutAttribute(params int[] kinds)
+                                  {
+                                  }
+
+                                  public int[] Size { get; set; } = [];
+                              }
+
+                              [StructLayout(2, Size = new[] { 64 })]
+                              struct Wide
+                              {
+                                  private long _a, _b, _c;
+
+                                  public long Sum() => _a + _b + _c;
+                              }
+
+                              class C
+                              {
+                                  private readonly Wide _wide;
+
+                                  long M() => _wide.Sum();
+                              }
+                              """;
+        var options = ImmutableDictionary.Create<string, string>().Add("SQR0029.min_struct_size", "24");
+
+        var diagnostics = await RunAsync(source, options, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
     private static async Task AssertCleanAsync(string source, CancellationToken cancellationToken)
     {
         var diagnostics = await RunAsync(source, null, cancellationToken);

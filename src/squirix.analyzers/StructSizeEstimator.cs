@@ -65,7 +65,7 @@ internal sealed class StructSizeEstimator
 
         foreach (var argument in attribute.NamedArguments)
         {
-            if (argument.Key == name && argument.Value.Value is int value)
+            if (argument.Key == name && GetValue(argument.Value) is int value)
                 return value;
         }
 
@@ -89,7 +89,13 @@ internal sealed class StructSizeEstimator
     }
 
     /// <summary>Returns the only constructor argument of the attribute, or null when there is no attribute or it has another number of them.</summary>
-    private static object? GetSingleArgument(AttributeData? attribute) => attribute is { ConstructorArguments: { Length: 1 } arguments } ? arguments[0].Value : null;
+    private static object? GetSingleArgument(AttributeData? attribute) => attribute is { ConstructorArguments: { Length: 1 } arguments } ? GetValue(arguments[0]) : null;
+
+    /// <summary>
+    /// Returns the value of an attribute argument, or null for an array. The layout attributes are found by name, so another attribute of
+    /// the same name can be taken for one of them and bring an array, which has no single value to read.
+    /// </summary>
+    private static object? GetValue(TypedConstant argument) => argument.Kind == TypedConstantKind.Array ? null : argument.Value;
 
     // LayoutKind.Explicit is 2; the attribute takes either the enum or a short.
     private static bool IsExplicit(AttributeData? structLayout) => GetSingleArgument(structLayout) is 2 or (short)2;
