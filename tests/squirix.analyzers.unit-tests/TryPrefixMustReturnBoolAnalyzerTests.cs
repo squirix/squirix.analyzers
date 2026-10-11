@@ -339,4 +339,25 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         return diagnostic.GetMessage();
     }
+
+    [Test]
+    public async Task SkipsGeneratedMember(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  [System.CodeDom.Compiler.GeneratedCode("tool", "1.0")]
+                                  int TryGet() => 0;
+
+                                  [System.Runtime.CompilerServices.CompilerGenerated]
+                                  void TryRun()
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
 }

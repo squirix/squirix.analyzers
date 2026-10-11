@@ -40,17 +40,16 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeMethod(SymbolAnalysisContext context)
     {
         var method = (IMethodSymbol)context.Symbol;
+
+        // The name and the return type come first: they rule out nearly every method, and the checks after them walk attributes and interfaces.
+        var name = method.Name;
+        if (!HasTryPrefix(name) || ReturnsBoolLike(method.ReturnType))
+            return;
+
         if (AnalyzerHelpers.IsCompilerOrGenerated(method))
             return;
 
         if (method.IsOverride || ImplementsInterfaceMember(method))
-            return;
-
-        var name = method.Name;
-        if (!HasTryPrefix(name))
-            return;
-
-        if (ReturnsBoolLike(method.ReturnType))
             return;
 
         var location = AnalyzerHelpers.GetBestLocation(method);
