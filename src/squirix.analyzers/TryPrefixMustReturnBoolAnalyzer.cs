@@ -32,7 +32,8 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (context == null)
             throw new ArgumentNullException(nameof(context));
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        // Generated code is analyzed to reach a hand-written partial method whose implementation a generator adds; the rest of it is skipped by hand.
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze);
         context.EnableConcurrentExecution();
         context.RegisterSymbolAction(AnalyzeMethod, SymbolKind.Method);
     }
@@ -50,7 +51,7 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (!ReferenceEquals(AnalyzerHelpers.GetPartialDefinition(method), method))
             return;
 
-        if (AnalyzerHelpers.IsCompilerOrGenerated(method))
+        if (AnalyzerHelpers.IsGeneratedMember(context))
             return;
 
         if (method.IsOverride || ImplementsInterfaceMember(method))
