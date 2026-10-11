@@ -45,6 +45,21 @@ internal static class AnalyzerHelpers
         return int.TryParse(raw, out var value) && value > 0 ? value : defaultValue;
     }
 
+    /// <summary>
+    /// Returns the definition part of a partial member, or the member itself. Lookups such as the implementation of an
+    /// interface member return the definition part, so the implementation part has to be compared through it.
+    /// </summary>
+    internal static ISymbol GetPartialDefinition(ISymbol symbol)
+    {
+        return symbol switch
+        {
+            IMethodSymbol { PartialDefinitionPart: { } part } => part,
+            IPropertySymbol { PartialDefinitionPart: { } part } => part,
+            IEventSymbol { PartialDefinitionPart: { } part } => part,
+            _ => symbol,
+        };
+    }
+
     internal static bool IsCompilerOrGenerated(ISymbol symbol)
     {
         if (symbol.IsImplicitlyDeclared)
