@@ -332,4 +332,25 @@ public sealed class MethodNameTooLongAnalyzerTests
 
         _ = await Assert.That(diagnostics).IsEmpty();
     }
+
+    [Test]
+    public async Task SkipsGeneratedMember(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  [System.CodeDom.Compiler.GeneratedCode("tool", "1.0")]
+                                  void AbcdefghijAbcdefghijAbcdefghijAbcdefghijK()
+                                  {
+                                  }
+
+                                  [System.Runtime.CompilerServices.CompilerGenerated]
+                                  int AbcdefghijAbcdefghijAbcdefghijAbcdefghijKP => 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MethodNameTooLongAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
 }

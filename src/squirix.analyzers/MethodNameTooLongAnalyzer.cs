@@ -41,11 +41,12 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
         if (symbol is IMethodSymbol { AssociatedSymbol: not null })
             return;
 
-        if (AnalyzerHelpers.IsCompilerOrGenerated(symbol) || IsNameDictatedByBase(symbol))
-            return;
-
+        // The length comes first: it rules out nearly every member, and the checks after it walk attributes and interfaces.
         var name = symbol.Name;
         if (name.Length <= AnalyzerLimits.MaxMethodNameLength)
+            return;
+
+        if (AnalyzerHelpers.IsCompilerOrGenerated(symbol) || IsNameDictatedByBase(symbol))
             return;
 
         var location = AnalyzerHelpers.GetBestLocation(symbol);
