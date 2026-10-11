@@ -912,4 +912,28 @@ public sealed class OmitSingleStatementBracesAnalyzerTests
 
         _ = await Assert.That(diagnostics).IsEmpty();
     }
+
+    /// <summary>Dropping both pairs at once would hand the else to the inner if, so only the inner pair is reported.</summary>
+    [Test]
+    public async Task FlagsOnlyInnerBracesBeforeElse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M(bool c, bool d, bool x)
+                                  {
+                                      if (c) { while (d) { if (x) Log(); } }
+                                      else Log();
+                                  }
+
+                                  void Log() { }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitSingleStatementBracesAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+        _ = await Assert.That(diagnostic.GetMessage()).Contains("while");
+    }
 }

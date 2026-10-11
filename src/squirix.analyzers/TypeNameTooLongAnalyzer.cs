@@ -17,7 +17,7 @@ public sealed class TypeNameTooLongAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Type name '{0}' length is {1} (limit {2})";
     private static readonly LocalizableString Title = "Avoid types with name too long";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description, HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

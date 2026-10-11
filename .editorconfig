@@ -126,8 +126,8 @@ dotnet_diagnostic.SQR0010.severity = error # skips multiline if/else/using/lock 
 dotnet_diagnostic.SQR0012.severity = error # prefer ==/!= over is/is not patterns for null checks (reverses MA0142/MA0148/MA0149)
 dotnet_diagnostic.SQR0013.severity = error # Squirix design/naming rule
 dotnet_diagnostic.SQR0014.severity = error # Squirix design/naming rule
-dotnet_diagnostic.SQR0017.severity = error # forbid TestContext.Current.CancellationToken; use DefaultCancellationToken from base test classes
-dotnet_diagnostic.SQR0018.severity = error # multiline embedded if/else-if/else bodies (except nested ifs) must use braces
+dotnet_diagnostic.SQR0017.severity = error # forbid reading the cancellation token from TestContext.Current
+dotnet_diagnostic.SQR0018.severity = error # multiline embedded if/else-if/else bodies (except nested ifs without an else) must use braces
 dotnet_diagnostic.SQR0009.severity = warning # Squirix rule (SQR0009)
 dotnet_diagnostic.SQR0011.severity = warning # Squirix rule (SQR0011)
 dotnet_diagnostic.SQR0021.severity = warning # prefer ArgumentException throw helpers over manual guards
@@ -161,6 +161,7 @@ dotnet_diagnostic.CA2213.severity = error # disposable fields should be disposed
 # ===========================================================================
 dotnet_diagnostic.RS0030.severity = error # symbol has been banned
 dotnet_diagnostic.RS0031.severity = error # symbol has been banned for use in declarations
+dotnet_diagnostic.RS1041.severity = error # the analyzer must target netstandard2.0, or a compiler hosted on .NET Framework cannot load it
 
 # ===========================================================================
 # TUnit analyzers (shipped in the TUnit package via TUnit.Core)

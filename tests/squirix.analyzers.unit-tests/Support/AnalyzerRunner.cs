@@ -12,15 +12,28 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Squirix.Analyzers.UnitTests.Support;
 
 /// <summary>Compiles C# source and returns the findings of a single analyzer.</summary>
+/// <remarks>Throws when the analyzer or the analyzer driver throws: Roslyn reports that as AD0001 or AD0002, which the ID filter would otherwise drop.</remarks>
 internal static class AnalyzerRunner
 {
+    private const string AnalyzerDriverExceptionId = "AD0002";
+
+    private const string AnalyzerExceptionId = "AD0001";
+
     private static readonly Lazy<ImmutableArray<MetadataReference>> References = new(LoadReferences);
 
     public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
         RunAsync(analyzer, source, null, cancellationToken);
 
     public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions = null,
-        CancellationToken cancellationToken = default) => RunAsync(analyzer, source, analyzerOptions, References.Value, cancellationToken);
+        CancellationToken cancellationToken = default) => RunAsync(analyzer, source, analyzerOptions, References.Value, true, cancellationToken);
+
+    /// <summary>Runs the analyzer on several files of one compilation, as with a partial type split across files.</summary>
+    public static Task<ImmutableArray<Diagnostic>> RunOnFilesAsync(DiagnosticAnalyzer analyzer, ImmutableArray<string> sources, CancellationToken cancellationToken = default) =>
+        RunAsync(analyzer, sources, null, References.Value, true, cancellationToken);
+
+    /// <summary>Runs the analyzer on source that may not compile, as an IDE does while the user types; still throws when the analyzer throws.</summary>
+    public static Task<ImmutableArray<Diagnostic>> RunOnIncompleteCodeAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
+        RunAsync(analyzer, source, null, References.Value, false, cancellationToken);
 
     /// <summary>Compiles <paramref name="library" /> into an assembly first, so <paramref name="source" /> sees its types as metadata.</summary>
     public static Task<ImmutableArray<Diagnostic>> RunWithLibraryAsync(DiagnosticAnalyzer analyzer, string library, string source, CancellationToken cancellationToken = default)
@@ -31,15 +44,26 @@ internal static class AnalyzerRunner
 
         using var image = new MemoryStream();
         _ = compilation.Emit(image, cancellationToken: cancellationToken);
-        return RunAsync(analyzer, source, null, References.Value.Add(MetadataReference.CreateFromImage(image.ToArray())), cancellationToken);
+        return RunAsync(analyzer, source, null, References.Value.Add(MetadataReference.CreateFromImage(image.ToArray())), true, cancellationToken);
     }
 
-    private static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions,
-        ImmutableArray<MetadataReference> references, CancellationToken cancellationToken)
+    private static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions,
+        ImmutableArray<MetadataReference> references, bool requireCompilableSource, CancellationToken cancellationToken) =>
+        RunAsync(analyzer, [source], analyzerOptions, references, requireCompilableSource, cancellationToken);
+
+    private static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, ImmutableArray<string> sources, ImmutableDictionary<string, string>? analyzerOptions,
+        ImmutableArray<MetadataReference> references, bool requireCompilableSource, CancellationToken cancellationToken)
     {
-        var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
-        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, references, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
-        ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
+        var trees = new List<SyntaxTree>();
+        for (var index = 0; index < sources.Length; index++)
+            trees.Add(CSharpSyntaxTree.ParseText(sources[index], path: $"File{index}.cs", cancellationToken: cancellationToken));
+
+        var kind = HasTopLevelStatements(trees[0], cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary;
+        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", trees, references, new CSharpCompilationOptions(kind, allowUnsafe: true));
+        if (requireCompilableSource)
+            ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
+        else
+            ThrowIfSourceCompiles(compilation, cancellationToken);
 
         AnalyzerOptions? options = null;
         if (analyzerOptions is { Count: > 0 })
@@ -47,6 +71,7 @@ internal static class AnalyzerRunner
 
         var withAnalyzers = compilation.WithAnalyzers([analyzer], options);
         var allDiagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync(cancellationToken);
+        ThrowIfAnalyzerThrew(allDiagnostics);
         var supportedIds = new HashSet<string>();
         foreach (var supported in analyzer.SupportedDiagnostics)
             _ = supportedIds.Add(supported.Id);
@@ -87,6 +112,30 @@ internal static class AnalyzerRunner
     }
 
     private static string ThrowTrustedAssembliesMissing() => throw new InvalidOperationException("TRUSTED_PLATFORM_ASSEMBLIES is not available.");
+
+    private static void ThrowIfAnalyzerThrew(ImmutableArray<Diagnostic> diagnostics)
+    {
+        var crashes = new List<string>();
+        foreach (var diagnostic in diagnostics)
+        {
+            if (diagnostic.Id == AnalyzerExceptionId || diagnostic.Id == AnalyzerDriverExceptionId)
+                crashes.Add(diagnostic.ToString());
+        }
+
+        if (crashes.Count > 0)
+            throw new InvalidOperationException("Analyzer threw an exception:" + Environment.NewLine + string.Join(Environment.NewLine, crashes));
+    }
+
+    private static void ThrowIfSourceCompiles(Compilation compilation, CancellationToken cancellationToken)
+    {
+        foreach (var diagnostic in compilation.GetDiagnostics(cancellationToken))
+        {
+            if (diagnostic.Severity == DiagnosticSeverity.Error)
+                return;
+        }
+
+        throw new InvalidOperationException("Incomplete-code source compiles without errors, so it no longer tests incomplete code.");
+    }
 
     private static void ThrowIfSourceDoesNotCompile(Compilation compilation, CancellationToken cancellationToken)
     {

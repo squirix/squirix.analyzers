@@ -20,7 +20,8 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString MessageFormat = "Method '{0}' has 'Try' prefix but returns '{1}', expected bool, Task<bool>, or ValueTask<bool>";
 
     private static readonly LocalizableString Title = "Try-prefixed method must return a Boolean result";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -31,7 +32,8 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (context == null)
             throw new ArgumentNullException(nameof(context));
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        // Generated code is analyzed to reach a hand-written partial method whose implementation a generator adds; the rest of it is skipped by hand.
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze);
         context.EnableConcurrentExecution();
         context.RegisterSymbolAction(AnalyzeMethod, SymbolKind.Method);
     }
@@ -39,17 +41,20 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeMethod(SymbolAnalysisContext context)
     {
         var method = (IMethodSymbol)context.Symbol;
-        if (AnalyzerHelpers.IsCompilerOrGenerated(method))
+
+        // The name and the return type come first: they rule out nearly every method, and the checks after them walk attributes and interfaces.
+        var name = method.Name;
+        if (!HasTryPrefix(name) || ReturnsBoolLike(method.ReturnType))
+            return;
+
+        // A partial method is reported once, on its definition part.
+        if (!ReferenceEquals(AnalyzerHelpers.GetPartialDefinition(method), method))
+            return;
+
+        if (AnalyzerHelpers.IsGeneratedMember(context))
             return;
 
         if (method.IsOverride || ImplementsInterfaceMember(method))
-            return;
-
-        var name = method.Name;
-        if (!HasTryPrefix(name))
-            return;
-
-        if (ReturnsBoolLike(method.ReturnType))
             return;
 
         var location = AnalyzerHelpers.GetBestLocation(method);
@@ -106,6 +111,6 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (!IsSystemThreadingTasks(named.ContainingNamespace))
             return false;
 
-        return named.TypeArguments is [{ SpecialType: SpecialType.System_Boolean }];
+        return named.TypeArguments[0].SpecialType == SpecialType.System_Boolean;
     }
 }

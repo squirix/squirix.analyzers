@@ -36,7 +36,8 @@ public sealed class SimplifyIfReturnAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Simplify this 'if' and the following statement into one conditional return";
     private static readonly LocalizableString Title = "Simplify if-return to conditional return";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

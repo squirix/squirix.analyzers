@@ -9,8 +9,9 @@ namespace Squirix.Analyzers;
 
 /// <summary>
 /// Requires braces when an if/else-if/else body is a single embedded statement that spans multiple lines.
-/// Nested if statements without braces are exempt; the leaf if is analyzed on its own node so the brace is
-/// reported at the actual multiline statement (mirrors SQR0008 for loops).
+/// A nested if without an else is exempt; it is analyzed on its own node so the brace is reported at the actual
+/// multiline statement (mirrors SQR0008 for loops). A nested if with an else is treated like any other body: without braces
+/// it is easy to misread which if the else belongs to.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class RequireMultilineIfBodyBracesAnalyzer : DiagnosticAnalyzer
@@ -19,9 +20,10 @@ public sealed class RequireMultilineIfBodyBracesAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString Description = "When an if/else-if/else body is a single embedded statement that spans multiple lines, add braces around the body.";
 
-    private static readonly LocalizableString MessageFormat = "Add braces to {0} body when the embedded statement spans multiple lines";
+    private static readonly LocalizableString MessageFormat = "Add braces to {0} body when the embedded statement spans multiple lines{1}";
     private static readonly LocalizableString Title = "Add braces to multiline embedded if/else body";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -72,14 +74,16 @@ public sealed class RequireMultilineIfBodyBracesAnalyzer : DiagnosticAnalyzer
         switch (body)
         {
             case BlockSyntax:
-            // A nested `if` without braces is analyzed on its own node; report the brace at its leaf statement.
-            case IfStatementSyntax:
+            // A nested `if` without an else is analyzed on its own node; report the brace at its leaf statement.
+            case IfStatementSyntax { Else: null }:
                 return;
         }
 
         if (!LoopStatementSyntaxHelpers.SpansMultipleLines(body))
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, body.GetFirstToken().GetLocation(), kind));
+        // The diagnostic sits on the nested `if`, so say that the braces go around it and not around its own body.
+        var advice = body is IfStatementSyntax ? "; the nested if and its else go inside them" : string.Empty;
+        context.ReportDiagnostic(Diagnostic.Create(Rule, body.GetFirstToken().GetLocation(), kind, advice));
     }
 }
