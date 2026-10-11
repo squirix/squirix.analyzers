@@ -296,16 +296,12 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
 
     private static bool CanCarryResource(ITypeSymbol? type)
     {
-        if (type == null)
-            return true;
-
-        if (type.TypeKind is TypeKind.Enum or TypeKind.Array)
-            return false;
-
-        return type.SpecialType is not (SpecialType.System_Void or SpecialType.System_Boolean or SpecialType.System_Char or SpecialType.System_SByte or SpecialType.System_Byte
+        return type == null
+            || (type.TypeKind is not (TypeKind.Enum or TypeKind.Array)
+            && type.SpecialType is not (SpecialType.System_Void or SpecialType.System_Boolean or SpecialType.System_Char or SpecialType.System_SByte or SpecialType.System_Byte
             or SpecialType.System_Int16 or SpecialType.System_UInt16 or SpecialType.System_Int32 or SpecialType.System_UInt32 or SpecialType.System_Int64
             or SpecialType.System_UInt64 or SpecialType.System_Decimal or SpecialType.System_Single or SpecialType.System_Double or SpecialType.System_String
-            or SpecialType.System_IntPtr or SpecialType.System_UIntPtr or SpecialType.System_DateTime or SpecialType.System_Enum);
+            or SpecialType.System_IntPtr or SpecialType.System_UIntPtr or SpecialType.System_DateTime or SpecialType.System_Enum));
     }
 
     private sealed class ScopeWalker
@@ -371,13 +367,11 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
 
         private string GetCallName(ExpressionSyntax expression)
         {
-            if (expression is not InvocationExpressionSyntax invocation)
-                return SemanticModel.GetTypeInfo(expression, CancellationToken).Type?.Name ?? expression.ToString();
-
-            if (SemanticModel.GetSymbolInfo(invocation, CancellationToken).Symbol is { } method)
-                return method.Name;
-
-            return invocation.Expression is MemberAccessExpressionSyntax member ? member.Name.Identifier.ValueText : invocation.Expression.ToString();
+            return expression is not InvocationExpressionSyntax invocation
+                ? SemanticModel.GetTypeInfo(expression, CancellationToken).Type?.Name ?? expression.ToString()
+                : SemanticModel.GetSymbolInfo(invocation, CancellationToken).Symbol is { } method
+                    ? method.Name
+                    : invocation.Expression is MemberAccessExpressionSyntax member ? member.Name.Identifier.ValueText : invocation.Expression.ToString();
         }
 
         private bool IsFinishedFactory(SyntaxNode node)
@@ -406,13 +400,9 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
                 if (candidate is IdentifierNameSyntax identifier
                     && SemanticModel.GetSymbolInfo(identifier, CancellationToken).Symbol is { } symbol
                     && _tainted.TryGetValue(symbol, out var taintedResource))
-                {
                     Report(candidate, identifier.Identifier.ValueText, taintedResource);
-                }
                 else if (IsTaskCall(candidate) && TryFindBound(candidate, out var resource))
-                {
                     Report(candidate, GetCallName(candidate), resource);
-                }
             }
         }
 
@@ -542,10 +532,9 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             while (expression is MemberAccessExpressionSyntax member)
                 expression = Unwrap(member.Expression);
 
-            if (expression is not IdentifierNameSyntax identifier)
-                return false;
-
-            return SemanticModel.GetSymbolInfo(identifier, CancellationToken).Symbol is { } symbol && _references.TryGetValue(symbol, out resource!);
+            return expression is IdentifierNameSyntax identifier
+                && SemanticModel.GetSymbolInfo(identifier, CancellationToken).Symbol is { } symbol
+                && _references.TryGetValue(symbol, out resource!);
         }
 
         private void Visit(SyntaxNode node)
@@ -591,9 +580,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             var expression = Unwrap(statement.Expression);
             if (expression is AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression } assignment
                 && SemanticModel.GetSymbolInfo(assignment.Left, CancellationToken).Symbol is IDiscardSymbol)
-            {
                 expression = Unwrap(assignment.Right);
-            }
 
             ReportIfBound(expression);
         }

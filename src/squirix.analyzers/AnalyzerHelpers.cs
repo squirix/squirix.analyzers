@@ -29,10 +29,7 @@ internal static class AnalyzerHelpers
     internal static int GetIntOption(SymbolAnalysisContext context, ISymbol symbol, string optionName, int defaultValue)
     {
         var tree = GetBestLocation(symbol)?.SourceTree;
-        if (tree is null)
-            return defaultValue;
-
-        return GetIntOption(context.Options, tree, optionName, defaultValue);
+        return tree == null ? defaultValue : GetIntOption(context.Options, tree, optionName, defaultValue);
     }
 
     /// <summary>
@@ -42,10 +39,7 @@ internal static class AnalyzerHelpers
     internal static int GetIntOption(AnalyzerOptions analyzerOptions, SyntaxTree tree, string optionName, int defaultValue)
     {
         var options = analyzerOptions.AnalyzerConfigOptionsProvider.GetOptions(tree);
-        if (!options.TryGetValue(optionName, out var raw))
-            return defaultValue;
-
-        return int.TryParse(raw, out var value) && value > 0 ? value : defaultValue;
+        return !options.TryGetValue(optionName, out var raw) ? defaultValue : int.TryParse(raw, out var value) && value > 0 ? value : defaultValue;
     }
 
     /// <summary>
@@ -111,13 +105,11 @@ internal static class AnalyzerHelpers
 
         // A type marked as generated covers its members, whoever wrote their parts.
         for (var type = symbol.ContainingType; type != null; type = type.ContainingType)
-        {
             foreach (var attribute in type.GetAttributes())
             {
                 if (attribute.AttributeClass?.Name == "GeneratedCodeAttribute")
                     return true;
             }
-        }
 
         // Of the member's own markers only one written on the definition part counts. A definition in a generated file needs no check: the driver drops
         // what is reported there.

@@ -135,25 +135,21 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
 
         // For a ref field, 'readonly' before 'ref' only fixes where the reference points. Whether the struct behind it can
         // change depends on the kind of reference alone, not on the holder and not on the object being initialized.
-        switch (field.RefKind)
+        return field.RefKind switch
         {
-            case RefKind.Ref:
-                return null;
-            case RefKind.RefReadOnly:
-                return field;
-        }
-
-        if (field.IsReadOnly)
-            return IsStillWritable(reference, containingSymbol) ? null : field;
-
-        // A field of a struct is as readonly as the variable that holds the struct.
-        if (field.IsStatic || reference.Instance is not { Type.IsValueType: true } owner)
-            return null;
-
-        if (owner is IInstanceReferenceOperation)
-            return containingSymbol is IMethodSymbol { IsReadOnly: true, MethodKind: not MethodKind.Constructor } ? field : null;
-
-        return GetReadOnlyVariable(owner, containingSymbol) != null ? field : null;
+            RefKind.Ref => null,
+            RefKind.RefReadOnly => field,
+            // A field of a struct is as readonly as the variable that holds the struct.
+            _ => field.IsReadOnly
+                        ? IsStillWritable(reference, containingSymbol) ? null : field
+                        : (!field.IsStatic
+                            && reference.Instance is { Type.IsValueType: true } owner
+                            && (owner is IInstanceReferenceOperation
+                                ? containingSymbol is IMethodSymbol { IsReadOnly: true, MethodKind: not MethodKind.Constructor }
+                                : GetReadOnlyVariable(owner, containingSymbol) != null))
+                            ? field
+                            : null,
+        };
     }
 
     private static bool HasAncestor<TOperation>(IOperation operation)

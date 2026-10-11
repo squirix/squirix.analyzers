@@ -80,18 +80,15 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
     private static bool CanUseEqualityOperator(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
     {
         var type = context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type;
-        if (type == null)
-            return false;
-
         // Interfaces accept '== null': no user-defined operator is visible through an interface static type,
         // so overload resolution always picks the built-in reference equality, exactly matching 'is null'.
         // Only 'object' (no sharper type available) and 'dynamic' (runtime binding) stay excluded.
         // Unconstrained (or reference-constrained) type parameters accept '== null'; value-type-constrained
         // ones do not, since the comparison would always be false.
-        if (type.TypeKind == TypeKind.TypeParameter)
-            return !type.IsValueType;
-
-        return type.SpecialType != SpecialType.System_Object && type.TypeKind != TypeKind.Dynamic;
+        return type != null
+            && (type.TypeKind == TypeKind.TypeParameter
+                ? !type.IsValueType
+                : type.SpecialType != SpecialType.System_Object && type.TypeKind != TypeKind.Dynamic);
     }
 
     /// <summary>
@@ -196,10 +193,9 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
 
         // Enum inputs qualify only when the constant is of the same enum; every other constant kind
         // (for example the literal 0) keeps its pattern form.
-        if (inputType.TypeKind == TypeKind.Enum)
-            return SymbolEqualityComparer.Default.Equals(inputType, constantType);
-
-        return IsBuiltInValueEqualityType(inputType.SpecialType) && IsBuiltInValueEqualityType(constantType.SpecialType);
+        return inputType.TypeKind == TypeKind.Enum
+            ? SymbolEqualityComparer.Default.Equals(inputType, constantType)
+            : IsBuiltInValueEqualityType(inputType.SpecialType) && IsBuiltInValueEqualityType(constantType.SpecialType);
     }
 
     private static void ReportNullArms(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
@@ -263,15 +259,11 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
     private static bool ResolvesToBuiltInNullOperator(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
     {
         var type = context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type;
-        if (type == null || type.TypeKind is TypeKind.Error or TypeKind.Unknown)
-            return false;
-
-        if (HasUserDefinedEqualityOperator(type))
-            return false;
-
-        if (type.TypeKind == TypeKind.TypeParameter)
-            return !type.IsValueType;
-
-        return type.IsReferenceType || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+        return type != null
+            && type.TypeKind is not (TypeKind.Error or TypeKind.Unknown)
+            && !HasUserDefinedEqualityOperator(type)
+            && (type.TypeKind == TypeKind.TypeParameter
+                ? !type.IsValueType
+                : type.IsReferenceType || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T);
     }
 }

@@ -61,13 +61,9 @@ public sealed class TypeNamespacePrefixAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static bool StartsWithNamespaceSegment(string typeName, string segment)
     {
-        if (typeName.Length < segment.Length)
-            return false;
-
-        if (!typeName.StartsWith(segment, StringComparison.Ordinal))
-            return false;
-
-        return typeName.Length == segment.Length || char.IsUpper(typeName[segment.Length]);
+        return typeName.Length >= segment.Length
+            && typeName.StartsWith(segment, StringComparison.Ordinal)
+            && (typeName.Length == segment.Length || char.IsUpper(typeName[segment.Length]));
     }
 
     private static bool TryGetImmediateNamespaceSegment(INamespaceSymbol? ns, out string segment)

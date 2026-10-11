@@ -400,7 +400,6 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         var pending = new Stack<IOperation>();
         pending.Push(body);
         while (pending.Count > 0)
-        {
             foreach (var child in pending.Pop().ChildOperations)
             {
                 switch (child)
@@ -415,7 +414,6 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
                         break;
                 }
             }
-        }
     }
 
     private static bool ReturnsPlainTask(ITypeSymbol? type, out INamedTypeSymbol delegateType)

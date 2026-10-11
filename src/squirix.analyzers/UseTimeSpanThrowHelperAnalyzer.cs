@@ -102,13 +102,9 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
         // which TimeSpan does not implement, so a lifted 'TimeSpan?' comparison has no
         // helper-shaped fix either.
         var operandType = context.SemanticModel.GetTypeInfo(left, context.CancellationToken).Type;
-        if (operandType == null)
-            return false;
-
-        if (operandType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
-            return false;
-
-        return operandType.ToDisplayString() == "System.TimeSpan";
+        return operandType != null
+            && operandType.OriginalDefinition.SpecialType != SpecialType.System_Nullable_T
+            && operandType.ToDisplayString() == "System.TimeSpan";
     }
 
     private static bool IsTimeSpanZero(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)

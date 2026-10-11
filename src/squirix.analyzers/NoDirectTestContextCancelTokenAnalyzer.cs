@@ -94,7 +94,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
 
     private static bool ExposesSharedCancellationToken(INamedTypeSymbol symbol)
     {
-        for (var current = symbol; current is not null; current = current.BaseType)
+        for (var current = symbol; current != null; current = current.BaseType)
         {
             if (current.TypeKind == TypeKind.Class && DeclaresCancellationTokenMember(current))
                 return true;
@@ -106,7 +106,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
     /// <summary>Returns the type that declares the code, or null for top-level statements, which have no type to derive from a test base.</summary>
     private static INamedTypeSymbol? GetContainingType(ISymbol? symbol)
     {
-        for (var current = symbol; current is not null; current = current.ContainingSymbol)
+        for (var current = symbol; current != null; current = current.ContainingSymbol)
         {
             switch (current)
             {
@@ -131,7 +131,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
             return instance;
 
         var child = instance;
-        for (var parent = instance.Parent; parent is not null; child = parent, parent = parent.Parent)
+        for (var parent = instance.Parent; parent != null; child = parent, parent = parent.Parent)
         {
             if (parent is not IConditionalAccessOperation conditional || conditional.WhenNotNull != child)
                 continue;
@@ -155,7 +155,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
             return false;
 
         var outer = inner.ContainingNamespace;
-        return outerNs is null ? outer.IsGlobalNamespace : outer.Name == outerNs && outer.ContainingNamespace is { IsGlobalNamespace: true };
+        return outerNs == null ? outer.IsGlobalNamespace : outer.Name == outerNs && outer.ContainingNamespace is { IsGlobalNamespace: true };
     }
 
     private static void Report(OperationAnalysisContext context, IPropertyReferenceOperation token, int start, string access, string advice)

@@ -62,7 +62,6 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
         var guards = new DisposingPathGuards(method.Parameters[0], type, CollectConstructorAssignedFields(type, cancellationToken), cancellationToken);
         var copies = CollectCopies(context.OperationBlocks, type, cancellationToken);
         foreach (var block in context.OperationBlocks)
-        {
             foreach (var operation in block.DescendantsAndSelf())
             {
                 switch (operation)
@@ -84,14 +83,12 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
                         break;
                 }
             }
-        }
     }
 
     private static HashSet<string> CollectConstructorAssignedFields(INamedTypeSymbol type, CancellationToken cancellationToken)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var constructor in type.InstanceConstructors)
-        {
             foreach (var reference in constructor.DeclaringSyntaxReferences)
             {
                 if (reference.GetSyntax(cancellationToken) is not ConstructorDeclarationSyntax declaration)
@@ -104,7 +101,6 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
                         _ = names.Add(name);
                 }
             }
-        }
 
         return names;
     }
@@ -117,7 +113,6 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
     {
         var copies = new Dictionary<ILocalSymbol, ISymbol>(SymbolEqualityComparer.Default);
         foreach (var block in blocks)
-        {
             foreach (var operation in block.DescendantsAndSelf())
             {
                 // A value-type local is not the reference itself: a span over a null array is empty, and unboxing throws at the cast.
@@ -136,19 +131,16 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
                 if (source != null)
                     copies[declarator.Symbol] = source;
             }
-        }
 
         if (copies.Count == 0)
             return copies;
 
         foreach (var block in blocks)
-        {
             foreach (var operation in block.DescendantsAndSelf())
             {
                 if (operation is ILocalReferenceOperation local && IsWritten(local))
                     _ = copies.Remove(local.Local);
             }
-        }
 
         return copies;
     }

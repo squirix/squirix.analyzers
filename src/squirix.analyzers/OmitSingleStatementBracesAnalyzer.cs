@@ -137,12 +137,11 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
 
     private static bool IsOmittableSingleLineBody(StatementSyntax statement, bool followedByElse)
     {
-        if (statement is not BlockSyntax block)
-            return !LoopStatementSyntaxHelpers.SpansMultipleLines(statement);
-        if (block.Statements.Count != 1)
-            return false;
-
-        return BraceRemovalGuards.CanRemoveBraces(block, followedByElse) && !LoopStatementSyntaxHelpers.SpansMultipleLines(block.Statements[0]);
+        return statement is not BlockSyntax block
+            ? !LoopStatementSyntaxHelpers.SpansMultipleLines(statement)
+            : block.Statements.Count == 1
+            && BraceRemovalGuards.CanRemoveBraces(block, followedByElse)
+            && !LoopStatementSyntaxHelpers.SpansMultipleLines(block.Statements[0]);
     }
 
     private static void ReportIfBlock(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind, bool followedByElse)

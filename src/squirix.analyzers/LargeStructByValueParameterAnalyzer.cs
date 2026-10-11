@@ -107,16 +107,11 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static bool CanBeReadOnlyReference(IParameterSymbol parameter, BaseMethodDeclarationSyntax declaration, SemanticModel semanticModel)
     {
-        if (IsPassedByReference(declaration, parameter.Name))
-            return false;
-
-        if (declaration is ConstructorDeclarationSyntax { Initializer: { } initializer } && !IsUntouched(semanticModel.AnalyzeDataFlow(initializer), parameter))
-            return false;
-
-        if (declaration.Body != null)
-            return IsUntouched(semanticModel.AnalyzeDataFlow(declaration.Body), parameter);
-
-        return declaration.ExpressionBody != null && IsUntouched(semanticModel.AnalyzeDataFlow(declaration.ExpressionBody.Expression), parameter);
+        return !IsPassedByReference(declaration, parameter.Name)
+            && (declaration is not ConstructorDeclarationSyntax { Initializer: { } initializer } || IsUntouched(semanticModel.AnalyzeDataFlow(initializer), parameter))
+            && (declaration.Body != null
+            ? IsUntouched(semanticModel.AnalyzeDataFlow(declaration.Body), parameter)
+            : declaration.ExpressionBody != null && IsUntouched(semanticModel.AnalyzeDataFlow(declaration.ExpressionBody.Expression), parameter));
     }
 
     /// <summary>
@@ -193,13 +188,11 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
         var target = method.PartialDefinitionPart ?? method;
         var type = method.ContainingType;
         foreach (var contract in type.AllInterfaces)
-        {
             foreach (var member in contract.GetMembers(method.Name))
             {
                 if (SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), target))
                     return true;
             }
-        }
 
         return false;
     }

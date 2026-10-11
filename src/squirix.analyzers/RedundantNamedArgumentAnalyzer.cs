@@ -67,9 +67,7 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
                 return;
 
             if (RemainsBoundToSameMethod(context, argumentList, i, withArgumentList, method))
-            {
                 context.ReportDiagnostic(Diagnostic.Create(Rule, argument.NameColon.GetLocation(), name));
-            }
 
             expectedIndex++;
         }
@@ -130,7 +128,7 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool HasNamedArgument(ArgumentListSyntax? argumentList)
     {
-        if (argumentList is null)
+        if (argumentList == null)
             return false;
 
         foreach (var argument in argumentList.Arguments)

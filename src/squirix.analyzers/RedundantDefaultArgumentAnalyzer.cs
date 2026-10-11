@@ -197,21 +197,13 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool EqualsNormalized(object? left, object? right)
     {
-        if (Equals(left, right))
-            return true;
-
         // Roslyn may box enum defaults as the underlying integral type.
-        if (left is Enum leftEnum && right != null)
-        {
-            return Equals(Convert.ChangeType(leftEnum, Enum.GetUnderlyingType(leftEnum.GetType()), CultureInfo.InvariantCulture), right);
-        }
-
-        if (right is Enum rightEnum && left != null)
-        {
-            return Equals(left, Convert.ChangeType(rightEnum, Enum.GetUnderlyingType(rightEnum.GetType()), CultureInfo.InvariantCulture));
-        }
-
-        return false;
+        return Equals(left, right)
+            || (left is Enum leftEnum && right != null
+                ? Equals(Convert.ChangeType(leftEnum, Enum.GetUnderlyingType(leftEnum.GetType()), CultureInfo.InvariantCulture), right)
+                : right is Enum rightEnum
+                && left != null
+                && Equals(left, Convert.ChangeType(rightEnum, Enum.GetUnderlyingType(rightEnum.GetType()), CultureInfo.InvariantCulture)));
     }
 
     private static int FindParameterIndex(ImmutableArray<IParameterSymbol> parameters, string name)
@@ -250,7 +242,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static object? GetValueTypeDefault(ITypeSymbol type)
     {
-        if (type.TypeKind is not TypeKind.Enum || type is not INamedTypeSymbol enumType)
+        if (type.TypeKind != TypeKind.Enum || type is not INamedTypeSymbol enumType)
             return GetNumericZero(type.SpecialType);
         // Enum default is 0 converted to the underlying type's zero value.
         var underlying = enumType.EnumUnderlyingType;
@@ -266,10 +258,8 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         foreach (var attribute in attributes)
         {
             var attr = attribute.AttributeClass;
-            if (attr?.Name is "OptionalAttribute" && attr.ContainingNamespace?.ToDisplayString() is "System.Runtime.InteropServices")
-            {
+            if (attr?.Name == "OptionalAttribute" && attr.ContainingNamespace?.ToDisplayString() == "System.Runtime.InteropServices")
                 return true;
-            }
         }
 
         return false;
@@ -288,7 +278,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool HasRedundantDefaultCandidate(ArgumentListSyntax? argumentList)
     {
-        if (argumentList is null)
+        if (argumentList == null)
             return false;
 
         foreach (var argument in argumentList.Arguments)
@@ -309,10 +299,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             return defaultValue is null;
 
         var typeDefault = GetValueTypeDefault(parameterType);
-        if (typeDefault is null)
-            return false;
-
-        return EqualsNormalized(typeDefault, defaultValue);
+        return typeDefault != null && EqualsNormalized(typeDefault, defaultValue);
     }
 
     private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex, int count,
@@ -416,7 +403,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         foreach (var attribute in parameter.GetAttributes())
         {
             var attr = attribute.AttributeClass;
-            if (attr?.ContainingNamespace?.ToDisplayString() is not "System.Runtime.CompilerServices")
+            if (attr?.ContainingNamespace?.ToDisplayString() != "System.Runtime.CompilerServices")
                 continue;
 
             if (attr.Name is "CallerMemberNameAttribute" or "CallerFilePathAttribute" or "CallerLineNumberAttribute" or "CallerArgumentExpressionAttribute")

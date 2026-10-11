@@ -91,27 +91,20 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
 
     private static string? GetThrowHelperName(SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
     {
-        if (condition is not InvocationExpressionSyntax invocation)
-            return null;
-
-        if (invocation.ArgumentList.Arguments.Count != 1)
-            return null;
-
         // Resolve semantically so unrelated 'IsNullOrEmpty' helpers, extension methods,
         // and 'using static' imports of non-string types are not flagged. This also
         // handles 'string', 'String', 'System.String', 'global::System.String', and aliases.
-        if (context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken).Symbol is not IMethodSymbol method)
-            return null;
-
-        if (method.ContainingType?.SpecialType != SpecialType.System_String)
-            return null;
-
-        return method.Name switch
-        {
-            "IsNullOrWhiteSpace" => "ArgumentException.ThrowIfNullOrWhiteSpace",
-            "IsNullOrEmpty" => "ArgumentException.ThrowIfNullOrEmpty",
-            _ => null,
-        };
+        return condition is InvocationExpressionSyntax invocation
+            && invocation.ArgumentList.Arguments.Count == 1
+            && context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken).Symbol is IMethodSymbol method
+            && method.ContainingType?.SpecialType == SpecialType.System_String
+            ? method.Name switch
+            {
+                "IsNullOrWhiteSpace" => "ArgumentException.ThrowIfNullOrWhiteSpace",
+                "IsNullOrEmpty" => "ArgumentException.ThrowIfNullOrEmpty",
+                _ => null,
+            }
+            : null;
     }
 
     private static bool ThrowsPlainArgumentException(SyntaxNodeAnalysisContext context, StatementSyntax statement, ExpressionSyntax condition, out ExpressionSyntax? explicitName)

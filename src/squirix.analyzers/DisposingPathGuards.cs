@@ -44,9 +44,7 @@ internal sealed class DisposingPathGuards
     internal static IOperation Unwrap(IOperation operation)
     {
         while (operation is IParenthesizedOperation or IConversionOperation { Conversion.IsUserDefined: false })
-        {
             operation = operation is IParenthesizedOperation parenthesized ? parenthesized.Operand : ((IConversionOperation)operation).Operand;
-        }
 
         return operation;
     }

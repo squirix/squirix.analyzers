@@ -72,14 +72,5 @@ public sealed class TooManyFieldsAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(Rule, location, type.Name, fieldCount, maxFields));
     }
 
-    private static bool ShouldCountField(IFieldSymbol field)
-    {
-        if (AnalyzerHelpers.IsCompilerOrGenerated(field))
-            return false;
-
-        if (field.IsConst)
-            return false;
-
-        return field is not { IsStatic: true, IsReadOnly: true };
-    }
+    private static bool ShouldCountField(IFieldSymbol field) => !AnalyzerHelpers.IsCompilerOrGenerated(field) && !field.IsConst && field is not { IsStatic: true, IsReadOnly: true };
 }
