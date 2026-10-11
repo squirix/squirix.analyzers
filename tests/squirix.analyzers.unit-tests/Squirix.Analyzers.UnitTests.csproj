@@ -9,6 +9,8 @@
         <UseAppHost>true</UseAppHost>
         <RootNamespace>Squirix.Analyzers.UnitTests</RootNamespace>
         <AssemblyName>Squirix.Analyzers.UnitTests</AssemblyName>
+        <TUnitImplicitUsings>false</TUnitImplicitUsings>
+        <TUnitAssertionsImplicitUsings>false</TUnitAssertionsImplicitUsings>
     </PropertyGroup>
 
     <ItemGroup>

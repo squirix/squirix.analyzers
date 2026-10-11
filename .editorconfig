@@ -148,6 +148,8 @@ dotnet_diagnostic.SQR0030.severity = error # await tasks that use a resource bef
 dotnet_diagnostic.SQR0031.severity = error # unwrap nested tasks before awaiting or returning them
 dotnet_diagnostic.SQR0032.severity = error # no Task<T> to Task conversion in a delegate return
 dotnet_diagnostic.SQR0033.severity = error # no field dereference outside the disposing branch in a finalizable type
+dotnet_diagnostic.SQR0034.severity = error # no global using directives, including generated ones (ImplicitUsings, TUnitImplicitUsings)
+dotnet_diagnostic.SQR0035.severity = error # no primary constructors on classes and structs
 
 # ===========================================================================
 # Microsoft code analysis (CA*) — reliability / disposal / performance / usage
