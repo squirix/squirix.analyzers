@@ -360,4 +360,59 @@ public sealed class TryPrefixMustReturnBoolAnalyzerTests
 
         _ = await Assert.That(diagnostics).IsEmpty();
     }
+
+    /// <summary>The interface dictates the name of both parts of a partial member; only the declaration in the interface is reported.</summary>
+    [Test]
+    public async Task SkipsPartialInterfaceImplementation(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              interface I
+                              {
+                                  int TryGet();
+                              }
+
+                              partial class C : I
+                              {
+                                  public partial int TryGet();
+                              }
+
+                              partial class C
+                              {
+                                  public partial int TryGet() => 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new TryPrefixMustReturnBoolAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task SkipsPartialImplementationInOtherFile(CancellationToken cancellationToken)
+    {
+        const string implementation = """
+                                      partial class C
+                                      {
+                                          public partial int TryGet() => 0;
+                                      }
+                                      """;
+
+        const string definition = """
+                                  interface I
+                                  {
+                                      int TryGet();
+                                  }
+
+                                  partial class C : I
+                                  {
+                                      public partial int TryGet();
+                                  }
+                                  """;
+
+        var diagnostics = await AnalyzerRunner.RunOnFilesAsync(new TryPrefixMustReturnBoolAnalyzer(), [implementation, definition], cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Location.SourceTree!.FilePath).IsEqualTo("File1.cs");
+    }
 }

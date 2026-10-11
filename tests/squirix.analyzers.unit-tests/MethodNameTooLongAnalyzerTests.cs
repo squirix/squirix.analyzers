@@ -353,4 +353,55 @@ public sealed class MethodNameTooLongAnalyzerTests
 
         _ = await Assert.That(diagnostics).IsEmpty();
     }
+
+    /// <summary>The interface dictates the name of both parts of a partial member; only the declaration in the interface is reported.</summary>
+    [Test]
+    public async Task SkipsPartialInterfaceImplementation(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              interface I
+                              {
+                                  void AbcdefghijAbcdefghijAbcdefghijAbcdefghijK();
+
+                                  int AbcdefghijAbcdefghijAbcdefghijAbcdefghijKP { get; }
+
+                                  event System.Action AbcdefghijAbcdefghijAbcdefghijAbcdefghijKE;
+                              }
+
+                              partial class C : I
+                              {
+                                  public partial void AbcdefghijAbcdefghijAbcdefghijAbcdefghijK();
+
+                                  public partial int AbcdefghijAbcdefghijAbcdefghijAbcdefghijKP { get; }
+
+                                  public partial event System.Action AbcdefghijAbcdefghijAbcdefghijAbcdefghijKE;
+                              }
+
+                              partial class C
+                              {
+                                  public partial void AbcdefghijAbcdefghijAbcdefghijAbcdefghijK()
+                                  {
+                                  }
+
+                                  public partial int AbcdefghijAbcdefghijAbcdefghijAbcdefghijKP => 0;
+
+                                  public partial event System.Action AbcdefghijAbcdefghijAbcdefghijAbcdefghijKE
+                                  {
+                                      add
+                                      {
+                                      }
+
+                                      remove
+                                      {
+                                      }
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MethodNameTooLongAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(3);
+        foreach (var diagnostic in diagnostics)
+            _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsLessThan(7);
+    }
 }

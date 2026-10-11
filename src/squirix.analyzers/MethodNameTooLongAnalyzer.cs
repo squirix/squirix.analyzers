@@ -76,11 +76,12 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
         if (type is null)
             return false;
 
+        var target = AnalyzerHelpers.GetPartialDefinition(symbol);
         foreach (var contract in type.AllInterfaces)
         {
             foreach (var member in contract.GetMembers(symbol.Name))
             {
-                if (SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), symbol))
+                if (SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), target))
                     return true;
             }
         }

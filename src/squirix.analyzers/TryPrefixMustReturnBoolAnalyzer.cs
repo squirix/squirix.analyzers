@@ -73,11 +73,12 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (type == null || type.TypeKind == TypeKind.Interface)
             return false;
 
+        var target = AnalyzerHelpers.GetPartialDefinition(method);
         foreach (var iface in type.AllInterfaces)
         {
             foreach (var member in iface.GetMembers(method.Name))
             {
-                if (member is IMethodSymbol && SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), method))
+                if (member is IMethodSymbol && SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), target))
                     return true;
             }
         }
