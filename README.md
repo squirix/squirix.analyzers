@@ -42,7 +42,8 @@ SQR0002.max_methods_per_type = 30
 ## Rules
 
 Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/compliant examples, lives in
-[docs/rules](docs/rules). No rule ships an auto-fix (code fix provider) yet.
+[docs/rules](docs/rules). Each diagnostic links to its page at the tag of the installed version. No rule ships an
+auto-fix (code fix provider) yet.
 
 | Rule                               | Category    | Analyzer                                  | What it enforces                                                     |
 |------------------------------------|-------------|-------------------------------------------|----------------------------------------------------------------------|

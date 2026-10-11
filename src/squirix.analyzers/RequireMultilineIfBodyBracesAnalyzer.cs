@@ -21,7 +21,8 @@ public sealed class RequireMultilineIfBodyBracesAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Add braces to {0} body when the embedded statement spans multiple lines";
     private static readonly LocalizableString Title = "Add braces to multiline embedded if/else body";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

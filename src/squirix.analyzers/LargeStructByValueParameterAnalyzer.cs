@@ -27,7 +27,8 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Parameter '{0}' copies the {2}-byte readonly struct '{1}' on every call; pass it by 'in'";
     private static readonly LocalizableString Title = "Pass large readonly structs by 'in'";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Performance", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Performance", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

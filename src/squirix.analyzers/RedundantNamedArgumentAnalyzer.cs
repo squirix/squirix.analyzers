@@ -21,7 +21,7 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString MessageFormat = "Named argument '{0}' is redundant; use a positional argument";
 
     private static readonly LocalizableString Title = "Avoid redundant named arguments";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description, HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];

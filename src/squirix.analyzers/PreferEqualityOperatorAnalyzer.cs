@@ -36,13 +36,13 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString NullCheckTitle = "Prefer '==' / '!=' over 'is' / 'is not' for null checks";
 
     private static readonly DiagnosticDescriptor NullCheckRule = new(NullCheckRuleId, NullCheckTitle, NullCheckMessage, Category, DiagnosticSeverity.Info, true,
-        NullCheckDescription);
+        NullCheckDescription, HelpLinks.For(NullCheckRuleId));
 
     private static readonly DiagnosticDescriptor IsConstantRule = new(IsConstantRuleId, IsConstantTitle, IsConstantMessage, Category, DiagnosticSeverity.Info, true,
-        IsConstantDescription);
+        IsConstantDescription, HelpLinks.For(IsConstantRuleId));
 
     private static readonly DiagnosticDescriptor IsNotConstantRule = new(IsNotConstantRuleId, IsNotConstantTitle, IsNotConstantMessage, Category, DiagnosticSeverity.Info, true,
-        IsNotConstantDescription);
+        IsNotConstantDescription, HelpLinks.For(IsNotConstantRuleId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [NullCheckRule, IsConstantRule, IsNotConstantRule];

@@ -27,7 +27,8 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "'{0}' produces a task whose result is another task; the inner task is not awaited";
     private static readonly LocalizableString Title = "Unwrap nested tasks before awaiting or returning them";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Reliability", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Reliability", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
