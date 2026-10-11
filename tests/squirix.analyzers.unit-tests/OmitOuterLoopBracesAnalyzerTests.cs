@@ -416,4 +416,32 @@ public sealed class OmitOuterLoopBracesAnalyzerTests
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
     }
+
+    /// <summary>A directive between the loop and its brace counts as well: the brace keeps the body in one piece in every configuration.</summary>
+    [Test]
+    public async Task AllowsBracesAfterDirective(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M(int[] xs, int[] ys)
+                                  {
+                                      foreach (var x in xs)
+                              #if TRACE_ON
+                              #endif
+                                      {
+                                          foreach (var y in ys) Log();
+                                      }
+                                  }
+
+                                  void Log()
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new OmitOuterLoopBracesAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
 }

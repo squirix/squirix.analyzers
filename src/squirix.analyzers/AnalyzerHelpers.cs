@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Squirix.Analyzers;
@@ -58,6 +59,27 @@ internal static class AnalyzerHelpers
             IEventSymbol { PartialDefinitionPart: { } part } => part,
             _ => symbol,
         };
+    }
+
+    /// <summary>
+    /// Returns whether a conditional compilation directive starts inside the node at or after <paramref name="from" />.
+    /// The code around such a directive is not the same in every configuration.
+    /// </summary>
+    internal static bool HasConditionalDirective(SyntaxNode node, int from)
+    {
+        if (!node.ContainsDirectives)
+            return false;
+
+        for (var directive = node.GetFirstDirective(); directive != null && directive.SpanStart < node.FullSpan.End; directive = directive.GetNextDirective())
+        {
+            if (directive.SpanStart < from)
+                continue;
+
+            if (directive.Kind() is SyntaxKind.IfDirectiveTrivia or SyntaxKind.ElifDirectiveTrivia or SyntaxKind.ElseDirectiveTrivia or SyntaxKind.EndIfDirectiveTrivia)
+                return true;
+        }
+
+        return false;
     }
 
     internal static bool IsCompilerOrGenerated(ISymbol symbol)
