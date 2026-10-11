@@ -54,7 +54,8 @@ public sealed class OmitOuterLoopBracesAnalyzer : DiagnosticAnalyzer
         if (!LoopStatementSyntaxHelpers.IsLoopStatement(only))
             return;
 
-        if (HasConditionalDirective(block))
+        // With a conditional directive inside, the statements differ between configurations, and the braces may be what keeps them together.
+        if (AnalyzerHelpers.HasConditionalDirective(block, block.FullSpan.Start))
             return;
 
         // The 'while (...)' that closes a do loop keeps a following else away from the body.
@@ -63,23 +64,5 @@ public sealed class OmitOuterLoopBracesAnalyzer : DiagnosticAnalyzer
 
         var loopKind = LoopStatementSyntaxHelpers.GetLoopKindName(context.Node);
         context.ReportDiagnostic(Diagnostic.Create(Rule, block.OpenBraceToken.GetLocation(), loopKind));
-    }
-
-    /// <summary>
-    /// Returns whether the block holds a conditional compilation directive. Its statements then differ between
-    /// configurations, and the braces may be what keeps them together.
-    /// </summary>
-    private static bool HasConditionalDirective(BlockSyntax block)
-    {
-        if (!block.ContainsDirectives)
-            return false;
-
-        for (var directive = block.GetFirstDirective(); directive != null && directive.SpanStart < block.FullSpan.End; directive = directive.GetNextDirective())
-        {
-            if (directive.Kind() is SyntaxKind.IfDirectiveTrivia or SyntaxKind.ElifDirectiveTrivia or SyntaxKind.ElseDirectiveTrivia or SyntaxKind.EndIfDirectiveTrivia)
-                return true;
-        }
-
-        return false;
     }
 }

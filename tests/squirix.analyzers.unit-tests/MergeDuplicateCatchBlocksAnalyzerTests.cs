@@ -882,6 +882,442 @@ public sealed class MergeDuplicateCatchBlocksAnalyzerTests
         _ = await Assert.That(diagnostics[0].Location.SourceSpan.Start).IsEqualTo(IndexOfCatch(source, 1));
     }
 
+    /// <summary>With the symbol defined the bodies are no longer the same.</summary>
+    [Test]
+    public async Task AllowsBodiesThatDifferUnderDirective(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.IO;
+
+                              class C
+                              {
+                                  void M(bool flag)
+                                  {
+                                      try
+                                      {
+                                          Work();
+                                      }
+                                      catch (InvalidOperationException)
+                                      {
+                              #if TRACE_ON
+                                          Other();
+                              #endif
+                                          Handle();
+                                      }
+                                      catch (ArgumentException)
+                                      {
+                                          Handle();
+                                      }
+                                  }
+
+                                  void Work()
+                                  {
+                                  }
+
+                                  void Handle()
+                                  {
+                                  }
+
+                                  void Other()
+                                  {
+                                  }
+
+                                  void Log(Exception exception)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>With the symbol defined the clause in the middle is gone, so a merged clause would catch more than the code does.</summary>
+    [Test]
+    public async Task AllowsClauseUnderDirective(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.IO;
+
+                              class C
+                              {
+                                  void M(bool flag)
+                                  {
+                                      try
+                                      {
+                                          Work();
+                                      }
+                                      catch (InvalidOperationException)
+                                      {
+                                          Handle();
+                                      }
+                              #if !TRACE_ON
+                                      catch (ArgumentException)
+                                      {
+                                          Handle();
+                                      }
+                              #endif
+                                      catch (IOException)
+                                      {
+                                          Handle();
+                                      }
+                                  }
+
+                                  void Work()
+                                  {
+                                  }
+
+                                  void Handle()
+                                  {
+                                  }
+
+                                  void Other()
+                                  {
+                                  }
+
+                                  void Log(Exception exception)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>The two clauses come and go together, so they can be merged where they stand.</summary>
+    [Test]
+    public async Task FlagsRunInsideDirective(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.IO;
+
+                              class C
+                              {
+                                  void M(bool flag)
+                                  {
+                                      try
+                                      {
+                                          Work();
+                                      }
+                                      catch (InvalidOperationException)
+                                      {
+                                          Handle();
+                                      }
+                              #if !TRACE_ON
+                                      catch (ArgumentException)
+                                      {
+                                          Handle();
+                                      }
+                                      catch (IOException)
+                                      {
+                                          Handle();
+                                      }
+                              #endif
+                                  }
+
+                                  void Work()
+                                  {
+                                  }
+
+                                  void Handle()
+                                  {
+                                  }
+
+                                  void Other()
+                                  {
+                                  }
+
+                                  void Log(Exception exception)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].GetMessage()).Contains("(ex is ArgumentException or IOException)");
+        _ = await Assert.That(diagnostics[0].Location.SourceSpan.Start).IsEqualTo(IndexOfCatch(source, 1));
+    }
+
+    /// <summary>Regions and pragmas do not change what is compiled.</summary>
+    [Test]
+    public async Task FlagsBodiesWithOtherDirectives(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.IO;
+
+                              class C
+                              {
+                                  void M(bool flag)
+                                  {
+                                      try
+                                      {
+                                          Work();
+                                      }
+                                      catch (InvalidOperationException)
+                                      {
+                              #region Handling
+                                          Handle();
+                              #endregion
+                                      }
+                                      catch (ArgumentException)
+                                      {
+                              #pragma warning disable CS0168
+                                          Handle();
+                              #pragma warning restore CS0168
+                                      }
+                                  }
+
+                                  void Work()
+                                  {
+                                  }
+
+                                  void Handle()
+                                  {
+                                  }
+
+                                  void Other()
+                                  {
+                                  }
+
+                                  void Log(Exception exception)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].GetMessage()).Contains("(ex is InvalidOperationException or ArgumentException)");
+        _ = await Assert.That(diagnostics[0].Location.SourceSpan.Start).IsEqualTo(IndexOfCatch(source, 0));
+    }
+
+    /// <summary>The second clause catches an IOException as well and handles it the same way.</summary>
+    [Test]
+    public async Task AdvisesKeepingBaseClause(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.IO;
+
+                              class C
+                              {
+                                  void M(bool flag)
+                                  {
+                                      try
+                                      {
+                                          Work();
+                                      }
+                                      catch (IOException)
+                                      {
+                                          Handle();
+                                      }
+                                      catch (Exception)
+                                      {
+                                          Handle();
+                                      }
+                                  }
+
+                                  void Work()
+                                  {
+                                  }
+
+                                  void Handle()
+                                  {
+                                  }
+
+                                  void Other()
+                                  {
+                                  }
+
+                                  void Log(Exception exception)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo(Reduced("Exception"));
+        _ = await Assert.That(diagnostic.Location.SourceSpan.Start).IsEqualTo(IndexOfCatch(source, 0));
+    }
+
+    [Test]
+    public async Task AdvisesKeepingTopmostClause(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.IO;
+
+                              class C
+                              {
+                                  void M(bool flag)
+                                  {
+                                      try
+                                      {
+                                          Work();
+                                      }
+                                      catch (FileNotFoundException)
+                                      {
+                                          Handle();
+                                      }
+                                      catch (IOException)
+                                      {
+                                          Handle();
+                                      }
+                                      catch (InvalidOperationException)
+                                      {
+                                          Handle();
+                                      }
+                                      catch (SystemException)
+                                      {
+                                          Handle();
+                                      }
+                                  }
+
+                                  void Work()
+                                  {
+                                  }
+
+                                  void Handle()
+                                  {
+                                  }
+
+                                  void Other()
+                                  {
+                                  }
+
+                                  void Log(Exception exception)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo(Reduced("SystemException"));
+        _ = await Assert.That(diagnostic.Location.SourceSpan.Start).IsEqualTo(IndexOfCatch(source, 0));
+    }
+
+    [Test]
+    public async Task LeavesDerivedTypeOutOfPattern(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.IO;
+
+                              class C
+                              {
+                                  void M(bool flag)
+                                  {
+                                      try
+                                      {
+                                          Work();
+                                      }
+                                      catch (FileNotFoundException)
+                                      {
+                                          Handle();
+                                      }
+                                      catch (IOException)
+                                      {
+                                          Handle();
+                                      }
+                                      catch (ArgumentException)
+                                      {
+                                          Handle();
+                                      }
+                                  }
+
+                                  void Work()
+                                  {
+                                  }
+
+                                  void Handle()
+                                  {
+                                  }
+
+                                  void Other()
+                                  {
+                                  }
+
+                                  void Log(Exception exception)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].GetMessage()).Contains("(ex is IOException or ArgumentException)");
+        _ = await Assert.That(diagnostics[0].Location.SourceSpan.Start).IsEqualTo(IndexOfCatch(source, 0));
+    }
+
+    /// <summary>The directive before the first clause of the run is skipped; the one in its body still counts.</summary>
+    [Test]
+    public async Task AllowsDirectiveInBodyAfterLeadingOne(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.IO;
+
+                              class C
+                              {
+                                  void M()
+                                  {
+                                      try
+                                      {
+                                          Work();
+                                      }
+                                      catch (InvalidOperationException)
+                                      {
+                                          Other();
+                                      }
+                              #if !TRACE_ON
+                                      catch (ArgumentException)
+                                      {
+                              #if TRACE_ON
+                                          Other();
+                              #endif
+                                          Handle();
+                                      }
+                                      catch (IOException)
+                                      {
+                                          Handle();
+                                      }
+                              #endif
+                                  }
+
+                                  void Work()
+                                  {
+                                  }
+
+                                  void Handle()
+                                  {
+                                  }
+
+                                  void Other()
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new MergeDuplicateCatchBlocksAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
     private static int IndexOfCatch(string source, int index)
     {
         var position = -1;
@@ -890,4 +1326,6 @@ public sealed class MergeDuplicateCatchBlocksAnalyzerTests
 
         return position;
     }
+
+    private static string Reduced(string type) => $"Consecutive catch blocks for the same body should be reduced to the one for '{type}', which catches the others as well";
 }
