@@ -127,7 +127,7 @@ dotnet_diagnostic.SQR0012.severity = error # prefer ==/!= over is/is not pattern
 dotnet_diagnostic.SQR0013.severity = error # Squirix design/naming rule
 dotnet_diagnostic.SQR0014.severity = error # Squirix design/naming rule
 dotnet_diagnostic.SQR0017.severity = error # forbid reading the cancellation token from TestContext.Current
-dotnet_diagnostic.SQR0018.severity = error # multiline embedded if/else-if/else bodies (except nested ifs) must use braces
+dotnet_diagnostic.SQR0018.severity = error # multiline embedded if/else-if/else bodies (except nested ifs without an else) must use braces
 dotnet_diagnostic.SQR0009.severity = warning # Squirix rule (SQR0009)
 dotnet_diagnostic.SQR0011.severity = warning # Squirix rule (SQR0011)
 dotnet_diagnostic.SQR0021.severity = warning # prefer ArgumentException throw helpers over manual guards
