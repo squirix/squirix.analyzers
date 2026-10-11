@@ -47,8 +47,8 @@ internal static class AnalyzerHelpers
     }
 
     /// <summary>
-    /// Returns the definition part of a partial member, or the member itself. Lookups such as the implementation of an
-    /// interface member return the definition part, so the implementation part has to be compared through it.
+    /// Returns the definition part of a partial member, or the member itself. A rule that looks at the member as a whole
+    /// reports it on this part, and lookups such as the implementation of an interface member return it as well.
     /// </summary>
     internal static ISymbol GetPartialDefinition(ISymbol symbol)
     {
