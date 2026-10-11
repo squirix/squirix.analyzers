@@ -206,94 +206,6 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static ExpressionSyntax Unwrap(ExpressionSyntax expression)
-    {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
-            expression = parenthesized.Expression;
-
-        return expression;
-    }
-
-    private static void CollectCandidates(ExpressionSyntax expression, List<ExpressionSyntax> candidates)
-    {
-        switch (expression)
-        {
-            case ParenthesizedExpressionSyntax parenthesized:
-                CollectCandidates(parenthesized.Expression, candidates);
-                break;
-            case CastExpressionSyntax cast:
-                CollectCandidates(cast.Expression, candidates);
-                break;
-            case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppress:
-                CollectCandidates(suppress.Operand, candidates);
-                break;
-            case ConditionalExpressionSyntax conditional:
-                CollectCandidates(conditional.WhenTrue, candidates);
-                CollectCandidates(conditional.WhenFalse, candidates);
-                break;
-            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.CoalesceExpression } coalesce:
-                CollectCandidates(coalesce.Left, candidates);
-                CollectCandidates(coalesce.Right, candidates);
-                break;
-            case SwitchExpressionSyntax switchExpression:
-                foreach (var arm in switchExpression.Arms)
-                    CollectCandidates(arm.Expression, candidates);
-
-                break;
-            case ConditionalAccessExpressionSyntax conditionalAccess:
-                CollectCandidates(conditionalAccess.WhenNotNull, candidates);
-                break;
-            default:
-                candidates.Add(expression);
-                break;
-        }
-    }
-
-    private static SyntaxNode GetChainRoot(SyntaxNode node)
-    {
-        while (true)
-        {
-            switch (node)
-            {
-                case MemberAccessExpressionSyntax member:
-                    node = member.Expression;
-                    break;
-                case InvocationExpressionSyntax invocation:
-                    node = invocation.Expression;
-                    break;
-                case ElementAccessExpressionSyntax element:
-                    node = element.Expression;
-                    break;
-                case ConditionalAccessExpressionSyntax conditional:
-                    node = conditional.Expression;
-                    break;
-                case ParenthesizedExpressionSyntax parenthesized:
-                    node = parenthesized.Expression;
-                    break;
-                case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppress:
-                    node = suppress.Operand;
-                    break;
-                default:
-                    return node;
-            }
-        }
-    }
-
-    private static SyntaxNode? GetConditionalReceiver(SyntaxNode call)
-    {
-        for (var node = call.Parent; node != null && node is not StatementSyntax; node = node.Parent)
-        {
-            if (node is ConditionalAccessExpressionSyntax conditional && conditional.WhenNotNull.Span.Contains(call.Span))
-                return conditional.Expression;
-        }
-
-        return null;
-    }
-
-    private static bool IsChain(SyntaxNode node) => node is MemberAccessExpressionSyntax or InvocationExpressionSyntax or ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax;
-
-    private static bool IsCall(SyntaxNode node) => node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax;
-
     private static bool CanCarryResource(ITypeSymbol? type)
     {
         return type == null
@@ -386,7 +298,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         }
 
         private bool IsTaskCall(ExpressionSyntax expression) =>
-            IsCall(expression) && IsTaskLike(SemanticModel.GetTypeInfo(expression, CancellationToken).Type) && !IsFinishedFactory(expression);
+            ExpressionChains.IsCall(expression) && IsTaskLike(SemanticModel.GetTypeInfo(expression, CancellationToken).Type) && !IsFinishedFactory(expression);
 
         private void Report(ExpressionSyntax expression, string name, ILocalSymbol resource) =>
             _context.ReportDiagnostic(Diagnostic.Create(Rule, expression.GetLocation(), name, resource.Name));
@@ -394,7 +306,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         private void ReportIfBound(ExpressionSyntax expression)
         {
             var candidates = new List<ExpressionSyntax>();
-            CollectCandidates(expression, candidates);
+            ExpressionChains.CollectCandidates(expression, candidates);
             foreach (var candidate in candidates)
             {
                 if (candidate is IdentifierNameSyntax identifier
@@ -411,7 +323,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             if (local == null || (_references.TryGetValue(local, out var self) && SymbolEqualityComparer.Default.Equals(self, local)))
                 return;
 
-            var expression = Unwrap(value);
+            var expression = ExpressionChains.Unwrap(value);
             if (TryGetChainRoot(expression, out var root) && (expression is IdentifierNameSyntax || CanCarryResource(SemanticModel.GetTypeInfo(expression, CancellationToken).Type)))
             {
                 _references[local] = root;
@@ -422,7 +334,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             _ = _references.Remove(local);
             _ = _tainted.Remove(local);
             var candidates = new List<ExpressionSyntax>();
-            CollectCandidates(expression, candidates);
+            ExpressionChains.CollectCandidates(expression, candidates);
             foreach (var candidate in candidates)
             {
                 if (candidate is IdentifierNameSyntax identifier
@@ -433,7 +345,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
-                if (!IsCall(candidate) || IsFinishedFactory(candidate) || !TryFindBound(candidate, out var resource))
+                if (!ExpressionChains.IsCall(candidate) || IsFinishedFactory(candidate) || !TryFindBound(candidate, out var resource))
                     continue;
 
                 if (IsTaskCall(candidate))
@@ -455,9 +367,9 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
             ILocalSymbol? best = null;
             if (call is InvocationExpressionSyntax invocation)
             {
-                var root = GetChainRoot(invocation.Expression);
-                if (root is MemberBindingExpressionSyntax && GetConditionalReceiver(call) is { } receiver)
-                    root = GetChainRoot(receiver);
+                var root = ExpressionChains.GetChainRoot(invocation.Expression);
+                if (root is MemberBindingExpressionSyntax && ExpressionChains.GetConditionalReceiver(call) is { } receiver)
+                    root = ExpressionChains.GetChainRoot(receiver);
 
                 if (TryResolve(root, out var receiverResource))
                     Consider(receiverResource, ref best);
@@ -500,12 +412,12 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
-            if ((IsChain(node) || IsCall(node)) && node is ExpressionSyntax expression)
+            if ((ExpressionChains.IsChain(node) || ExpressionChains.IsCall(node)) && node is ExpressionSyntax expression)
             {
                 if (IsFinishedFactory(node) || !CanCarryResource(SemanticModel.GetTypeInfo(expression, CancellationToken).Type))
                     return;
 
-                if (IsChain(node) && TryResolve(GetChainRoot(node), out var rooted))
+                if (ExpressionChains.IsChain(node) && TryResolve(ExpressionChains.GetChainRoot(node), out var rooted))
                 {
                     Consider(rooted, ref best);
                     return;
@@ -530,7 +442,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         {
             resource = null!;
             while (expression is MemberAccessExpressionSyntax member)
-                expression = Unwrap(member.Expression);
+                expression = ExpressionChains.Unwrap(member.Expression);
 
             return expression is IdentifierNameSyntax identifier
                 && SemanticModel.GetSymbolInfo(identifier, CancellationToken).Symbol is { } symbol
@@ -577,10 +489,10 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
 
         private void VisitExpressionStatement(ExpressionStatementSyntax statement)
         {
-            var expression = Unwrap(statement.Expression);
+            var expression = ExpressionChains.Unwrap(statement.Expression);
             if (expression is AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression } assignment
                 && SemanticModel.GetSymbolInfo(assignment.Left, CancellationToken).Symbol is IDiscardSymbol)
-                expression = Unwrap(assignment.Right);
+                expression = ExpressionChains.Unwrap(assignment.Right);
 
             ReportIfBound(expression);
         }
