@@ -50,14 +50,14 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
         });
     }
 
-    private static void AnalyzeInvocation(OperationAnalysisContext context, StructSizeEstimator sizes)
+    private static void AnalyzeInvocation(in OperationAnalysisContext context, StructSizeEstimator sizes)
     {
         var invocation = (IInvocationOperation)context.Operation;
         if (invocation.Instance != null)
             Analyze(context, sizes, invocation.Instance, invocation.TargetMethod, invocation.TargetMethod.Name);
     }
 
-    private static void AnalyzePropertyReference(OperationAnalysisContext context, StructSizeEstimator sizes)
+    private static void AnalyzePropertyReference(in OperationAnalysisContext context, StructSizeEstimator sizes)
     {
         var reference = (IPropertyReferenceOperation)context.Operation;
 
@@ -69,7 +69,7 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
             Analyze(context, sizes, reference.Instance, getter, reference.Property.Name);
     }
 
-    private static void Analyze(OperationAnalysisContext context, StructSizeEstimator sizes, IOperation instance, IMethodSymbol member, string memberName)
+    private static void Analyze(in OperationAnalysisContext context, StructSizeEstimator sizes, IOperation instance, IMethodSymbol member, string memberName)
     {
         if (member.IsReadOnly || member.ContainingType is not { TypeKind: TypeKind.Struct } type)
             return;

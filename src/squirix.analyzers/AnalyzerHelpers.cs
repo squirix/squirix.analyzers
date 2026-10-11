@@ -26,7 +26,7 @@ internal static class AnalyzerHelpers
     /// Reads an integer .editorconfig option for the symbol's syntax tree, returning
     /// <paramref name="defaultValue" /> when the option is absent or not a valid int.
     /// </summary>
-    internal static int GetIntOption(SymbolAnalysisContext context, ISymbol symbol, string optionName, int defaultValue)
+    internal static int GetIntOption(in SymbolAnalysisContext context, ISymbol symbol, string optionName, int defaultValue)
     {
         var tree = GetBestLocation(symbol)?.SourceTree;
         return tree == null ? defaultValue : GetIntOption(context.Options, tree, optionName, defaultValue);
@@ -97,7 +97,7 @@ internal static class AnalyzerHelpers
     /// whose definition a person wrote stays hand-written when a generator adds the implementation: the generator marks
     /// its own part, the attributes of both parts merge, and the driver then takes the whole member for generated code.
     /// </summary>
-    internal static bool IsGeneratedMember(SymbolAnalysisContext context)
+    internal static bool IsGeneratedMember(in SymbolAnalysisContext context)
     {
         var symbol = context.Symbol;
         if (!HasPartialImplementation(symbol))

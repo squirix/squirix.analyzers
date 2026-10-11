@@ -137,7 +137,7 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
     /// Builds the advice for a run of clauses with the same body. A clause whose type derives from the type of another
     /// clause of the run adds nothing: that other clause catches its exceptions and handles them the same way.
     /// </summary>
-    private static string GetAdvice(SyntaxNodeAnalysisContext context, SyntaxList<CatchClauseSyntax> catches, int start, List<string> runTypes)
+    private static string GetAdvice(in SyntaxNodeAnalysisContext context, SyntaxList<CatchClauseSyntax> catches, int start, List<string> runTypes)
     {
         var types = new ITypeSymbol?[runTypes.Count];
         for (var i = 0; i < types.Length; i++)

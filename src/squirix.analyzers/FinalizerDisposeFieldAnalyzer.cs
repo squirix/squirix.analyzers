@@ -280,7 +280,7 @@ public sealed class FinalizerDisposeFieldAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static void Report(OperationBlockAnalysisContext context, DisposingPathGuards guards, IOperation dereferenced, ISymbol subject, ISymbol named)
+    private static void Report(in OperationBlockAnalysisContext context, DisposingPathGuards guards, IOperation dereferenced, ISymbol subject, ISymbol named)
     {
         if (!guards.IsGuarded(dereferenced, subject))
             context.ReportDiagnostic(Diagnostic.Create(Rule, dereferenced.Syntax.GetLocation(), named is IEventSymbol ? "Event" : "Field", named.Name));

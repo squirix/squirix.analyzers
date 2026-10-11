@@ -56,7 +56,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeImplicitObjectCreation, SyntaxKind.ImplicitObjectCreationExpression);
     }
 
-    private static void AnalyzeArgumentList(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, IMethodSymbol method,
+    private static void AnalyzeArgumentList(in SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, IMethodSymbol method,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList)
     {
         var parameters = method.Parameters;
@@ -183,7 +183,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         AnalyzeArgumentList(context, creation.ArgumentList, method, static (node, list) => ((ObjectCreationExpressionSyntax)node).WithArgumentList(list));
     }
 
-    private static bool ArgumentEqualsDefault(SyntaxNodeAnalysisContext context, ExpressionSyntax expression, IParameterSymbol parameter, object? defaultValue)
+    private static bool ArgumentEqualsDefault(in SyntaxNodeAnalysisContext context, ExpressionSyntax expression, IParameterSymbol parameter, object? defaultValue)
     {
         // 'default' / 'default(T)' equals the parameter default only when the parameter
         // default itself is the default value of the parameter type (e.g. null for
@@ -302,7 +302,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return typeDefault != null && EqualsNormalized(typeDefault, defaultValue);
     }
 
-    private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex, int count,
+    private static bool RemainsBoundAfterRemoving(in SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex, int count,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList, IMethodSymbol method)
     {
         var rewrittenArgs = argumentList.Arguments;
@@ -380,7 +380,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool TrailingDefaultsCanBeOmitted(ArgumentListSyntax argumentList, int[] argumentToParameter, ImmutableArray<IParameterSymbol> parameters, int startIndex,
-        SyntaxNodeAnalysisContext context)
+        in SyntaxNodeAnalysisContext context)
     {
         for (var i = startIndex; i < argumentList.Arguments.Count; i++)
         {

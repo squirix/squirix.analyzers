@@ -60,7 +60,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         context.RegisterOperationAction(operationContext => AnalyzeMethodGroup(operationContext, types), OperationKind.DelegateCreation);
     }
 
-    private static void AnalyzeAwait(OperationAnalysisContext context, TaskTypes types)
+    private static void AnalyzeAwait(in OperationAnalysisContext context, TaskTypes types)
     {
         var awaitOperation = (IAwaitOperation)context.Operation;
         if (!IsResultDiscarded(awaitOperation))
@@ -74,7 +74,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
             Report(context, operand);
     }
 
-    private static void AnalyzeConversion(OperationAnalysisContext context, TaskTypes types)
+    private static void AnalyzeConversion(in OperationAnalysisContext context, TaskTypes types)
     {
         var conversion = (IConversionOperation)context.Operation;
         if (!conversion.IsImplicit || !SymbolEqualityComparer.Default.Equals(conversion.Type, types.Task))
@@ -173,7 +173,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         return operation != null && IsWhenAnyOriginOrNull(operation, types, cancellationToken, depth + 1);
     }
 
-    private static void AnalyzeWait(OperationAnalysisContext context, TaskTypes types)
+    private static void AnalyzeWait(in OperationAnalysisContext context, TaskTypes types)
     {
         var invocation = (IInvocationOperation)context.Operation;
         if (invocation is not { TargetMethod.Name: "Wait", Instance: { } instance } || !SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, types.Task))
@@ -183,7 +183,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
             Report(context, instance);
     }
 
-    private static void AnalyzeMethodGroup(OperationAnalysisContext context, TaskTypes types)
+    private static void AnalyzeMethodGroup(in OperationAnalysisContext context, TaskTypes types)
     {
         var creation = (IDelegateCreationOperation)context.Operation;
         if (creation.Target is not IMethodReferenceOperation reference)
@@ -204,7 +204,7 @@ public sealed class NestedTaskAnalyzer : DiagnosticAnalyzer
         _ => false,
     };
 
-    private static void Report(OperationAnalysisContext context, IOperation nested)
+    private static void Report(in OperationAnalysisContext context, IOperation nested)
     {
         var name = nested is IInvocationOperation invocation ? invocation.TargetMethod.Name : nested.Syntax.ToString();
         context.ReportDiagnostic(Diagnostic.Create(Rule, nested.Syntax.GetLocation(), name));

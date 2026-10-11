@@ -251,7 +251,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     /// Reports at the expression as written: with the checked and null-forgiving wrappers that have no operation of
     /// their own, and without the parentheses around the whole.
     /// </summary>
-    private static void Report(OperationAnalysisContext context, SyntaxNode lost, INamedTypeSymbol delegateType, string result)
+    private static void Report(in OperationAnalysisContext context, SyntaxNode lost, INamedTypeSymbol delegateType, string result)
     {
         while (lost.Parent is ParenthesizedExpressionSyntax or CheckedExpressionSyntax or PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression })
             lost = lost.Parent;
@@ -295,7 +295,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     /// branches of conditional, switch and null-coalescing expressions, and through a conversion that only gives such
     /// an expression its Task type. An explicit cast states the intent and ends it.
     /// </summary>
-    private static void ReportLostResults(OperationAnalysisContext context, IOperation? value, INamedTypeSymbol delegateType)
+    private static void ReportLostResults(in OperationAnalysisContext context, IOperation? value, INamedTypeSymbol delegateType)
     {
         switch (value)
         {
@@ -329,7 +329,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
     /// Visits every return of the function itself; nested lambdas and local functions have their own returns. The walk
     /// keeps its own stack, because an operation tree can be deeper than the call stack allows.
     /// </summary>
-    private static void ReportReturns(OperationAnalysisContext context, IOperation body, INamedTypeSymbol delegateType)
+    private static void ReportReturns(in OperationAnalysisContext context, IOperation body, INamedTypeSymbol delegateType)
     {
         var pending = new Stack<IOperation>();
         pending.Push(body);
@@ -401,7 +401,7 @@ public sealed class DiscardedTaskResultDelegateAnalyzer : DiagnosticAnalyzer
         private readonly SyntaxNode _place;
         private List<(string DelegateName, string Result)>? _reported;
 
-        public LossSink(OperationAnalysisContext context, SyntaxNode place)
+        public LossSink(in OperationAnalysisContext context, SyntaxNode place)
         {
             _context = context;
             _place = place;

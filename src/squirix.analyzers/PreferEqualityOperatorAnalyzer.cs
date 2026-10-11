@@ -77,7 +77,7 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static bool CanUseEqualityOperator(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
+    private static bool CanUseEqualityOperator(in SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
     {
         var type = context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type;
         // Interfaces accept '== null': no user-defined operator is visible through an interface static type,
@@ -181,7 +181,7 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
 
     private static bool IsNullLiteral(ExpressionSyntax expression) => expression.IsKind(SyntaxKind.NullLiteralExpression);
 
-    private static bool IsValueEqualityConstantComparison(SyntaxNodeAnalysisContext context, ExpressionSyntax input, ExpressionSyntax constantExpression)
+    private static bool IsValueEqualityConstantComparison(in SyntaxNodeAnalysisContext context, ExpressionSyntax input, ExpressionSyntax constantExpression)
     {
         var inputType = context.SemanticModel.GetTypeInfo(input, context.CancellationToken).Type;
         var constantType = context.SemanticModel.GetTypeInfo(constantExpression, context.CancellationToken).Type;
@@ -198,7 +198,7 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
             : IsBuiltInValueEqualityType(inputType.SpecialType) && IsBuiltInValueEqualityType(constantType.SpecialType);
     }
 
-    private static void ReportNullArms(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
+    private static void ReportNullArms(in SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern)
     {
         while (true)
         {
@@ -220,7 +220,7 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static void ReportPattern(SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern, bool negated)
+    private static void ReportPattern(in SyntaxNodeAnalysisContext context, IsPatternExpressionSyntax isPattern, PatternSyntax pattern, bool negated)
     {
         if (pattern is not ConstantPatternSyntax constantPattern)
             return;
@@ -256,7 +256,7 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(rule, pattern.GetLocation()));
     }
 
-    private static bool ResolvesToBuiltInNullOperator(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
+    private static bool ResolvesToBuiltInNullOperator(in SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
     {
         var type = context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type;
         return type != null

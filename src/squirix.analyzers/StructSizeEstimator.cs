@@ -95,7 +95,7 @@ internal sealed class StructSizeEstimator
     /// Returns the value of an attribute argument, or null for an array. The layout attributes are found by name, so another attribute of
     /// the same name can be taken for one of them and bring an array, which has no single value to read.
     /// </summary>
-    private static object? GetValue(TypedConstant argument) => argument.Kind == TypedConstantKind.Array ? null : argument.Value;
+    private static object? GetValue(in TypedConstant argument) => argument.Kind == TypedConstantKind.Array ? null : argument.Value;
 
     // LayoutKind.Explicit is 2; the attribute takes either the enum or a short.
     private static bool IsExplicit(AttributeData? structLayout) => GetSingleArgument(structLayout) is 2 or (short)2;

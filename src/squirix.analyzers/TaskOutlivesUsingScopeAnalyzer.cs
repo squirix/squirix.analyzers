@@ -83,7 +83,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         new ScopeWalker(context, resources).Walk(statement.Statement);
     }
 
-    private static bool TryGetResources(UsingStatementSyntax statement, SyntaxNodeAnalysisContext context, List<ILocalSymbol> resources)
+    private static bool TryGetResources(UsingStatementSyntax statement, in SyntaxNodeAnalysisContext context, List<ILocalSymbol> resources)
     {
         if (statement.Declaration != null)
             AddDeclaredLocals(statement.Declaration, context, resources);
@@ -94,7 +94,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         return resources.Count > 0;
     }
 
-    private static bool IsInsideOuterScope(SyntaxNode node, SyntaxNodeAnalysisContext context)
+    private static bool IsInsideOuterScope(SyntaxNode node, in SyntaxNodeAnalysisContext context)
     {
         var child = node;
         for (var parent = node.Parent; parent != null; child = parent, parent = parent.Parent)
@@ -152,7 +152,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static void AddDeclaredLocals(VariableDeclarationSyntax declaration, SyntaxNodeAnalysisContext context, List<ILocalSymbol> resources)
+    private static void AddDeclaredLocals(VariableDeclarationSyntax declaration, in SyntaxNodeAnalysisContext context, List<ILocalSymbol> resources)
     {
         foreach (var declarator in declaration.Variables)
         {
@@ -222,7 +222,7 @@ public sealed class TaskOutlivesUsingScopeAnalyzer : DiagnosticAnalyzer
         private readonly Dictionary<ISymbol, ILocalSymbol> _references = new(SymbolEqualityComparer.Default);
         private readonly Dictionary<ISymbol, ILocalSymbol> _tainted = new(SymbolEqualityComparer.Default);
 
-        public ScopeWalker(SyntaxNodeAnalysisContext context, List<ILocalSymbol> resources)
+        public ScopeWalker(in SyntaxNodeAnalysisContext context, List<ILocalSymbol> resources)
         {
             _context = context;
             foreach (var resource in resources)

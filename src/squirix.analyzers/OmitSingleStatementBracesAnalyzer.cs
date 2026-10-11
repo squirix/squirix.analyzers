@@ -144,7 +144,7 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
             && !LoopStatementSyntaxHelpers.SpansMultipleLines(block.Statements[0]);
     }
 
-    private static void ReportIfBlock(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind, bool followedByElse)
+    private static void ReportIfBlock(in SyntaxNodeAnalysisContext context, StatementSyntax body, string kind, bool followedByElse)
     {
         if (body is not BlockSyntax block || block.Statements.Count != 1)
             return;
@@ -158,7 +158,7 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(Rule, block.OpenBraceToken.GetLocation(), kind));
     }
 
-    private static void ReportSimpleEmbedded(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind)
+    private static void ReportSimpleEmbedded(in SyntaxNodeAnalysisContext context, StatementSyntax body, string kind)
     {
         if (body is not BlockSyntax block || block.Statements.Count != 1)
             return;

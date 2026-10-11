@@ -69,7 +69,7 @@ public sealed class RequireMultilineIfBodyBracesAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static void CheckBranch(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind)
+    private static void CheckBranch(in SyntaxNodeAnalysisContext context, StatementSyntax body, string kind)
     {
         switch (body)
         {

@@ -158,7 +158,7 @@ public sealed class NoDirectTestContextCancelTokenAnalyzer : DiagnosticAnalyzer
         return outerNs == null ? outer.IsGlobalNamespace : outer.Name == outerNs && outer.ContainingNamespace is { IsGlobalNamespace: true };
     }
 
-    private static void Report(OperationAnalysisContext context, IPropertyReferenceOperation token, int start, string access, string advice)
+    private static void Report(in OperationAnalysisContext context, IPropertyReferenceOperation token, int start, string access, string advice)
     {
         var location = Location.Create(token.Syntax.SyntaxTree, TextSpan.FromBounds(start, token.Syntax.Span.End));
         context.ReportDiagnostic(Diagnostic.Create(Rule, location, access, advice));

@@ -89,7 +89,7 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static string? GetThrowHelperName(SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
+    private static string? GetThrowHelperName(in SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
     {
         // Resolve semantically so unrelated 'IsNullOrEmpty' helpers, extension methods,
         // and 'using static' imports of non-string types are not flagged. This also
@@ -107,7 +107,7 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
             : null;
     }
 
-    private static bool ThrowsPlainArgumentException(SyntaxNodeAnalysisContext context, StatementSyntax statement, ExpressionSyntax condition, out ExpressionSyntax? explicitName)
+    private static bool ThrowsPlainArgumentException(in SyntaxNodeAnalysisContext context, StatementSyntax statement, ExpressionSyntax condition, out ExpressionSyntax? explicitName)
     {
         explicitName = null;
         ThrowStatementSyntax? throwStatement;

@@ -49,7 +49,7 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
         });
     }
 
-    private static void AnalyzeDeclaration(SyntaxNodeAnalysisContext context, StructSizeEstimator sizes)
+    private static void AnalyzeDeclaration(in SyntaxNodeAnalysisContext context, StructSizeEstimator sizes)
     {
         var declaration = (BaseMethodDeclarationSyntax)context.Node;
         if (!HasByValueParameter(declaration) || !HasBody(declaration) || declaration.Modifiers.Any(SyntaxKind.AsyncKeyword))
@@ -281,7 +281,7 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
     /// Returns whether a bound name is the method, an override of it (which must follow its signature), or the static
     /// form of it as an extension-block member.
     /// </summary>
-    private static bool RefersTo(SymbolInfo info, IMethodSymbol method)
+    private static bool RefersTo(in SymbolInfo info, IMethodSymbol method)
     {
         var target = Normalize(method);
         if (RefersTo(info.Symbol, target))
