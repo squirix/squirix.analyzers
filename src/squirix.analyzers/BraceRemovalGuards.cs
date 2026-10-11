@@ -18,11 +18,9 @@ internal static class BraceRemovalGuards
         var only = block.Statements[0];
 
         // Declarations, local functions and labeled statements are not valid embedded statements.
-        if (only is LocalDeclarationStatementSyntax or LocalFunctionStatementSyntax or LabeledStatementSyntax)
-            return false;
-
         // Removing the braces would re-bind a following else to an inner if.
-        return !(followedByElse && EndsInUnmatchedIf(only));
+        return only is not (LocalDeclarationStatementSyntax or LocalFunctionStatementSyntax or LabeledStatementSyntax)
+            && !(followedByElse && EndsInUnmatchedIf(only));
     }
 
     /// <summary>

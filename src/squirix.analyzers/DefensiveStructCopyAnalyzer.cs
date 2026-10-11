@@ -50,14 +50,14 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
         });
     }
 
-    private static void AnalyzeInvocation(OperationAnalysisContext context, StructSizeEstimator sizes)
+    private static void AnalyzeInvocation(in OperationAnalysisContext context, StructSizeEstimator sizes)
     {
         var invocation = (IInvocationOperation)context.Operation;
         if (invocation.Instance != null)
             Analyze(context, sizes, invocation.Instance, invocation.TargetMethod, invocation.TargetMethod.Name);
     }
 
-    private static void AnalyzePropertyReference(OperationAnalysisContext context, StructSizeEstimator sizes)
+    private static void AnalyzePropertyReference(in OperationAnalysisContext context, StructSizeEstimator sizes)
     {
         var reference = (IPropertyReferenceOperation)context.Operation;
 
@@ -69,7 +69,7 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
             Analyze(context, sizes, reference.Instance, getter, reference.Property.Name);
     }
 
-    private static void Analyze(OperationAnalysisContext context, StructSizeEstimator sizes, IOperation instance, IMethodSymbol member, string memberName)
+    private static void Analyze(in OperationAnalysisContext context, StructSizeEstimator sizes, IOperation instance, IMethodSymbol member, string memberName)
     {
         if (member.IsReadOnly || member.ContainingType is not { TypeKind: TypeKind.Struct } type)
             return;
@@ -135,25 +135,12 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
 
         // For a ref field, 'readonly' before 'ref' only fixes where the reference points. Whether the struct behind it can
         // change depends on the kind of reference alone, not on the holder and not on the object being initialized.
-        switch (field.RefKind)
+        return field.RefKind switch
         {
-            case RefKind.Ref:
-                return null;
-            case RefKind.RefReadOnly:
-                return field;
-        }
-
-        if (field.IsReadOnly)
-            return IsStillWritable(reference, containingSymbol) ? null : field;
-
-        // A field of a struct is as readonly as the variable that holds the struct.
-        if (field.IsStatic || reference.Instance is not { Type.IsValueType: true } owner)
-            return null;
-
-        if (owner is IInstanceReferenceOperation)
-            return containingSymbol is IMethodSymbol { IsReadOnly: true, MethodKind: not MethodKind.Constructor } ? field : null;
-
-        return GetReadOnlyVariable(owner, containingSymbol) != null ? field : null;
+            RefKind.Ref => null,
+            RefKind.RefReadOnly => field,
+            _ => IsReadOnlyWhereRead(reference, containingSymbol) ? field : null,
+        };
     }
 
     private static bool HasAncestor<TOperation>(IOperation operation)
@@ -173,6 +160,23 @@ public sealed class DefensiveStructCopyAnalyzer : DiagnosticAnalyzer
     /// an init accessor or an initializer of its own type, on the instance being initialized, and outside any lambda
     /// or local function.
     /// </summary>
+    /// <summary>Returns whether the struct that holds a field is itself readonly at this point: 'this' of a readonly member, or a readonly variable.</summary>
+    private static bool IsReadOnlyHolder(IOperation owner, ISymbol containingSymbol) => owner is IInstanceReferenceOperation
+        ? containingSymbol is IMethodSymbol { IsReadOnly: true, MethodKind: not MethodKind.Constructor }
+        : GetReadOnlyVariable(owner, containingSymbol) != null;
+
+    /// <summary>
+    /// Returns whether a field that is not a ref field cannot be written where it is read: it is declared readonly and is not being
+    /// initialized, or it belongs to a struct that is readonly there. A field of a struct is as readonly as the variable that holds the struct.
+    /// </summary>
+    private static bool IsReadOnlyWhereRead(IFieldReferenceOperation reference, ISymbol containingSymbol)
+    {
+        var field = reference.Field;
+        return field.IsReadOnly
+            ? !IsStillWritable(reference, containingSymbol)
+            : !field.IsStatic && reference.Instance is { Type.IsValueType: true } owner && IsReadOnlyHolder(owner, containingSymbol);
+    }
+
     private static bool IsStillWritable(IFieldReferenceOperation reference, ISymbol containingSymbol)
     {
         var field = reference.Field;

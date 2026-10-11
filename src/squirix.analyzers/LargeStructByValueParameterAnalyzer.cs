@@ -49,7 +49,7 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
         });
     }
 
-    private static void AnalyzeDeclaration(SyntaxNodeAnalysisContext context, StructSizeEstimator sizes)
+    private static void AnalyzeDeclaration(in SyntaxNodeAnalysisContext context, StructSizeEstimator sizes)
     {
         var declaration = (BaseMethodDeclarationSyntax)context.Node;
         if (!HasByValueParameter(declaration) || !HasBody(declaration) || declaration.Modifiers.Any(SyntaxKind.AsyncKeyword))
@@ -107,16 +107,11 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static bool CanBeReadOnlyReference(IParameterSymbol parameter, BaseMethodDeclarationSyntax declaration, SemanticModel semanticModel)
     {
-        if (IsPassedByReference(declaration, parameter.Name))
-            return false;
-
-        if (declaration is ConstructorDeclarationSyntax { Initializer: { } initializer } && !IsUntouched(semanticModel.AnalyzeDataFlow(initializer), parameter))
-            return false;
-
-        if (declaration.Body != null)
-            return IsUntouched(semanticModel.AnalyzeDataFlow(declaration.Body), parameter);
-
-        return declaration.ExpressionBody != null && IsUntouched(semanticModel.AnalyzeDataFlow(declaration.ExpressionBody.Expression), parameter);
+        return !IsPassedByReference(declaration, parameter.Name)
+            && (declaration is not ConstructorDeclarationSyntax { Initializer: { } initializer } || IsUntouched(semanticModel.AnalyzeDataFlow(initializer), parameter))
+            && (declaration.Body != null
+            ? IsUntouched(semanticModel.AnalyzeDataFlow(declaration.Body), parameter)
+            : declaration.ExpressionBody != null && IsUntouched(semanticModel.AnalyzeDataFlow(declaration.ExpressionBody.Expression), parameter));
     }
 
     /// <summary>
@@ -193,13 +188,11 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
         var target = method.PartialDefinitionPart ?? method;
         var type = method.ContainingType;
         foreach (var contract in type.AllInterfaces)
-        {
             foreach (var member in contract.GetMembers(method.Name))
             {
                 if (SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), target))
                     return true;
             }
-        }
 
         return false;
     }
@@ -288,7 +281,7 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
     /// Returns whether a bound name is the method, an override of it (which must follow its signature), or the static
     /// form of it as an extension-block member.
     /// </summary>
-    private static bool RefersTo(SymbolInfo info, IMethodSymbol method)
+    private static bool RefersTo(in SymbolInfo info, IMethodSymbol method)
     {
         var target = Normalize(method);
         if (RefersTo(info.Symbol, target))

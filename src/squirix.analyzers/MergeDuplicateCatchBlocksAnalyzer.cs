@@ -99,28 +99,20 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static bool CanMerge(CatchClauseSyntax clause, int directivesFrom)
     {
-        if (clause.Declaration == null)
-            return false;
-
-        if (clause.Filter != null)
-            return false;
-
-        if (AnalyzerHelpers.HasConditionalDirective(clause, directivesFrom))
-            return false;
-
-        return !ExceptionVariableIsReferenced(clause);
+        return clause.Declaration != null
+            && clause.Filter == null
+            && !AnalyzerHelpers.HasConditionalDirective(clause, directivesFrom)
+            && !ExceptionVariableIsReferenced(clause);
     }
 
     private static bool DerivesFromAnother(ITypeSymbol?[] types, int index)
     {
         for (var ancestor = types[index]?.BaseType; ancestor != null; ancestor = ancestor.BaseType)
-        {
             for (var other = 0; other < types.Length; other++)
             {
                 if (other != index && SymbolEqualityComparer.Default.Equals(ancestor, types[other]))
                     return true;
             }
-        }
 
         return false;
     }
@@ -128,7 +120,7 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
     private static bool ExceptionVariableIsReferenced(CatchClauseSyntax clause)
     {
         var identifier = clause.Declaration?.Identifier;
-        if (identifier is null || identifier.Value.IsMissing || string.IsNullOrEmpty(identifier.Value.ValueText))
+        if (identifier == null || identifier.Value.IsMissing || string.IsNullOrEmpty(identifier.Value.ValueText))
             return false;
 
         var name = identifier.Value.ValueText;
@@ -145,7 +137,7 @@ public sealed class MergeDuplicateCatchBlocksAnalyzer : DiagnosticAnalyzer
     /// Builds the advice for a run of clauses with the same body. A clause whose type derives from the type of another
     /// clause of the run adds nothing: that other clause catches its exceptions and handles them the same way.
     /// </summary>
-    private static string GetAdvice(SyntaxNodeAnalysisContext context, SyntaxList<CatchClauseSyntax> catches, int start, List<string> runTypes)
+    private static string GetAdvice(in SyntaxNodeAnalysisContext context, SyntaxList<CatchClauseSyntax> catches, int start, List<string> runTypes)
     {
         var types = new ITypeSymbol?[runTypes.Count];
         for (var i = 0; i < types.Length; i++)

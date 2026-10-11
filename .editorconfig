@@ -114,6 +114,7 @@ resharper_redundant_argument_default_value_highlighting = warning # parameter ha
 # ===========================================================================
 # Squirix analyzers (SQR*) — this package's own rules
 # ===========================================================================
+# Every rule is an error here: the tests are checked by the build of this repository, the analyzer source by the last published package.
 dotnet_diagnostic.SQR0001.severity = error # outer for/foreach/while/do must omit braces when body is only a nested loop
 dotnet_diagnostic.SQR0002.severity = error # design/naming limit (SQR0002-SQR0007); threshold via SQR0002.max_methods_per_type (default 20)
 dotnet_diagnostic.SQR0003.severity = error # design/naming limit (SQR0002-SQR0007)
@@ -122,18 +123,31 @@ dotnet_diagnostic.SQR0005.severity = error # design/naming limit (SQR0002-SQR000
 dotnet_diagnostic.SQR0006.severity = error # design/naming limit (SQR0002-SQR0007)
 dotnet_diagnostic.SQR0007.severity = error # design / naming limits (SQR0002-SQR0007)
 dotnet_diagnostic.SQR0008.severity = error # multiline embedded loop bodies (except nested loops) must use braces
+dotnet_diagnostic.SQR0009.severity = error # prefer positional arguments; drop names given in declaration order
 dotnet_diagnostic.SQR0010.severity = error # skips multiline if/else/using/lock embedded bodies (only single-line bodies gated)
+dotnet_diagnostic.SQR0011.severity = error # omit arguments equal to the parameter default
 dotnet_diagnostic.SQR0012.severity = error # prefer ==/!= over is/is not patterns for null checks (reverses MA0142/MA0148/MA0149)
-dotnet_diagnostic.SQR0013.severity = error # Squirix design/naming rule
-dotnet_diagnostic.SQR0014.severity = error # Squirix design/naming rule
+dotnet_diagnostic.SQR0013.severity = error # prefer == over is when comparing to a constant
+dotnet_diagnostic.SQR0014.severity = error # prefer != over is not when comparing to a constant
+dotnet_diagnostic.SQR0015.severity = error # dispose guard must be an int flag toggled through Interlocked
+dotnet_diagnostic.SQR0016.severity = error # int dispose flag only through Interlocked/Volatile
 dotnet_diagnostic.SQR0017.severity = error # forbid reading the cancellation token from TestContext.Current
 dotnet_diagnostic.SQR0018.severity = error # multiline embedded if/else-if/else bodies (except nested ifs without an else) must use braces
-dotnet_diagnostic.SQR0009.severity = warning # Squirix rule (SQR0009)
-dotnet_diagnostic.SQR0011.severity = warning # Squirix rule (SQR0011)
-dotnet_diagnostic.SQR0021.severity = warning # prefer ArgumentException throw helpers over manual guards
-dotnet_diagnostic.SQR0022.severity = warning # TimeSpan range guards must route the throw through a throw-helper method (BCL ThrowIf* require INumberBase<T>; use a project helper)
-dotnet_diagnostic.SQR0023.severity = warning # prefer ArgumentNullException.ThrowIfNull over null-coalescing throw
-dotnet_diagnostic.SQR0024.severity = warning # prefer a throw-helper method over null-coalescing throw
+dotnet_diagnostic.SQR0019.severity = error # no allocating exception asserts
+dotnet_diagnostic.SQR0020.severity = error # merge consecutive catch blocks with identical bodies
+dotnet_diagnostic.SQR0021.severity = error # prefer ArgumentException throw helpers over manual guards
+dotnet_diagnostic.SQR0022.severity = error # TimeSpan range guards must route the throw through a throw-helper method (BCL ThrowIf* require INumberBase<T>; use a project helper)
+dotnet_diagnostic.SQR0023.severity = error # prefer ArgumentNullException.ThrowIfNull over null-coalescing throw
+dotnet_diagnostic.SQR0024.severity = error # prefer a throw-helper method over null-coalescing throw
+dotnet_diagnostic.SQR0025.severity = error # Try-prefixed method must return bool, Task<bool> or ValueTask<bool>
+dotnet_diagnostic.SQR0026.severity = error # simplify if-return to one conditional return
+dotnet_diagnostic.SQR0027.severity = error # set DisposeHttpClient when GrpcChannelOptions gets an owned handler
+dotnet_diagnostic.SQR0028.severity = error # pass readonly structs above 16 bytes by 'in'
+dotnet_diagnostic.SQR0029.severity = error # no non-readonly struct members through readonly variables
+dotnet_diagnostic.SQR0030.severity = error # await tasks that use a resource before its using scope ends
+dotnet_diagnostic.SQR0031.severity = error # unwrap nested tasks before awaiting or returning them
+dotnet_diagnostic.SQR0032.severity = error # no Task<T> to Task conversion in a delegate return
+dotnet_diagnostic.SQR0033.severity = error # no field dereference outside the disposing branch in a finalizable type
 
 # ===========================================================================
 # Microsoft code analysis (CA*) — reliability / disposal / performance / usage

@@ -75,7 +75,7 @@ public sealed class CoalesceThrowIfNullAnalyzer : DiagnosticAnalyzer
     /// True when the left side is a parameter and the exception carries only the matching parameter name, so the
     /// rewrite to <c language="csharp">ThrowIfNull</c> preserves the exception exactly.
     /// </summary>
-    private static bool IsPlainParameterGuard(SyntaxNodeAnalysisContext context, BinaryExpressionSyntax coalesce, ObjectCreationExpressionSyntax creation)
+    private static bool IsPlainParameterGuard(in SyntaxNodeAnalysisContext context, BinaryExpressionSyntax coalesce, ObjectCreationExpressionSyntax creation)
     {
         if (coalesce.Left is not IdentifierNameSyntax identifier)
             return false;

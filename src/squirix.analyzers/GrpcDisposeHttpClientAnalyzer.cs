@@ -164,22 +164,14 @@ public sealed class GrpcDisposeHttpClientAnalyzer : DiagnosticAnalyzer
     private static bool IsOwnedDisposable(ExpressionSyntax value, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         var expression = Unwrap(value);
-        if (IsOwningExpression(expression))
-            return IsDisposable(semanticModel.GetTypeInfo(expression, cancellationToken).Type);
-
-        if (expression is not IdentifierNameSyntax)
-            return false;
-
-        if (semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol is not ILocalSymbol { DeclaringSyntaxReferences.Length: > 0 } local)
-            return false;
-
-        if (local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax { Initializer: { } initializer } declarator)
-            return false;
-
-        if (IsUsingDeclared(declarator))
-            return false;
-
-        return IsOwningExpression(Unwrap(initializer.Value)) && IsDisposable(local.Type);
+        return IsOwningExpression(expression)
+            ? IsDisposable(semanticModel.GetTypeInfo(expression, cancellationToken).Type)
+            : expression is IdentifierNameSyntax
+            && semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol is ILocalSymbol { DeclaringSyntaxReferences.Length: > 0 } local
+            && local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is VariableDeclaratorSyntax { Initializer: { } initializer } declarator
+            && !IsUsingDeclared(declarator)
+            && IsOwningExpression(Unwrap(initializer.Value))
+            && IsDisposable(local.Type);
     }
 
     private static bool IsOwningExpression(ExpressionSyntax expression) => expression is BaseObjectCreationExpressionSyntax or InvocationExpressionSyntax;

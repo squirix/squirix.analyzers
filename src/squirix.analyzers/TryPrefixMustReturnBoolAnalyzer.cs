@@ -79,13 +79,11 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
             return false;
 
         foreach (var iface in type.AllInterfaces)
-        {
             foreach (var member in iface.GetMembers(method.Name))
             {
                 if (member is IMethodSymbol && SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), method))
                     return true;
             }
-        }
 
         return false;
     }
@@ -99,18 +97,10 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static bool ReturnsBoolLike(ITypeSymbol type)
     {
-        if (type.SpecialType == SpecialType.System_Boolean)
-            return true;
-
-        if (type is not INamedTypeSymbol { Arity: 1 } named)
-            return false;
-
-        if (named.Name != "Task" && named.Name != "ValueTask")
-            return false;
-
-        if (!IsSystemThreadingTasks(named.ContainingNamespace))
-            return false;
-
-        return named.TypeArguments[0].SpecialType == SpecialType.System_Boolean;
+        return type.SpecialType == SpecialType.System_Boolean
+            || (type is INamedTypeSymbol { Arity: 1 } named
+            && (named.Name == "Task" || named.Name == "ValueTask")
+            && IsSystemThreadingTasks(named.ContainingNamespace)
+            && named.TypeArguments[0].SpecialType == SpecialType.System_Boolean);
     }
 }
