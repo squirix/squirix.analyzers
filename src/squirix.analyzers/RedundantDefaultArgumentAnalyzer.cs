@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Squirix.Analyzers;
 
@@ -20,7 +21,9 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString Description = "Omit arguments that equal the parameter default; the default may change at the declaration.";
 
-    private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value";
+    private const string RunAdvice = ", and so do the arguments after it; omit them together";
+
+    private static readonly LocalizableString MessageFormat = "The parameter '{0}' has the same default value{1}";
 
     private static readonly LocalizableString Title = "Avoid redundant default argument values";
     private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Info, true, Description);
@@ -107,15 +110,29 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             if (!ArgumentEqualsDefault(context, argument.Expression, parameter, defaultValue))
                 continue;
 
-            // Named args can always be dropped. Positional args only when every later
-            // argument is also a redundant optional default (otherwise binding shifts).
-            if (argument.NameColon == null && !TrailingDefaultsCanBeOmitted(argumentList, argumentToParameter, parameters, i, context))
+            // A named argument can be dropped on its own unless a positional one follows: that one would move into its place.
+            if (argument.NameColon != null)
+            {
+                if (!HasPositionalArgumentAfter(argumentList, i) && RemainsBoundAfterRemoving(context, argumentList, i, 1, withArgumentList, method))
+                    context.ReportDiagnostic(Diagnostic.Create(Rule, argument.GetLocation(), parameter.Name, string.Empty));
+
+                continue;
+            }
+
+            // A positional argument can go only together with everything after it: dropping it alone would hand the
+            // next argument to its parameter. So the rest of the list must be redundant defaults too, and it is
+            // reported once, as one run.
+            if (!TrailingDefaultsCanBeOmitted(argumentList, argumentToParameter, parameters, i, context))
                 continue;
 
-            if (!RemainsBoundAfterRemoving(context, argumentList, i, withArgumentList, method))
+            var count = argumentList.Arguments.Count - i;
+            if (!RemainsBoundAfterRemoving(context, argumentList, i, count, withArgumentList, method))
                 continue;
 
-            context.ReportDiagnostic(Diagnostic.Create(Rule, argument.GetLocation(), parameter.Name));
+            var last = argumentList.Arguments[argumentList.Arguments.Count - 1];
+            var location = Location.Create(argument.SyntaxTree, TextSpan.FromBounds(argument.SpanStart, last.Span.End));
+            context.ReportDiagnostic(Diagnostic.Create(Rule, location, parameter.Name, count > 1 ? RunAdvice : string.Empty));
+            return;
         }
     }
 
@@ -258,6 +275,17 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    private static bool HasPositionalArgumentAfter(ArgumentListSyntax argumentList, int index)
+    {
+        for (var i = index + 1; i < argumentList.Arguments.Count; i++)
+        {
+            if (argumentList.Arguments[i].NameColon == null)
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool HasRedundantDefaultCandidate(ArgumentListSyntax? argumentList)
     {
         if (argumentList is null)
@@ -287,16 +315,81 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         return EqualsNormalized(typeDefault, defaultValue);
     }
 
-    private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex,
+    private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex, int count,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList, IMethodSymbol method)
     {
-        var rewrittenArgs = argumentList.Arguments.RemoveAt(argumentIndex);
-        var rewrittenList = argumentList.WithArguments(rewrittenArgs);
-        var rewrittenCall = withArgumentList(context.Node, rewrittenList);
+        var rewrittenArgs = argumentList.Arguments;
+        for (var removed = 0; removed < count; removed++)
+            rewrittenArgs = rewrittenArgs.RemoveAt(argumentIndex);
 
+        var rewrittenList = argumentList.WithArguments(rewrittenArgs);
+        var rewrittenCall = WithoutConditionalAccess(context.Node, withArgumentList(context.Node, rewrittenList));
         var speculative = context.SemanticModel.GetSpeculativeSymbolInfo(context.Node.SpanStart, rewrittenCall, SpeculativeBindingOption.BindAsExpression);
 
-        return speculative.Symbol is IMethodSymbol speculativeMethod && SymbolEqualityComparer.Default.Equals(speculativeMethod.OriginalDefinition, method.OriginalDefinition);
+        // The same method with the same type arguments: without an argument, inference may pick other ones.
+        return speculative.Symbol is IMethodSymbol speculativeMethod && SymbolEqualityComparer.Default.Equals(speculativeMethod, method);
+    }
+
+    /// <summary>
+    /// Returns the <c language="csharp">.Name</c> or <c language="csharp">[index]</c> a call chain starts from when it
+    /// continues a conditional access, as in the <c language="csharp">.Foo</c> of <c language="csharp">c?.Foo(1)</c>.
+    /// </summary>
+    private static ExpressionSyntax? GetLeadingBinding(ExpressionSyntax? expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case MemberBindingExpressionSyntax or ElementBindingExpressionSyntax:
+                    return expression;
+                case InvocationExpressionSyntax invocation:
+                    expression = invocation.Expression;
+                    break;
+                case MemberAccessExpressionSyntax access:
+                    expression = access.Expression;
+                    break;
+                case ElementAccessExpressionSyntax element:
+                    expression = element.Expression;
+                    break;
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    break;
+                case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression:
+                    expression = suppression.Operand;
+                    break;
+                default:
+                    return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Rewrites a call that follows <c language="csharp">?.</c> into a plain one on the same receiver, as in
+    /// <c language="csharp">c?.Foo(1)</c> to <c language="csharp">(c).Foo(1)</c>: a call cut out of its conditional access
+    /// cannot be bound on its own. A call that follows no <c language="csharp">?.</c> is returned as it is.
+    /// </summary>
+    private static ExpressionSyntax WithoutConditionalAccess(SyntaxNode original, ExpressionSyntax call)
+    {
+        var anchor = original;
+        for (var parent = original.Parent; parent != null; parent = parent.Parent)
+        {
+            if (parent is not ConditionalAccessExpressionSyntax conditional || !conditional.WhenNotNull.Span.Contains(anchor.Span))
+                continue;
+
+            var binding = GetLeadingBinding(call);
+            if (binding == null)
+                break;
+
+            var receiver = SyntaxFactory.ParenthesizedExpression(conditional.Expression.WithoutTrivia());
+            ExpressionSyntax access = binding is MemberBindingExpressionSyntax member
+                ? SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, receiver, member.Name)
+                : SyntaxFactory.ElementAccessExpression(receiver, ((ElementBindingExpressionSyntax)binding).ArgumentList);
+
+            call = call.ReplaceNode(binding, access);
+            anchor = conditional;
+        }
+
+        return call;
     }
 
     private static bool TrailingDefaultsCanBeOmitted(ArgumentListSyntax argumentList, int[] argumentToParameter, ImmutableArray<IParameterSymbol> parameters, int startIndex,

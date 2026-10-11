@@ -25,7 +25,7 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
                                                             "clearly as ArgumentException.ThrowIfNullOrWhiteSpace or ArgumentException.ThrowIfNullOrEmpty. The helper " +
                                                             "keeps the throwing path out of the caller, which keeps the caller small and inlineable.";
 
-    private static readonly LocalizableString MessageFormat = "Use '{0}' instead of an 'if' check with 'throw'";
+    private static readonly LocalizableString MessageFormat = "Use '{0}' instead of an 'if' check with 'throw'{1}";
 
     private static readonly LocalizableString Title = "Prefer ArgumentException throw helpers over manual guards";
 
@@ -57,10 +57,13 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
         if (helperName == null)
             return;
 
-        if (!ThrowsPlainArgumentException(context, ifStatement.Statement, ifStatement.Condition))
+        if (!ThrowsPlainArgumentException(context, ifStatement.Statement, ifStatement.Condition, out var explicitName))
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, ifStatement.IfKeyword.GetLocation(), helperName));
+        // The helper names the parameter after the text of its argument. Where the guard throws another name, as with
+        // 'options.Name' and nameof(options.Name), the name has to be passed to keep it.
+        var advice = explicitName == null ? string.Empty : $"; pass '{explicitName.NormalizeWhitespace()}' as the second argument to keep the parameter name";
+        context.ReportDiagnostic(Diagnostic.Create(Rule, ifStatement.IfKeyword.GetLocation(), helperName, advice));
     }
 
     private static string? GetParamNameValue(ExpressionSyntax expression)
@@ -111,8 +114,9 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool ThrowsPlainArgumentException(SyntaxNodeAnalysisContext context, StatementSyntax statement, ExpressionSyntax condition)
+    private static bool ThrowsPlainArgumentException(SyntaxNodeAnalysisContext context, StatementSyntax statement, ExpressionSyntax condition, out ExpressionSyntax? explicitName)
     {
+        explicitName = null;
         ThrowStatementSyntax? throwStatement;
         switch (statement)
         {
@@ -166,8 +170,36 @@ public sealed class UseArgumentExceptionThrowHelperAnalyzer : DiagnosticAnalyzer
 
         if (paramNameExpression == null)
             return true;
-        var guardedName = GetSimpleName(syntax.ArgumentList.Arguments[0].Expression);
+        var guarded = syntax.ArgumentList.Arguments[0].Expression;
+        var guardedName = GetSimpleName(guarded);
         var thrownName = GetParamNameValue(paramNameExpression);
-        return guardedName == null || thrownName == null || string.Equals(guardedName, thrownName, StringComparison.Ordinal);
+        if (guardedName != null && thrownName != null && !string.Equals(guardedName, thrownName, StringComparison.Ordinal))
+            return false;
+
+        // A constant gives the thrown name as well, though only for the advice: the guards that are reported stay the same.
+        thrownName ??= context.SemanticModel.GetConstantValue(paramNameExpression, context.CancellationToken).Value as string;
+        if (thrownName != null && !string.Equals(GetCallerExpressionText(guarded), thrownName, StringComparison.Ordinal))
+            explicitName = paramNameExpression;
+
+        return true;
+    }
+
+    /// <summary>Returns the text the compiler captures for an argument as its caller expression: parentheses and the null-forgiving operator around it are left out.</summary>
+    private static string GetCallerExpressionText(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppression:
+                    expression = suppression.Operand;
+                    continue;
+                default:
+                    return expression.ToString();
+            }
+        }
     }
 }
