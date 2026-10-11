@@ -161,6 +161,7 @@ dotnet_diagnostic.CA2213.severity = error # disposable fields should be disposed
 # ===========================================================================
 dotnet_diagnostic.RS0030.severity = error # symbol has been banned
 dotnet_diagnostic.RS0031.severity = error # symbol has been banned for use in declarations
+dotnet_diagnostic.RS1041.severity = error # the analyzer must target netstandard2.0, or a compiler hosted on .NET Framework cannot load it
 
 # ===========================================================================
 # TUnit analyzers (shipped in the TUnit package via TUnit.Core)

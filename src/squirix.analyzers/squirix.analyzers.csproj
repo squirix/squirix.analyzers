@@ -1,14 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.1</TargetFramework>
+        <!-- netstandard2.0, as RS1041 asks: a compiler that runs on .NET Framework (Visual Studio, some MSBuild setups) loads nothing newer. -->
+        <TargetFramework>netstandard2.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>
         <LangVersion>12.0</LangVersion>
         <IsRoslynComponent>true</IsRoslynComponent>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-        <!-- RS1041: in-repo analyzers are private tooling; see https://github.com/dotnet/roslyn-analyzers/issues/7470 -->
-        <NoWarn>$(NoWarn);RS1041</NoWarn>
         <DevelopmentDependency>true</DevelopmentDependency>
 
         <!-- Pack as a Roslyn analyzer NuGet package. -->
