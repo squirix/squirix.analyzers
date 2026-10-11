@@ -197,13 +197,17 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool EqualsNormalized(object? left, object? right)
     {
-        // Roslyn may box enum defaults as the underlying integral type.
-        return Equals(left, right)
-            || (left is Enum leftEnum && right != null
-                ? Equals(Convert.ChangeType(leftEnum, Enum.GetUnderlyingType(leftEnum.GetType()), CultureInfo.InvariantCulture), right)
-                : right is Enum rightEnum
-                && left != null
-                && Equals(left, Convert.ChangeType(rightEnum, Enum.GetUnderlyingType(rightEnum.GetType()), CultureInfo.InvariantCulture)));
+        // Roslyn may box enum defaults as the underlying integral type, so an enum on one side is compared by that value.
+        var equalByUnderlyingValue = left is Enum leftEnum && right != null
+            ? Equals(ToUnderlyingValue(leftEnum), right)
+            : right is Enum rightEnum && left != null && Equals(left, ToUnderlyingValue(rightEnum));
+
+        return Equals(left, right) || equalByUnderlyingValue;
+
+        static object ToUnderlyingValue(Enum value)
+        {
+            return Convert.ChangeType(value, Enum.GetUnderlyingType(value.GetType()), CultureInfo.InvariantCulture);
+        }
     }
 
     private static int FindParameterIndex(ImmutableArray<IParameterSymbol> parameters, string name)
