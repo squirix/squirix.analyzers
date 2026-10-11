@@ -86,6 +86,10 @@ auto-fix (code fix provider) yet.
 
 Requires the .NET SDK. The analyzer target is `netstandard2.0`; the unit-test project targets `net10.0`.
 
+The repository obeys its own rules, all at error severity. The tests are checked by the analyzer built from this
+repository. The analyzer source cannot be checked by its own build, so it is checked by the last published package;
+after a release, raise `OwnRulesPackageVersion` in `src/squirix.analyzers/squirix.analyzers.csproj`.
+
 ```bash
 dotnet build squirix.analyzers.slnx -c Release
 dotnet test tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj -c Release

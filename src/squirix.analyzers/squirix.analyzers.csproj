@@ -42,6 +42,17 @@
         <None Include="..\..\icon.png" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
+    <!-- The package checks its own source with its last published version; bump the version after each release. A project cannot
+         reference a package of its own id (NU1108), so the package is only downloaded and its assembly is handed to the compiler. -->
+    <PropertyGroup>
+        <OwnRulesPackageVersion>0.1.12</OwnRulesPackageVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageDownload Include="squirix.analyzers" Version="[$(OwnRulesPackageVersion)]"/>
+        <Analyzer Include="$(NuGetPackageRoot)squirix.analyzers\$(OwnRulesPackageVersion)\analyzers\dotnet\cs\squirix.analyzers.dll"/>
+    </ItemGroup>
+
     <ItemGroup>
         <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
         <AdditionalFiles Include="AnalyzerReleases.Shipped.md"/>
