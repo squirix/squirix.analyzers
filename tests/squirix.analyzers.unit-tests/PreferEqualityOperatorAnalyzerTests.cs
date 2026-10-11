@@ -638,4 +638,185 @@ public sealed class PreferEqualityOperatorAnalyzerTests
         var diagnostic = await Assert.That(diagnostics).HasSingleItem();
         _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
     }
+
+    /// <summary>With such a constraint, '==' binds to the operator of the type argument, which may not treat null like 'is null' does.</summary>
+    [Test]
+    public async Task AllowsNullCheckWithOperatorInterface(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Numerics;
+
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : class, IEqualityOperators<T, T, bool>
+                                  {
+                                      return value is null;
+                                  }
+
+                                  bool N<T>(T? value) where T : class, IEqualityOperators<T, T, bool>
+                                  {
+                                      return value is not null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsNullCheckWithInheritedOperator(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Numerics;
+
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : class, INumber<T>
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsNullCheckWithCustomOperator(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              interface IComparableByValue<TSelf> where TSelf : IComparableByValue<TSelf>
+                              {
+                                  static abstract bool operator ==(TSelf? left, TSelf? right);
+
+                                  static abstract bool operator !=(TSelf? left, TSelf? right);
+                              }
+
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : class, IComparableByValue<T>
+                                  {
+                                      return value is null or { };
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsNullCheckThroughTypeParameter(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Numerics;
+
+                              class C
+                              {
+                                  bool M<T, TBase>(T? value) where T : class, TBase where TBase : IEqualityOperators<TBase, TBase, bool>
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task FlagsNullCheckWithPlainInterface(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : class, System.IDisposable, System.IComparable<T>
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
+    }
+
+    /// <summary>An explicitly implemented operator is not visible through the class, so '==' stays reference equality.</summary>
+    [Test]
+    public async Task FlagsNullCheckWithExplicitOperatorBase(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Numerics;
+
+                              class Base : IEqualityOperators<Base, Base, bool>
+                              {
+                                  static bool IEqualityOperators<Base, Base, bool>.operator ==(Base? left, Base? right) => true;
+
+                                  static bool IEqualityOperators<Base, Base, bool>.operator !=(Base? left, Base? right) => false;
+                              }
+
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : Base
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
+    }
+
+    [Test]
+    public async Task FlagsNullCheckOnNullableOperatorStruct(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Numerics;
+
+                              class C
+                              {
+                                  bool M<T>(T? value) where T : struct, IEqualityOperators<T, T, bool>
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(NullCheckRuleId);
+    }
+
+    /// <summary>Here 'value == null' binds to the operator that takes a string, even without a class constraint.</summary>
+    [Test]
+    public async Task AllowsNullCheckWithMixedOperandOperator(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Numerics;
+
+                              class C
+                              {
+                                  bool M<T>(T value) where T : IEqualityOperators<T, string, bool>
+                                  {
+                                      return value is null;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new PreferEqualityOperatorAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
 }

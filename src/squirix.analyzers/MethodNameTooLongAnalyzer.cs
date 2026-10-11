@@ -19,7 +19,7 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Member name '{0}' length is {1} (limit {2})";
     private static readonly LocalizableString Title = "Avoid methods with name too long";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description, HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -30,7 +30,8 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
         if (context == null)
             throw new ArgumentNullException(nameof(context));
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        // Generated code is analyzed to reach a hand-written partial member whose implementation a generator adds; the rest of it is skipped by hand.
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze);
         context.EnableConcurrentExecution();
         context.RegisterSymbolAction(AnalyzeMember, SymbolKind.Method, SymbolKind.Property, SymbolKind.Event);
     }
@@ -41,11 +42,16 @@ public sealed class MethodNameTooLongAnalyzer : DiagnosticAnalyzer
         if (symbol is IMethodSymbol { AssociatedSymbol: not null })
             return;
 
-        if (AnalyzerHelpers.IsCompilerOrGenerated(symbol) || IsNameDictatedByBase(symbol))
-            return;
-
+        // The length comes first: it rules out nearly every member, and the checks after it walk attributes and interfaces.
         var name = symbol.Name;
         if (name.Length <= AnalyzerLimits.MaxMethodNameLength)
+            return;
+
+        // A partial member is reported once, on its definition part.
+        if (!ReferenceEquals(AnalyzerHelpers.GetPartialDefinition(symbol), symbol))
+            return;
+
+        if (AnalyzerHelpers.IsGeneratedMember(context) || IsNameDictatedByBase(symbol))
             return;
 
         var location = AnalyzerHelpers.GetBestLocation(symbol);

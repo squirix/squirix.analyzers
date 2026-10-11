@@ -19,7 +19,8 @@ public sealed class OmitOuterLoopBracesAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Omit braces from outer {0} when it only contains a nested loop";
     private static readonly LocalizableString Title = "Omit braces from outer loop that only contains a nested loop";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Style", DiagnosticSeverity.Warning, true, Description,
+        HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
@@ -51,6 +52,14 @@ public sealed class OmitOuterLoopBracesAnalyzer : DiagnosticAnalyzer
 
         var only = block.Statements[0];
         if (!LoopStatementSyntaxHelpers.IsLoopStatement(only))
+            return;
+
+        // With a conditional directive inside, the statements differ between configurations, and the braces may be what keeps them together.
+        if (AnalyzerHelpers.HasConditionalDirective(block, block.FullSpan.Start))
+            return;
+
+        // The 'while (...)' that closes a do loop keeps a following else away from the body.
+        if (context.Node is not DoStatementSyntax && BraceRemovalGuards.IsFollowedByElse(context.Node) && BraceRemovalGuards.EndsInUnmatchedIf(only))
             return;
 
         var loopKind = LoopStatementSyntaxHelpers.GetLoopKindName(context.Node);

@@ -36,13 +36,13 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString NullCheckTitle = "Prefer '==' / '!=' over 'is' / 'is not' for null checks";
 
     private static readonly DiagnosticDescriptor NullCheckRule = new(NullCheckRuleId, NullCheckTitle, NullCheckMessage, Category, DiagnosticSeverity.Info, true,
-        NullCheckDescription);
+        NullCheckDescription, HelpLinks.For(NullCheckRuleId));
 
     private static readonly DiagnosticDescriptor IsConstantRule = new(IsConstantRuleId, IsConstantTitle, IsConstantMessage, Category, DiagnosticSeverity.Info, true,
-        IsConstantDescription);
+        IsConstantDescription, HelpLinks.For(IsConstantRuleId));
 
     private static readonly DiagnosticDescriptor IsNotConstantRule = new(IsNotConstantRuleId, IsNotConstantTitle, IsNotConstantMessage, Category, DiagnosticSeverity.Info, true,
-        IsNotConstantDescription);
+        IsNotConstantDescription, HelpLinks.For(IsNotConstantRuleId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [NullCheckRule, IsConstantRule, IsNotConstantRule];
@@ -94,6 +94,27 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         return type.SpecialType != SpecialType.System_Object && type.TypeKind != TypeKind.Dynamic;
     }
 
+    /// <summary>
+    /// Returns whether an interface constraint, or an interface it inherits, declares a static abstract or virtual equality operator.
+    /// For a type parameter with such a constraint, '==' binds to the operator of the type argument.
+    /// </summary>
+    private static bool DeclaresInterfaceEqualityOperator(ITypeSymbol constraint)
+    {
+        if (constraint.TypeKind != TypeKind.Interface)
+            return false;
+
+        if (HasEqualityOperatorMembers(constraint))
+            return true;
+
+        foreach (var inherited in constraint.AllInterfaces)
+        {
+            if (HasEqualityOperatorMembers(inherited))
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool HasEqualityOperatorMembers(ITypeSymbol type)
     {
         if (type is not INamedTypeSymbol named)
@@ -114,7 +135,7 @@ public sealed class PreferEqualityOperatorAnalyzer : DiagnosticAnalyzer
         {
             foreach (var constraint in typeParameter.ConstraintTypes)
             {
-                if (HasUserDefinedEqualityOperator(constraint))
+                if (HasUserDefinedEqualityOperator(constraint) || DeclaresInterfaceEqualityOperator(constraint))
                     return true;
             }
 

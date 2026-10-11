@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Squirix.Analyzers.UnitTests.Support;
@@ -8,6 +10,21 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
 {
     private const string BoolRuleId = "SQR0015";
     private const string IntRuleId = "SQR0016";
+
+    /// <summary>Returns plain reads of the flag in every spelling; each is the last mention of the field in its source.</summary>
+    public static IEnumerable<string> PlainAccesses() =>
+    [
+        "_disposed",
+        "this._disposed",
+        "other._disposed != 0",
+        "other._next!._disposed",
+        "other._next?._disposed",
+        "p->_disposed",
+        "(*p)._disposed",
+        "checked(_disposed)",
+        "(_disposed)",
+        "_disposed!",
+    ];
 
     [Test]
     public async Task AllowsIntDisposedField(CancellationToken cancellationToken)
@@ -121,6 +138,436 @@ public sealed class NoBoolDisposedFieldAnalyzerTests
         var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
 
         _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsGuardedFlagOfAnotherInstance(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+                                  private readonly C _owner = null!;
+
+                                  static void Close(C other) => Interlocked.Exchange(ref other._disposed, 1);
+
+                                  static bool IsClosed(C other) => Volatile.Read(in other._disposed) != 0;
+
+                                  bool IsOwnerClosed() => Volatile.Read(ref this._owner._disposed) != 0;
+
+                                  void CloseOwner() => Interlocked.CompareExchange(ref _owner._disposed, 1, 0);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsPointerAndStaticQualifiedFlag(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              struct State
+                              {
+                                  public int _disposed;
+                              }
+
+                              class C
+                              {
+                                  private static int _disposed;
+
+                                  static void Close() => Interlocked.Exchange(ref C._disposed, 1);
+
+                                  static unsafe void Close(State* state) => Interlocked.Exchange(ref state->_disposed, 1);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsParenthesizedRefOperand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose() => Interlocked.Exchange(ref (_disposed), 1);
+
+                                  bool IsDisposed() => Volatile.Read(ref (this._disposed)) != 0;
+
+                                  static bool IsClosed(C other) => Volatile.Read(in ((other._disposed))) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>These wrappers leave the operand the same reference to the flag.</summary>
+    [Test]
+    public async Task AllowsCheckedAndNullForgivingOperand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose() => Interlocked.Exchange(ref checked(_disposed), 1);
+
+                                  void Reset() => Interlocked.Exchange(ref unchecked((this._disposed)), 0);
+
+                                  bool IsDisposed() => Volatile.Read(in _disposed!) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>Volatile.Read takes its location by readonly reference, so the flag is passed by reference without a keyword too.</summary>
+    [Test]
+    public async Task AllowsReferenceOperandWithoutKeyword(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  bool IsDisposed() => Volatile.Read(_disposed) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>Until a call binds, the rule cannot tell whether it guards the flag.</summary>
+    [Test]
+    public async Task LeavesCallThatDoesNotBindAlone(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose() => Missing.Exchange(ref _disposed, 1);
+
+                                  void Log() => Missing(_disposed + 1);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunOnIncompleteCodeAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(6);
+    }
+
+    /// <summary>With a dynamic argument the call binds at run time, yet the flag is still handed over by reference.</summary>
+    [Test]
+    public async Task AllowsGuardedCallWithDynamicArgument(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Set(dynamic value) => Interlocked.Exchange(ref _disposed, value);
+
+                                  void Write(dynamic value) => Volatile.Write(ref (_disposed), value);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task FlagsFlagReadInDynamicCall(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+                                  private int _state;
+
+                                  void Copy(dynamic comparand) => Interlocked.CompareExchange(ref _state, _disposed, comparand);
+
+                                  void Pass(dynamic other) => Use(ref _disposed, other);
+
+                                  static void Use(ref int flag, int other) { }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+    }
+
+    /// <summary>A type that only shares the name with the framework one guards nothing.</summary>
+    [Test]
+    public async Task FlagsLookAlikeInterlockedType(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              namespace My
+                              {
+                                  static class Interlocked
+                                  {
+                                      public static int Exchange(ref int location, int value) => value;
+                                  }
+                              }
+
+                              namespace My.System.Threading
+                              {
+                                  static class Volatile
+                                  {
+                                      public static int Read(ref int location) => location;
+                                  }
+                              }
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void Dispose() => My.Interlocked.Exchange(ref _disposed, 1);
+
+                                  int Read() => My.System.Threading.Volatile.Read(ref _disposed);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+    }
+
+    /// <summary>Without a keyword only the flag itself goes by reference; a computed value is a plain read.</summary>
+    [Test]
+    public async Task FlagsValueOperandWithoutKeyword(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+                                  private int _other;
+
+                                  int Pick(bool first) => Volatile.Read(first ? _disposed : _other);
+
+                                  long Widen() => Interlocked.Read(_disposed);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+    }
+
+    /// <summary>The report sits on the field name, whatever surrounds it.</summary>
+    [Test]
+    [MethodDataSource(nameof(PlainAccesses))]
+    public async Task ReportsOnTheFieldName(string access, CancellationToken cancellationToken)
+    {
+        var source = "#nullable enable\nunsafe class C { private int _disposed; private C? _next; struct S { public int _disposed; } " +
+                     "object M(C other, S* p) => " + access + "; }";
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        var span = diagnostic.Location.SourceSpan;
+        _ = await Assert.That(span.Start).IsEqualTo(source.LastIndexOf("_disposed", StringComparison.Ordinal));
+        _ = await Assert.That(span.Length).IsEqualTo("_disposed".Length);
+    }
+
+    /// <summary>The call receives a reference to whichever flag the condition picks, so both branches are guarded.</summary>
+    [Test]
+    public async Task AllowsRefConditionalOperand(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  static void Close(bool first, C a, C b) => Interlocked.Exchange(ref (first ? ref a._disposed : ref b._disposed), 1);
+
+                                  void CloseOne(bool mine, bool first, C a, C b) =>
+                                      Interlocked.Exchange(ref (mine ? ref _disposed : ref (first ? ref (a._disposed) : ref b._disposed)), 1);
+
+                                  static void CloseBare(bool first, C a, C b) => Interlocked.Exchange(ref first ? ref a._disposed : ref b._disposed, 1);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>The condition reads the flag; only the branches of a ref conditional stand for the reference.</summary>
+    [Test]
+    public async Task FlagsFlagInRefConditionalCondition(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+                                  private int _first;
+                                  private int _second;
+
+                                  void M() => Interlocked.Exchange(ref (_disposed == 0 ? ref _first : ref _second), 1);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IntRuleId);
+    }
+
+    /// <summary>Only the ref operand is guarded; as the value argument the flags are read.</summary>
+    [Test]
+    public async Task FlagsRefConditionalAsInterlockedValue(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+                                  private int _state;
+
+                                  static void Copy(bool first, C a, C b) => Interlocked.Exchange(ref a._state, (first ? ref a._disposed : ref b._disposed));
+
+                                  void CopyOwn() => Interlocked.Exchange(ref _state, (_disposed));
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task FlagsRefConditionalOutsideInterlocked(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  static void Close(bool first, C a, C b)
+                                  {
+                                      ref var flag = ref (first ? ref a._disposed : ref b._disposed);
+                                      flag = 1;
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task FlagsParenthesizedPlainAccess(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  bool IsDisposed() => (_disposed) != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsPlainReadOfAnotherInstanceFlag(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  static bool IsClosed(C other) => other._disposed != 0;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IntRuleId);
+    }
+
+    /// <summary>Only the ref operand is guarded; the flag of the other instance is a plain read here.</summary>
+    [Test]
+    public async Task FlagsOtherFlagAsInterlockedValue(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System.Threading;
+
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  void CopyFrom(C other) => Interlocked.Exchange(ref _disposed, other._disposed);
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IntRuleId);
+    }
+
+    [Test]
+    public async Task FlagsOtherFlagPassedToOwnMethod(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  private int _disposed;
+
+                                  static void Close(C other) => Set(ref other._disposed);
+
+                                  static void Set(ref int flag) { }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new NoBoolDisposedFieldAnalyzer(), source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(IntRuleId);
     }
 
     [Test]

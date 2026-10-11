@@ -13,16 +13,17 @@ and code-smell guards. They are applied at build time and their findings are sur
 ## Installation
 
 Add the package reference from [nuget.org](https://www.nuget.org/packages/squirix.analyzers) and use the latest
-published version (`0.1.11` at the time of writing):
+published version (`0.1.12` at the time of writing):
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="squirix.analyzers" Version="0.1.11" PrivateAssets="all" />
+    <PackageReference Include="squirix.analyzers" Version="0.1.12" PrivateAssets="all" />
 </ItemGroup>
 ```
 
 The package ships the analyzer assembly under `analyzers/dotnet/cs`, so it is loaded as a Roslyn analyzer at build time.
 The minimum supported toolchain is the .NET 10 SDK (10.0.100): the analyzer is compiled against Roslyn 5.0 and loads in that compiler and any newer one.
+It targets `netstandard2.0`, so a compiler that runs on .NET Framework, as in Visual Studio, loads it as well.
 
 Rules use the default severity from their descriptor. This repository's own `.editorconfig` overrides the severity of
 some `SQR` diagnostics; copy the relevant `dotnet_diagnostic.SQRnnnn.severity` entries into the consuming repository's
@@ -42,7 +43,8 @@ SQR0002.max_methods_per_type = 30
 ## Rules
 
 Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/compliant examples, lives in
-[docs/rules](docs/rules). No rule ships an auto-fix (code fix provider) yet.
+[docs/rules](docs/rules). Each diagnostic links to its page at the tag of the installed version. No rule ships an
+auto-fix (code fix provider) yet.
 
 | Rule                               | Category    | Analyzer                                  | What it enforces                                                     |
 |------------------------------------|-------------|-------------------------------------------|----------------------------------------------------------------------|
@@ -62,7 +64,7 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0014`](docs/rules/SQR0014.md) | Style       | `PreferEqualityOperatorAnalyzer`          | Prefer != over is-not when comparing to a constant.                  |
 | [`SQR0015`](docs/rules/SQR0015.md) | Concurrency | `NoBoolDisposedFieldAnalyzer`             | Dispose guard must be an int flag via Interlocked.                   |
 | [`SQR0016`](docs/rules/SQR0016.md) | Concurrency | `NoBoolDisposedFieldAnalyzer`             | int dispose flag only via Interlocked/Volatile.                      |
-| [`SQR0017`](docs/rules/SQR0017.md) | Usage       | `NoDirectTestContextCancelTokenAnalyzer`  | Don't use TestContext.Current.CancellationToken directly.            |
+| [`SQR0017`](docs/rules/SQR0017.md) | Usage       | `NoDirectTestContextCancelTokenAnalyzer`  | Don't read the cancellation token from TestContext.Current.          |
 | [`SQR0018`](docs/rules/SQR0018.md) | Style       | `RequireMultilineIfBodyBracesAnalyzer`    | Require braces on multi-line if/else bodies.                         |
 | [`SQR0019`](docs/rules/SQR0019.md) | Usage       | `NoAllocatingThrowsAssertAnalyzer`        | Avoid allocating exception assert invocations.                       |
 | [`SQR0020`](docs/rules/SQR0020.md) | Usage       | `MergeDuplicateCatchBlocksAnalyzer`       | Merge consecutive catch blocks with identical bodies.                |
@@ -78,10 +80,11 @@ Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/c
 | [`SQR0030`](docs/rules/SQR0030.md) | Reliability | `TaskOutlivesUsingScopeAnalyzer`          | Await tasks that use a resource before its using scope ends.         |
 | [`SQR0031`](docs/rules/SQR0031.md) | Reliability | `NestedTaskAnalyzer`                      | Unwrap nested tasks before awaiting or returning them.               |
 | [`SQR0032`](docs/rules/SQR0032.md) | Reliability | `DiscardedTaskResultDelegateAnalyzer`     | No `Task<T>` to `Task` conversion in a delegate return.              |
+| [`SQR0033`](docs/rules/SQR0033.md) | Reliability | `FinalizerDisposeFieldAnalyzer`           | No field dereference outside `disposing` in a finalizable type.      |
 
 ## Building
 
-Requires the .NET SDK. The analyzer target is `netstandard2.1`; the unit-test project targets `net10.0`.
+Requires the .NET SDK. The analyzer target is `netstandard2.0`; the unit-test project targets `net10.0`.
 
 ```bash
 dotnet build squirix.analyzers.slnx -c Release

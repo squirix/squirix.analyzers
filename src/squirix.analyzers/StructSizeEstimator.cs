@@ -40,7 +40,7 @@ internal sealed class StructSizeEstimator
     }
 
     private static int GetFieldOffset(IFieldSymbol field) =>
-        FindAttribute(field, "FieldOffsetAttribute") is { ConstructorArguments: [{ Value: int value }] } ? value : -1;
+        GetSingleArgument(FindAttribute(field, "FieldOffsetAttribute")) is int value ? value : -1;
 
     private static Layout GetFrameworkLayout(INamedTypeSymbol type) => (type.ContainingNamespace?.ToDisplayString(), type.MetadataName) switch
     {
@@ -65,7 +65,7 @@ internal sealed class StructSizeEstimator
 
         foreach (var argument in attribute.NamedArguments)
         {
-            if (argument.Key == name && argument.Value.Value is int value)
+            if (argument.Key == name && GetValue(argument.Value) is int value)
                 return value;
         }
 
@@ -88,8 +88,17 @@ internal sealed class StructSizeEstimator
         return size == 0 ? default : new Layout(size, size < PointerSize ? size : PointerSize, false);
     }
 
+    /// <summary>Returns the only constructor argument of the attribute, or null when there is no attribute or it has another number of them.</summary>
+    private static object? GetSingleArgument(AttributeData? attribute) => attribute is { ConstructorArguments: { Length: 1 } arguments } ? GetValue(arguments[0]) : null;
+
+    /// <summary>
+    /// Returns the value of an attribute argument, or null for an array. The layout attributes are found by name, so another attribute of
+    /// the same name can be taken for one of them and bring an array, which has no single value to read.
+    /// </summary>
+    private static object? GetValue(TypedConstant argument) => argument.Kind == TypedConstantKind.Array ? null : argument.Value;
+
     // LayoutKind.Explicit is 2; the attribute takes either the enum or a short.
-    private static bool IsExplicit(AttributeData? structLayout) => structLayout is { ConstructorArguments: [{ Value: 2 or (short)2 }] };
+    private static bool IsExplicit(AttributeData? structLayout) => GetSingleArgument(structLayout) is 2 or (short)2;
 
     // A tuple with element names exposes every element twice: as ItemN and under its name.
     private static bool IsTupleAlias(IFieldSymbol field) =>
@@ -124,7 +133,7 @@ internal sealed class StructSizeEstimator
         if (builder.IsEmpty && !inSource)
             return GetFrameworkLayout(type);
 
-        var length = FindAttribute(type, "InlineArrayAttribute") is { ConstructorArguments: [{ Value: int count }] } ? count : 1;
+        var length = GetSingleArgument(FindAttribute(type, "InlineArrayAttribute")) is int count ? count : 1;
         return builder.Build(length, GetIntArgument(structLayout, "Size"));
     }
 

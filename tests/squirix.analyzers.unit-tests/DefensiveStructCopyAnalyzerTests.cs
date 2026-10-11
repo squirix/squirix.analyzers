@@ -394,6 +394,344 @@ public sealed class DefensiveStructCopyAnalyzerTests
         }
         """, cancellationToken);
 
+    /// <summary>The readonly before ref only fixes where the reference points, so the member runs on the original struct.</summary>
+    [Test]
+    public async Task AllowsReadOnlyRefField(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        ref struct Writer
+        {
+            private readonly ref Counter _counter;
+
+            public Writer(ref Counter counter) => _counter = ref counter;
+
+            public int M() => _counter.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsRefFieldInsideReadOnlyMember(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        ref struct Writer
+        {
+            private ref Counter _counter;
+
+            public Writer(ref Counter counter) => _counter = ref counter;
+
+            public readonly int M() => _counter.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsRefFieldOfReadOnlyVariable(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        struct Inner { public Counter Deep; }
+
+        ref struct Writer
+        {
+            public ref Counter Direct;
+            public ref Inner Nested;
+        }
+
+        class C
+        {
+            int M(in Writer writer) => writer.Direct.Next() + writer.Nested.Deep.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsRefReadOnlyField(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("""
+            ref struct Reader
+            {
+                private ref readonly Counter _counter;
+
+                public Reader(ref Counter counter) => _counter = ref counter;
+
+                public int M() => _counter.Next();
+            }
+            """, null, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("'Next' is not readonly, so calling it on the readonly '_counter' runs on a hidden copy of 'Counter'");
+    }
+
+    [Test]
+    public async Task FlagsReadOnlyRefReadOnlyField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        readonly ref struct Reader
+        {
+            private readonly ref readonly Counter _counter;
+
+            public Reader(ref Counter counter) => _counter = ref counter;
+
+            public int M() => _counter.Next();
+        }
+        """, cancellationToken);
+
+    /// <summary>The struct behind a ref readonly field cannot be changed even while its holder is being initialized.</summary>
+    [Test]
+    public async Task FlagsRefReadOnlyFieldInConstructor(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        readonly ref struct Reader
+        {
+            private readonly ref readonly Counter _counter;
+
+            public Reader(ref Counter counter)
+            {
+                _counter = ref counter;
+                _ = _counter.Next();
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsFieldBehindRefReadOnlyField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        struct Inner { public Counter Deep; }
+
+        ref struct Reader
+        {
+            public ref readonly Inner Nested;
+        }
+
+        class C
+        {
+            int M(Reader reader) => reader.Nested.Deep.Next();
+        }
+        """, cancellationToken);
+
+    /// <summary>A ref field makes its struct writable, but not the readonly fields inside that struct.</summary>
+    [Test]
+    public async Task FlagsReadOnlyFieldBehindRefField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        struct Inner { public readonly Counter Deep; }
+
+        ref struct Writer
+        {
+            public ref Inner Nested;
+        }
+
+        class C
+        {
+            int M(Writer writer) => writer.Nested.Deep.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsRefConditionalOverReadOnlyRefs(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("class C { int M(bool first, in Counter a, in Counter b) => (first ? ref a : ref b).Next(); }", null, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("'Next' is not readonly, so calling it on the readonly 'a' runs on a hidden copy of 'Counter'");
+    }
+
+    /// <summary>One readonly branch makes the whole expression readonly, even when the writable branch is taken.</summary>
+    [Test]
+    public async Task FlagsRefConditionalWithReadOnlyBranch(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("class C { int M(bool first, ref Counter a, in Counter b) => (first ? ref a : ref b).Next(); }", null, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).Contains("the readonly 'b'");
+    }
+
+    [Test]
+    public async Task FlagsFieldBehindRefConditional(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        struct Wrap { public Counter Inner; }
+
+        class C
+        {
+            int M(bool first, in Wrap a, in Wrap b) => (first ? ref a : ref b).Inner.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsNestedRefConditional(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        class C
+        {
+            int M(bool first, bool second, ref Counter a, ref Counter b, in Counter c) => (first ? ref a : ref (second ? ref b : ref c)).Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsRefConditionalOverWritableRefs(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        class C
+        {
+            private Counter _own;
+
+            int M(bool first, ref Counter a, ref Counter b) => (first ? ref a : ref b).Next() + (first ? ref _own : ref b).Next();
+        }
+        """, cancellationToken);
+
+    /// <summary>A conditional without ref yields a temporary value: the call runs on a copy the code asked for.</summary>
+    [Test]
+    public async Task AllowsConditionalByValue(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        class C
+        {
+            int M(bool first, in Counter a, in Counter b) => (first ? a : b).Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsInlineArrayElementOfReadOnlyField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Counters { private Counter _first; }
+
+        class C
+        {
+            private readonly Counters _items;
+
+            int M() => _items[0].Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsInlineArrayElementOfInParameter(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Counters { private Counter _first; }
+
+        class C
+        {
+            int M(in Counters items, int index) => items[index].Current;
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsInlineArrayBehindRefReadOnlyField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Counters { private Counter _first; }
+
+        ref struct Reader
+        {
+            private ref readonly Counters _items;
+
+            public Reader(ref Counters items) => _items = ref items;
+
+            public int M() => _items[1].Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsInlineArrayElementOfWritable(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Counters { private Counter _first; }
+
+        class C
+        {
+            private readonly Counters _fixed;
+            private Counters _items;
+
+            C() => _ = _fixed[0].Next();
+
+            int M(ref Counters items, Counters copy) => _items[0].Next() + items[1].Next() + copy[0].Next() + _fixed[0].Peek();
+        }
+        """, cancellationToken);
+
+    /// <summary>In a constructor the readonly fields are still writable, and so is a ref conditional over them.</summary>
+    [Test]
+    public async Task AllowsRefConditionalInConstructor(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        class C
+        {
+            private readonly Counter _a;
+            private readonly Counter _b;
+
+            C(bool first) => _ = (first ? ref _a : ref _b).Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsRefConditionalOverInlineArrays(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Counters { private Counter _first; }
+
+        class C
+        {
+            private readonly Counters _fixed;
+            private Counters _items;
+
+            int M(bool first) => (first ? ref _items : ref _fixed)[0].Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task FlagsFieldOfInlineArrayElement(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        struct Wrap { public Counter Inner; }
+
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Wraps { private Wrap _first; }
+
+        class C
+        {
+            private readonly Wraps _wraps;
+
+            int M() => _wraps[0].Inner.Next();
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task ReportsInlineArrayHolder(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("""
+            [System.Runtime.CompilerServices.InlineArray(2)]
+            struct Counters { private Counter _first; }
+
+            class C
+            {
+                private readonly Counters _items;
+
+                int M() => _items[1].Next();
+            }
+            """, null, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).IsEqualTo("'Next' is not readonly, so calling it on the readonly '_items' runs on a hidden copy of 'Counter'");
+    }
+
+    /// <summary>The compiler warns about a plain call on this in a readonly member, but not about these two forms.</summary>
+    [Test]
+    public async Task FlagsThisBehindElementOrConditional(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("""
+            [System.Runtime.CompilerServices.InlineArray(2)]
+            struct Counters
+            {
+                private Counter _first;
+
+                public readonly int First() => this[0].Next();
+            }
+
+            struct Pair
+            {
+                public int Count;
+
+                public int Next() => ++Count;
+
+                public readonly int Either(bool first, ref Pair other) => (first ? ref this : ref other).Next();
+            }
+            """, null, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        foreach (var diagnostic in diagnostics)
+            _ = await Assert.That(diagnostic.GetMessage()).Contains("the readonly 'this'");
+    }
+
+    [Test]
+    public async Task AllowsThisInWritableMember(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        [System.Runtime.CompilerServices.InlineArray(2)]
+        struct Counters
+        {
+            private Counter _first;
+
+            public Counters(int start) => _ = this[0].Next();
+
+            public int First() => this[0].Next();
+        }
+
+        struct Pair
+        {
+            public int Count;
+
+            public int Next() => ++Count;
+
+            public int Either(bool first, ref Pair other) => (first ? ref this : ref other).Next();
+        }
+        """, cancellationToken);
+
     [Test]
     public async Task SkipsUnknownSizeWithConfiguredSize(CancellationToken cancellationToken)
     {
@@ -459,6 +797,45 @@ public sealed class DefensiveStructCopyAnalyzerTests
                               }
                               """;
         var options = ImmutableDictionary.Create<string, string>().Add("SQR0029.min_struct_size", "16");
+
+        var diagnostics = await RunAsync(source, options, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    /// <summary>The size limit makes the rule measure the struct, and the layout attributes are found by name: one that takes an array must not break it.</summary>
+    [Test]
+    public async Task FlagsStructWithLookAlikeLayout(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+
+                              sealed class StructLayoutAttribute : Attribute
+                              {
+                                  public StructLayoutAttribute(params int[] kinds)
+                                  {
+                                  }
+
+                                  public int[] Size { get; set; } = [];
+                              }
+
+                              [StructLayout(2, Size = new[] { 64 })]
+                              struct Wide
+                              {
+                                  private long _a, _b, _c;
+
+                                  public long Sum() => _a + _b + _c;
+                              }
+
+                              class C
+                              {
+                                  private readonly Wide _wide;
+
+                                  long M() => _wide.Sum();
+                              }
+                              """;
+        var options = ImmutableDictionary.Create<string, string>().Add("SQR0029.min_struct_size", "24");
 
         var diagnostics = await RunAsync(source, options, cancellationToken);
 

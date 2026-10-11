@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Immutable;
-using System.Threading;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace Squirix.Analyzers;
 
@@ -41,9 +40,11 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         "Dispose flag '{0}' is read or written without Interlocked/Volatile; use Interlocked.Exchange/CompareExchange or Volatile.Read/Write";
 
     private static readonly LocalizableString IntTitle = "Dispose guard must be accessed through Interlocked or Volatile";
-    private static readonly DiagnosticDescriptor BoolRule = new(BoolRuleId, BoolTitle, BoolMessage, Category, DiagnosticSeverity.Warning, true, BoolDescription);
+    private static readonly DiagnosticDescriptor BoolRule = new(BoolRuleId, BoolTitle, BoolMessage, Category, DiagnosticSeverity.Warning, true, BoolDescription,
+        HelpLinks.For(BoolRuleId));
 
-    private static readonly DiagnosticDescriptor IntRule = new(IntRuleId, IntTitle, IntMessage, Category, DiagnosticSeverity.Warning, true, IntDescription);
+    private static readonly DiagnosticDescriptor IntRule = new(IntRuleId, IntTitle, IntMessage, Category, DiagnosticSeverity.Warning, true, IntDescription,
+        HelpLinks.For(IntRuleId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [BoolRule, IntRule];
@@ -57,36 +58,23 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterSymbolAction(AnalyzeFieldSymbol, SymbolKind.Field);
-        context.RegisterSyntaxNodeAction(AnalyzeFieldAccess, SyntaxKind.IdentifierName);
+        context.RegisterOperationAction(AnalyzeFieldReference, OperationKind.FieldReference);
     }
 
-    private static void AnalyzeFieldAccess(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeFieldReference(OperationAnalysisContext context)
     {
-        if (context.Node is not IdentifierNameSyntax identifier)
+        var reference = (IFieldReferenceOperation)context.Operation;
+        var field = reference.Field;
+        if (!IsDisposedFieldName(field.Name) || field.Type.SpecialType != SpecialType.System_Int32)
             return;
 
-        if (!IsDisposedFieldName(identifier.Identifier.Text))
+        if (AnalyzerHelpers.IsCompilerOrGenerated(field))
             return;
 
-        if (context.SemanticModel.GetSymbolInfo(context.Node, context.CancellationToken).Symbol is not IFieldSymbol symbol)
+        if (IsGuarded(reference))
             return;
 
-        if (AnalyzerHelpers.IsCompilerOrGenerated(symbol))
-            return;
-
-        if (!IsDisposedFieldName(symbol.Name))
-            return;
-
-        if (symbol.Type.SpecialType != SpecialType.System_Int32)
-            return;
-
-        if (IsInsideNameofOperator(context.Node))
-            return;
-
-        if (IsGuardedByInterlockedOrVolatile(context.Node, context.SemanticModel, context.CancellationToken))
-            return;
-
-        context.ReportDiagnostic(Diagnostic.Create(IntRule, context.Node.GetLocation(), symbol.Name));
+        context.ReportDiagnostic(Diagnostic.Create(IntRule, GetNameLocation(reference.Syntax), field.Name));
     }
 
     private static void AnalyzeFieldSymbol(SymbolAnalysisContext context)
@@ -104,68 +92,65 @@ public sealed class NoBoolDisposedFieldAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(BoolRule, field.Locations.IsDefaultOrEmpty ? Location.None : field.Locations[0], field.Name));
     }
 
+    private static Location GetNameLocation(SyntaxNode syntax) => syntax switch
+    {
+        MemberAccessExpressionSyntax access => access.Name.GetLocation(),
+        MemberBindingExpressionSyntax binding => binding.Name.GetLocation(),
+        _ => syntax.GetLocation(),
+    };
+
     private static bool IsDisposedFieldName(string name) => string.Equals(name, "_disposed", StringComparison.Ordinal);
 
-    private static bool IsGuardedByInterlockedOrVolatile(SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
+    /// <summary>
+    /// Returns whether the access needs no report. That is so when the flag itself, and not its value, is what an
+    /// Interlocked or Volatile method receives by reference; the question is asked of the bound operation, so the
+    /// spelling of the operand (a qualifier, parentheses, <c language="csharp">checked</c>, the null-forgiving operator)
+    /// does not matter. It is also so when the expression that uses the flag does not bind, and inside nameof.
+    /// </summary>
+    private static bool IsGuarded(IFieldReferenceOperation reference)
     {
-        // The flag is guarded only when it is itself the ref/in operand of an Interlocked/Volatile
-        // call (optionally qualified as this._disposed). Any other occurrence inside the call's
-        // arguments, such as Interlocked.Exchange(ref _disposed, _disposed + 1), is a plain read.
-        var operand = node;
-        if (node.Parent is MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } memberAccess && memberAccess.Name == node)
-            operand = memberAccess;
+        // A ref conditional yields the reference of the branch it picks, so the flag in a branch shares the fate of the
+        // whole conditional. The flag cannot be the condition itself: an int there does not bind as a ref conditional.
+        IOperation operand = reference;
+        while (operand.Parent is IConditionalOperation { IsRef: true } conditional)
+            operand = conditional;
 
-        if (operand.Parent is not ArgumentSyntax argument || argument.Expression != operand)
-            return false;
+        return operand.Parent switch
+        {
+            IArgumentOperation { Parameter.RefKind: RefKind.Ref or RefKind.In or RefKind.RefReadOnlyParameter, Parent: IInvocationOperation invocation } =>
+                IsInterlockedOrVolatile(invocation.TargetMethod.ContainingType),
 
-        if (!argument.RefKindKeyword.IsKind(SyntaxKind.RefKeyword) && !argument.RefKindKeyword.IsKind(SyntaxKind.InKeyword))
-            return false;
+            // With a dynamic argument the call binds at run time, but the type and the way the flag is passed are known.
+            IDynamicInvocationOperation { Operation: IDynamicMemberReferenceOperation member } call =>
+                IsInterlockedOrVolatile(member.ContainingType) && IsPassedByReference(call, operand),
 
-        return argument.Parent?.Parent is InvocationExpressionSyntax invocation && IsInterlockedOrVolatileInvocation(invocation, semanticModel, cancellationToken);
+            // Code that does not bind says nothing about how the flag is accessed.
+            IInvalidOperation => true,
+            _ => IsInsideNameOf(reference),
+        };
     }
 
-    private static bool IsInsideNameofOperator(SyntaxNode node)
+    /// <summary>Returns whether the reference sits in a nameof, which produces the name without touching the field.</summary>
+    private static bool IsInsideNameOf(IOperation operation)
     {
-        // nameof(_disposed) does not read the field at runtime; it only produces its name.
-        for (var current = node.Parent; current is not null; current = current.Parent)
+        for (var parent = operation.Parent; parent != null; parent = parent.Parent)
         {
-            if (current is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } ancestor && IsWithin(ancestor.ArgumentList, node))
+            if (parent is INameOfOperation)
                 return true;
         }
 
         return false;
     }
 
-    private static bool IsInterlockedOrVolatileInvocation(InvocationExpressionSyntax invocation, SemanticModel semanticModel, CancellationToken cancellationToken)
+    private static bool IsInterlockedOrVolatile(ITypeSymbol? type) =>
+        type is { Name: "Interlocked" or "Volatile", ContainingNamespace: { Name: "Threading", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } };
+
+    private static bool IsPassedByReference(IDynamicInvocationOperation call, IOperation operand)
     {
-        if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol { ContainingType: not null } method)
+        for (var index = 0; index < call.Arguments.Length; index++)
         {
-            var containing = method.ContainingType;
-            return containing.Name is "Interlocked" or "Volatile" && containing.ContainingNamespace is { Name: "Threading", ContainingNamespace.Name: "System" };
-        }
-
-        // Fallback for unresolved symbols: exact match on the rightmost receiver name.
-        // Handles fully qualified 'System.Threading.Interlocked.Exchange' (receiver is a
-        // MemberAccess ending in 'Interlocked') and rejects 'InterlockedFoo.Exchange'.
-        if (invocation.Expression is not MemberAccessExpressionSyntax member)
-            return false;
-
-        var receiverName = member.Expression switch
-        {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
-            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
-            _ => null,
-        };
-
-        return string.Equals(receiverName, "Interlocked", StringComparison.Ordinal) || string.Equals(receiverName, "Volatile", StringComparison.Ordinal);
-    }
-
-    private static bool IsWithin(SyntaxNode ancestor, SyntaxNode descendant)
-    {
-        for (var current = descendant; current != null; current = current.Parent)
-        {
-            if (current == ancestor)
-                return true;
+            if (ReferenceEquals(call.Arguments[index], operand))
+                return call.GetArgumentRefKind(index) is RefKind.Ref or RefKind.In;
         }
 
         return false;

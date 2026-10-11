@@ -18,7 +18,7 @@ public sealed class TypeNamespacePrefixAnalyzer : DiagnosticAnalyzer
 
     private static readonly LocalizableString MessageFormat = "Type name '{0}' starts with parent namespace segment '{1}'; remove the redundant prefix";
     private static readonly LocalizableString Title = "Avoid type names that repeat the parent namespace segment";
-    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description);
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, "Naming", DiagnosticSeverity.Info, true, Description, HelpLinks.For(DiagnosticId));
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
