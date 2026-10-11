@@ -6,6 +6,7 @@ namespace Squirix.Analyzers.UnitTests;
 
 public sealed class RequireMultilineIfBracesAnalyzerTests
 {
+    private const string NestedAdvice = "; the nested if and its else go inside them";
     private const string RuleId = "SQR0018";
 
     [Test]
@@ -212,8 +213,9 @@ public sealed class RequireMultilineIfBracesAnalyzerTests
         _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("Call");
     }
 
+    /// <summary>Without braces it is easy to misread which if the else belongs to.</summary>
     [Test]
-    public async Task AllowsNestedIfWithDanglingElse(CancellationToken cancellationToken)
+    public async Task FlagsNestedIfWithElse(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -237,11 +239,105 @@ public sealed class RequireMultilineIfBracesAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, cancellationToken);
 
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].GetMessage()).IsEqualTo("Add braces to if body when the embedded statement spans multiple lines" + NestedAdvice);
+        _ = await Assert.That(diagnostics[0].Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(5);
+        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("if");
+    }
+
+    [Test]
+    public async Task FlagsNestedIfWithElseUnderElseIf(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M(bool flag, int[] xs, (int, int)[] pairs)
+                                  {
+                                      if (flag)
+                                          Call(1);
+                                      else if (xs.Length > 0)
+                                          if (xs.Length > 1)
+                                              Call(2);
+                                          else
+                                              Call(3);
+                                  }
+
+                                  bool Next() => false;
+
+                                  void Call(params int[] values)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].GetMessage()).IsEqualTo("Add braces to else if body when the embedded statement spans multiple lines" + NestedAdvice);
+        _ = await Assert.That(diagnostics[0].Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(7);
+        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("if");
+    }
+
+    /// <summary>The else belongs to the innermost if, so the if around it is the one whose body needs braces.</summary>
+    [Test]
+    public async Task FlagsInnermostIfWithElse(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M(bool flag, int[] xs, (int, int)[] pairs)
+                                  {
+                                      if (flag)
+                                          if (xs.Length > 0)
+                                              if (xs.Length > 1)
+                                                  Call(1);
+                                              else
+                                                  Call(2);
+                                  }
+
+                                  bool Next() => false;
+
+                                  void Call(params int[] values)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
+        _ = await Assert.That(diagnostics[0].GetMessage()).IsEqualTo("Add braces to if body when the embedded statement spans multiple lines" + NestedAdvice);
+        _ = await Assert.That(diagnostics[0].Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(6);
+        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("if");
+    }
+
+    [Test]
+    public async Task AllowsNestedIfWithElseOnOneLine(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  void M(bool flag, int[] xs, (int, int)[] pairs)
+                                  {
+                                      if (flag)
+                                          if (xs.Length > 0) Call(1); else Call(2);
+                                  }
+
+                                  bool Next() => false;
+
+                                  void Call(params int[] values)
+                                  {
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, cancellationToken);
+
         _ = await Assert.That(diagnostics).IsEmpty();
     }
 
     [Test]
-    public async Task FlagsBranchUnderDanglingElse(CancellationToken cancellationToken)
+    public async Task FlagsNestedIfAndItsMultilineBranch(CancellationToken cancellationToken)
     {
         const string source = """
                               class C
@@ -266,9 +362,12 @@ public sealed class RequireMultilineIfBracesAnalyzerTests
 
         var diagnostics = await AnalyzerRunner.RunAsync(new RequireMultilineIfBodyBracesAnalyzer(), source, cancellationToken);
 
-        _ = await Assert.That(diagnostics.Length).IsEqualTo(1);
-        _ = await Assert.That(diagnostics[0].GetMessage()).IsEqualTo("Add braces to else body when the embedded statement spans multiple lines");
-        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("Call");
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        _ = await Assert.That(diagnostics[0].GetMessage()).IsEqualTo("Add braces to if body when the embedded statement spans multiple lines" + NestedAdvice);
+        _ = await Assert.That(diagnostics[0].Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(5);
+        _ = await Assert.That(source.Substring(diagnostics[0].Location.SourceSpan.Start, diagnostics[0].Location.SourceSpan.Length)).IsEqualTo("if");
+        _ = await Assert.That(diagnostics[1].GetMessage()).IsEqualTo("Add braces to else body when the embedded statement spans multiple lines");
+        _ = await Assert.That(source.Substring(diagnostics[1].Location.SourceSpan.Start, diagnostics[1].Location.SourceSpan.Length)).IsEqualTo("Call");
     }
 
     /// <summary>The nested if is exempt as a body and checked as an if of its own: the statement gets one diagnostic.</summary>
