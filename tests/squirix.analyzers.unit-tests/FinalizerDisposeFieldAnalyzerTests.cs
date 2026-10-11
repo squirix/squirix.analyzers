@@ -630,6 +630,473 @@ public sealed class FinalizerDisposeFieldAnalyzerTests
         }
         """, 0, cancellationToken);
 
+    /// <summary>The value such a call returns is as null as the field was.</summary>
+    [Test]
+    public async Task FlagsValueReadThroughInterlocked(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+            private Gate _b;
+            private Gate _c;
+
+            public C(Gate a, Gate b, Gate c) : base(1)
+            {
+                _a = a;
+                _b = b;
+                _c = c;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                Interlocked.Exchange(ref _a, null).Exit();
+                Volatile.Read(ref _b).Exit();
+                _ = Interlocked.CompareExchange(ref _c, null, _c).IsOpen;
+            }
+        }
+        """, 3, cancellationToken);
+
+    [Test]
+    public async Task AllowsGuardedInterlockedRead(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+            private Gate _b;
+            private Gate _c;
+
+            public C(Gate a, Gate b, Gate c) : base(1)
+            {
+                _a = a;
+                _b = b;
+                _c = c;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                Interlocked.Exchange(ref _a, null)?.Exit();
+                if (disposing)
+                    Interlocked.Exchange(ref _b, null).Exit();
+
+                if (_c != null)
+                    Volatile.Read(ref _c).Exit();
+            }
+        }
+        """, 0, cancellationToken);
+
+    /// <summary>A local that holds the value of the field and nothing else is dereferenced in its place.</summary>
+    [Test]
+    public async Task FlagsLocalCopy(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+            private Gate _b;
+            private Gate _c;
+
+            public C(Gate a, Gate b, Gate c) : base(1)
+            {
+                _a = a;
+                _b = b;
+                _c = c;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                var a = _a;
+                a.Exit();
+
+                var b = Interlocked.Exchange(ref _b, null);
+                b.Exit();
+
+                Gate c = _c;
+                _ = c.IsOpen;
+            }
+        }
+        """, 3, cancellationToken);
+
+    /// <summary>A check of the local guards it, and so does a check of the field it was copied from.</summary>
+    [Test]
+    public async Task AllowsGuardedLocalCopy(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+            private Gate _b;
+            private Gate _c;
+            private Gate _d;
+            private Gate _e;
+
+            public C(Gate a, Gate b, Gate c, Gate d, Gate e) : base(1)
+            {
+                _a = a;
+                _b = b;
+                _c = c;
+                _d = d;
+                _e = e;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                var a = _a;
+                a?.Exit();
+
+                var b = Interlocked.Exchange(ref _b, null);
+                if (b != null)
+                    b.Exit();
+
+                if (_d != null)
+                {
+                    var d = _d;
+                    d.Exit();
+                }
+
+                if (disposing)
+                {
+                    var e = _e;
+                    e.Exit();
+                }
+
+                var c = _c;
+                if (c is null)
+                    return;
+
+                c.Exit();
+            }
+        }
+        """, 0, cancellationToken);
+
+    /// <summary>Once the local is written again it may hold another value, so it is no longer followed.</summary>
+    [Test]
+    public async Task AllowsLocalWrittenAgain(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+            private Gate _b;
+            private Gate _c;
+
+            private static void Fill(out Gate gate) => gate = new Gate();
+
+            public C(Gate a, Gate b, Gate c) : base(1)
+            {
+                _a = a;
+                _b = b;
+                _c = c;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                var a = _a;
+                a = new Gate();
+                a.Exit();
+
+                var b = _b;
+                Fill(out b);
+                b.Exit();
+
+                var c = _c;
+                c ??= new Gate();
+                c.Exit();
+            }
+        }
+        """, 0, cancellationToken);
+
+    /// <summary>A field-like event is null until someone subscribes, and nobody could subscribe to a half-built object.</summary>
+    [Test]
+    public async Task FlagsDirectEventInvocation(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+
+            public event Action Changed;
+
+            public event EventHandler Closed;
+
+            public C(Gate a) : base(1)
+            {
+                _a = a;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                Changed();
+                Closed.Invoke(this, EventArgs.Empty);
+
+                var handler = Changed;
+                handler();
+            }
+        }
+        """, 3, cancellationToken);
+
+    [Test]
+    public async Task AllowsGuardedOrInitializedEvent(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+
+            public event Action Changed;
+
+            public event EventHandler Closed;
+
+            public event Action Opened = static () => { };
+
+            public C(Gate a) : base(1)
+            {
+                _a = a;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                Changed?.Invoke();
+                if (Closed != null)
+                    Closed(this, EventArgs.Empty);
+
+                Opened();
+
+                var handler = Changed;
+                handler?.Invoke();
+            }
+        }
+        """, 0, cancellationToken);
+
+    /// <summary>Throwing null raises NullReferenceException at the throw.</summary>
+    [Test]
+    public async Task FlagsThrownField(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+
+            private readonly Exception _failure;
+
+            public C(Gate a) : base(1)
+            {
+                _a = a;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (_a is null)
+                    throw _failure;
+
+                var copy = _failure;
+                throw copy;
+            }
+        }
+        """, 2, cancellationToken);
+
+    [Test]
+    public async Task AllowsGuardedThrow(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+
+            private readonly Exception _failure;
+
+            public C(Gate a) : base(1)
+            {
+                _a = a;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (_failure != null)
+                    throw _failure;
+
+                if (disposing)
+                    throw _failure;
+            }
+        }
+        """, 0, cancellationToken);
+
+    [Test]
+    public async Task NamesEventInMessage(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              sealed class C : Base
+                              {
+                                  public C() : base(1)
+                                  {
+                                  }
+
+                                  public event Action Changed;
+
+                                  protected override void Dispose(bool disposing) => Changed();
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new FinalizerDisposeFieldAnalyzer(), FinalizableBase + source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).StartsWith("Event 'Changed' is dereferenced");
+    }
+
+    /// <summary>A value-type local is not the reference itself: a span over a null array is empty, and a null box gives an empty nullable.</summary>
+    [Test]
+    public async Task AllowsValueTypeLocal(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+
+            private readonly byte[] _buffer;
+
+            private readonly object _boxed;
+
+            public C(Gate a) : base(1)
+            {
+                _a = a;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                Span<byte> span = _buffer;
+                span.Clear();
+
+                int? number = _boxed as int?;
+                _ = number.HasValue;
+            }
+        }
+        """, 0, cancellationToken);
+
+    [Test]
+    public async Task AllowsLocalHandedOutByReference(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+            private Gate _b;
+            private Gate _c;
+
+            public void Refill(ref Gate gate) => gate = new Gate();
+
+            private static void Swap(ref Gate gate) => gate = new Gate();
+
+            public C(Gate a, Gate b, Gate c) : base(1)
+            {
+                _a = a;
+                _b = b;
+                _c = c;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                var a = _a;
+                Swap(ref a);
+                a.Exit();
+
+                var b = _b;
+                (b, _) = (new Gate(), 1);
+                b.Exit();
+
+                dynamic self = this;
+                var c = _c;
+                self.Refill(ref c);
+                c.Exit();
+            }
+        }
+        """, 0, cancellationToken);
+
+    /// <summary>An initialized field, a look-alike of Interlocked, the field passed as the new value and the event of another instance are left alone.</summary>
+    [Test]
+    public async Task AllowsReadThatIsNotOfUnsafeField(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+
+            private static readonly C Shared = new(new Gate());
+
+            private Gate _ready = new();
+
+            public event Action Changed;
+
+            public C(Gate a) : base(1)
+            {
+                _a = a;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                Interlocked.Exchange(ref _ready, null).Exit();
+                var ready = _ready;
+                ready.Exit();
+
+                Local.Interlocked.Exchange(ref _a, null).Exit();
+
+                object box = new object();
+                _ = Interlocked.Exchange(ref box, _a).ToString();
+
+                Shared.Changed();
+            }
+        }
+
+        namespace Local
+        {
+            static class Interlocked
+            {
+                public static T Exchange<T>(ref T location, T value) => value;
+            }
+        }
+        """, 0, cancellationToken);
+
+    /// <summary>A check guards only what it names.</summary>
+    [Test]
+    public async Task FlagsCheckOfAnotherSubject(CancellationToken cancellationToken) => await AssertCountAsync("""
+        sealed class C : Base
+        {
+            private Gate _a;
+            private Gate _b;
+
+            public event Action Changed;
+
+            public event EventHandler Closed;
+
+            public C(Gate a, Gate b) : base(1)
+            {
+                _a = a;
+                _b = b;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                var a = _a;
+                var b = _b;
+                if (a != null)
+                    b.Exit();
+
+                if (Closed != null)
+                    Changed();
+            }
+        }
+        """, 2, cancellationToken);
+
+    [Test]
+    public async Task ReportsReadAtFieldAndCopyAtLocal(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              sealed class C : Base
+                              {
+                                  private Gate _a;
+                                  private Gate _b;
+
+                                  public C(Gate a, Gate b) : base(1)
+                                  {
+                                      _a = a;
+                                      _b = b;
+                                  }
+
+                                  protected override void Dispose(bool disposing)
+                                  {
+                                      Interlocked.Exchange(ref _a, null).Exit();
+
+                                      object copy = _b;
+                                      _ = copy.ToString();
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunAsync(new FinalizerDisposeFieldAnalyzer(), FinalizableBase + source, cancellationToken);
+
+        _ = await Assert.That(diagnostics.Length).IsEqualTo(2);
+        _ = await Assert.That(diagnostics[0].GetMessage()).StartsWith("Field '_a' is dereferenced");
+        _ = await Assert.That(diagnostics[0].Location.SourceTree!.GetText(cancellationToken).ToString(diagnostics[0].Location.SourceSpan)).IsEqualTo("_a");
+        _ = await Assert.That(diagnostics[1].GetMessage()).StartsWith("Field '_b' is dereferenced");
+        _ = await Assert.That(diagnostics[1].Location.SourceTree!.GetText(cancellationToken).ToString(diagnostics[1].Location.SourceSpan)).IsEqualTo("copy");
+    }
+
     private static async Task AssertCountAsync(string source, int expected, CancellationToken cancellationToken, bool withBase = true)
     {
         var diagnostics = await AnalyzerRunner.RunAsync(new FinalizerDisposeFieldAnalyzer(), withBase ? FinalizableBase + source : source, cancellationToken);
