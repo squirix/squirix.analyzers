@@ -56,7 +56,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeImplicitObjectCreation, SyntaxKind.ImplicitObjectCreationExpression);
     }
 
-    private static void AnalyzeArgumentList(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, IMethodSymbol method,
+    private static void AnalyzeArgumentList(in SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, IMethodSymbol method,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList)
     {
         var parameters = method.Parameters;
@@ -183,7 +183,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         AnalyzeArgumentList(context, creation.ArgumentList, method, static (node, list) => ((ObjectCreationExpressionSyntax)node).WithArgumentList(list));
     }
 
-    private static bool ArgumentEqualsDefault(SyntaxNodeAnalysisContext context, ExpressionSyntax expression, IParameterSymbol parameter, object? defaultValue)
+    private static bool ArgumentEqualsDefault(in SyntaxNodeAnalysisContext context, ExpressionSyntax expression, IParameterSymbol parameter, object? defaultValue)
     {
         // 'default' / 'default(T)' equals the parameter default only when the parameter
         // default itself is the default value of the parameter type (e.g. null for
@@ -197,21 +197,17 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool EqualsNormalized(object? left, object? right)
     {
-        if (Equals(left, right))
-            return true;
+        // Roslyn may box enum defaults as the underlying integral type, so an enum on one side is compared by that value.
+        var equalByUnderlyingValue = left is Enum leftEnum && right != null
+            ? Equals(ToUnderlyingValue(leftEnum), right)
+            : right is Enum rightEnum && left != null && Equals(left, ToUnderlyingValue(rightEnum));
 
-        // Roslyn may box enum defaults as the underlying integral type.
-        if (left is Enum leftEnum && right != null)
+        return Equals(left, right) || equalByUnderlyingValue;
+
+        static object ToUnderlyingValue(Enum value)
         {
-            return Equals(Convert.ChangeType(leftEnum, Enum.GetUnderlyingType(leftEnum.GetType()), CultureInfo.InvariantCulture), right);
+            return Convert.ChangeType(value, Enum.GetUnderlyingType(value.GetType()), CultureInfo.InvariantCulture);
         }
-
-        if (right is Enum rightEnum && left != null)
-        {
-            return Equals(left, Convert.ChangeType(rightEnum, Enum.GetUnderlyingType(rightEnum.GetType()), CultureInfo.InvariantCulture));
-        }
-
-        return false;
     }
 
     private static int FindParameterIndex(ImmutableArray<IParameterSymbol> parameters, string name)
@@ -250,7 +246,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static object? GetValueTypeDefault(ITypeSymbol type)
     {
-        if (type.TypeKind is not TypeKind.Enum || type is not INamedTypeSymbol enumType)
+        if (type.TypeKind != TypeKind.Enum || type is not INamedTypeSymbol enumType)
             return GetNumericZero(type.SpecialType);
         // Enum default is 0 converted to the underlying type's zero value.
         var underlying = enumType.EnumUnderlyingType;
@@ -266,10 +262,8 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         foreach (var attribute in attributes)
         {
             var attr = attribute.AttributeClass;
-            if (attr?.Name is "OptionalAttribute" && attr.ContainingNamespace?.ToDisplayString() is "System.Runtime.InteropServices")
-            {
+            if (attr?.Name == "OptionalAttribute" && attr.ContainingNamespace?.ToDisplayString() == "System.Runtime.InteropServices")
                 return true;
-            }
         }
 
         return false;
@@ -288,7 +282,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool HasRedundantDefaultCandidate(ArgumentListSyntax? argumentList)
     {
-        if (argumentList is null)
+        if (argumentList == null)
             return false;
 
         foreach (var argument in argumentList.Arguments)
@@ -309,13 +303,10 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
             return defaultValue is null;
 
         var typeDefault = GetValueTypeDefault(parameterType);
-        if (typeDefault is null)
-            return false;
-
-        return EqualsNormalized(typeDefault, defaultValue);
+        return typeDefault != null && EqualsNormalized(typeDefault, defaultValue);
     }
 
-    private static bool RemainsBoundAfterRemoving(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex, int count,
+    private static bool RemainsBoundAfterRemoving(in SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex, int count,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList, IMethodSymbol method)
     {
         var rewrittenArgs = argumentList.Arguments;
@@ -393,7 +384,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool TrailingDefaultsCanBeOmitted(ArgumentListSyntax argumentList, int[] argumentToParameter, ImmutableArray<IParameterSymbol> parameters, int startIndex,
-        SyntaxNodeAnalysisContext context)
+        in SyntaxNodeAnalysisContext context)
     {
         for (var i = startIndex; i < argumentList.Arguments.Count; i++)
         {
@@ -416,7 +407,7 @@ public sealed class RedundantDefaultArgumentAnalyzer : DiagnosticAnalyzer
         foreach (var attribute in parameter.GetAttributes())
         {
             var attr = attribute.AttributeClass;
-            if (attr?.ContainingNamespace?.ToDisplayString() is not "System.Runtime.CompilerServices")
+            if (attr?.ContainingNamespace?.ToDisplayString() != "System.Runtime.CompilerServices")
                 continue;
 
             if (attr.Name is "CallerMemberNameAttribute" or "CallerFilePathAttribute" or "CallerLineNumberAttribute" or "CallerArgumentExpressionAttribute")

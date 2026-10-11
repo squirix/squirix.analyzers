@@ -77,7 +77,7 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool IsTimeSpanRangeGuard(SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
+    private static bool IsTimeSpanRangeGuard(in SyntaxNodeAnalysisContext context, ExpressionSyntax condition)
     {
         if (condition is not BinaryExpressionSyntax binary)
             return false;
@@ -102,16 +102,12 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
         // which TimeSpan does not implement, so a lifted 'TimeSpan?' comparison has no
         // helper-shaped fix either.
         var operandType = context.SemanticModel.GetTypeInfo(left, context.CancellationToken).Type;
-        if (operandType == null)
-            return false;
-
-        if (operandType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
-            return false;
-
-        return operandType.ToDisplayString() == "System.TimeSpan";
+        return operandType != null
+            && operandType.OriginalDefinition.SpecialType != SpecialType.System_Nullable_T
+            && operandType.ToDisplayString() == "System.TimeSpan";
     }
 
-    private static bool IsTimeSpanZero(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
+    private static bool IsTimeSpanZero(in SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
     {
         if (expression is not MemberAccessExpressionSyntax memberAccess)
             return false;
@@ -129,7 +125,7 @@ public sealed class UseTimeSpanThrowHelperAnalyzer : DiagnosticAnalyzer
         return containingType?.Name == "TimeSpan" && containingType.ContainingNamespace?.ToDisplayString() == "System";
     }
 
-    private static bool ThrowsArgumentOutOfRange(SyntaxNodeAnalysisContext context, StatementSyntax statement)
+    private static bool ThrowsArgumentOutOfRange(in SyntaxNodeAnalysisContext context, StatementSyntax statement)
     {
         ThrowStatementSyntax? throwStatement;
         switch (statement)

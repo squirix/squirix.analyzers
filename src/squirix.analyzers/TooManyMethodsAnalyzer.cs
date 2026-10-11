@@ -61,17 +61,15 @@ public sealed class TooManyMethodsAnalyzer : DiagnosticAnalyzer
 
     private static bool ShouldCountMethod(IMethodSymbol method)
     {
-        if (AnalyzerHelpers.IsCompilerOrGenerated(method))
-            return false;
-
-        return method.MethodKind switch
-        {
-            MethodKind.Constructor or MethodKind.StaticConstructor => false,
-            MethodKind.PropertyGet or MethodKind.PropertySet => false,
-            MethodKind.EventAdd or MethodKind.EventRemove or MethodKind.EventRaise => false,
-            MethodKind.Ordinary or MethodKind.UserDefinedOperator or MethodKind.Conversion => true,
-            _ => false,
-        };
+        return !AnalyzerHelpers.IsCompilerOrGenerated(method)
+            && method.MethodKind switch
+            {
+                MethodKind.Constructor or MethodKind.StaticConstructor => false,
+                MethodKind.PropertyGet or MethodKind.PropertySet => false,
+                MethodKind.EventAdd or MethodKind.EventRemove or MethodKind.EventRaise => false,
+                MethodKind.Ordinary or MethodKind.UserDefinedOperator or MethodKind.Conversion => true,
+                _ => false,
+            };
     }
 
     private static bool TryCountMethods(INamedTypeSymbol type, out int methodCount)

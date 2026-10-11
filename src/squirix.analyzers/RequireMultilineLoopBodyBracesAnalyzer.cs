@@ -46,7 +46,7 @@ public sealed class RequireMultilineLoopBodyBracesAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeLoop(SyntaxNodeAnalysisContext context)
     {
         var body = LoopStatementSyntaxHelpers.GetLoopBody(context.Node);
-        if (body is null or BlockSyntax)
+        if (body == null || body is BlockSyntax)
             return;
 
         if (LoopStatementSyntaxHelpers.IsLoopStatement(body))

@@ -39,7 +39,7 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeImplicitObjectCreation, SyntaxKind.ImplicitObjectCreationExpression);
     }
 
-    private static void AnalyzeArgumentList(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, IMethodSymbol method,
+    private static void AnalyzeArgumentList(in SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, IMethodSymbol method,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList)
     {
         // Reduced extension invocations already exclude the receiver from Parameters.
@@ -67,9 +67,7 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
                 return;
 
             if (RemainsBoundToSameMethod(context, argumentList, i, withArgumentList, method))
-            {
                 context.ReportDiagnostic(Diagnostic.Create(Rule, argument.NameColon.GetLocation(), name));
-            }
 
             expectedIndex++;
         }
@@ -130,7 +128,7 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
 
     private static bool HasNamedArgument(ArgumentListSyntax? argumentList)
     {
-        if (argumentList is null)
+        if (argumentList == null)
             return false;
 
         foreach (var argument in argumentList.Arguments)
@@ -142,7 +140,7 @@ public sealed class RedundantNamedArgumentAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool RemainsBoundToSameMethod(SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex,
+    private static bool RemainsBoundToSameMethod(in SyntaxNodeAnalysisContext context, ArgumentListSyntax argumentList, int argumentIndex,
         Func<SyntaxNode, ArgumentListSyntax, ExpressionSyntax> withArgumentList, IMethodSymbol method)
     {
         var argument = argumentList.Arguments[argumentIndex];

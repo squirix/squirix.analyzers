@@ -13,7 +13,7 @@
         <!-- Pack as a Roslyn analyzer NuGet package. -->
         <IsPackable>true</IsPackable>
         <PackageId>squirix.analyzers</PackageId>
-        <Version>0.1.12</Version>
+        <Version>0.1.13</Version>
         <Authors>Squirix Team</Authors>
         <Description>Design-time Roslyn analyzers that enforce squirix's internal coding conventions: brace style, member-size limits, naming rules, and code-smell guards.</Description>
         <RepositoryUrl>https://github.com/squirix/Squirix.Analyzers</RepositoryUrl>
@@ -40,6 +40,17 @@
         <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="all"/>
         <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
         <None Include="..\..\icon.png" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <!-- The package checks its own source with its last published version; bump the version after each release. A project cannot
+         reference a package of its own id (NU1108), so the package is only downloaded and its assembly is handed to the compiler. -->
+    <PropertyGroup>
+        <OwnRulesPackageVersion>0.1.12</OwnRulesPackageVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageDownload Include="squirix.analyzers" Version="[$(OwnRulesPackageVersion)]"/>
+        <Analyzer Include="$(NuGetPackageRoot)squirix.analyzers\$(OwnRulesPackageVersion)\analyzers\dotnet\cs\squirix.analyzers.dll"/>
     </ItemGroup>
 
     <ItemGroup>

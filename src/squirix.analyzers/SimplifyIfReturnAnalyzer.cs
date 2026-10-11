@@ -100,16 +100,15 @@ public sealed class SimplifyIfReturnAnalyzer : DiagnosticAnalyzer
         var firstType = model.GetTypeInfo(first, cancellationToken).Type;
         var secondType = model.GetTypeInfo(second, cancellationToken).Type;
 
-        if (firstType == null && first.IsKind(SyntaxKind.NullLiteralExpression))
-            return secondType != null && IsNullable(secondType);
+        // A null literal has no type of its own; it fits when the other side can hold null.
+        var firstIsNull = firstType == null && first.IsKind(SyntaxKind.NullLiteralExpression);
+        var secondIsNull = secondType == null && second.IsKind(SyntaxKind.NullLiteralExpression);
+        var typedSide = firstIsNull ? secondType : firstType;
+        var sameKnownType = firstType is { TypeKind: not TypeKind.Error }
+                            && secondType is { TypeKind: not TypeKind.Error }
+                            && SymbolEqualityComparer.Default.Equals(firstType, secondType);
 
-        if (secondType == null && second.IsKind(SyntaxKind.NullLiteralExpression))
-            return firstType != null && IsNullable(firstType);
-
-        if (firstType == null || secondType == null || firstType.TypeKind == TypeKind.Error || secondType.TypeKind == TypeKind.Error)
-            return false;
-
-        return SymbolEqualityComparer.Default.Equals(firstType, secondType);
+        return firstIsNull || secondIsNull ? typedSide != null && IsNullable(typedSide) : sameKnownType;
     }
 
     private static bool IsTargetTyped(ExpressionSyntax expression)

@@ -137,15 +137,14 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
 
     private static bool IsOmittableSingleLineBody(StatementSyntax statement, bool followedByElse)
     {
-        if (statement is not BlockSyntax block)
-            return !LoopStatementSyntaxHelpers.SpansMultipleLines(statement);
-        if (block.Statements.Count != 1)
-            return false;
-
-        return BraceRemovalGuards.CanRemoveBraces(block, followedByElse) && !LoopStatementSyntaxHelpers.SpansMultipleLines(block.Statements[0]);
+        return statement is not BlockSyntax block
+            ? !LoopStatementSyntaxHelpers.SpansMultipleLines(statement)
+            : block.Statements.Count == 1
+            && BraceRemovalGuards.CanRemoveBraces(block, followedByElse)
+            && !LoopStatementSyntaxHelpers.SpansMultipleLines(block.Statements[0]);
     }
 
-    private static void ReportIfBlock(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind, bool followedByElse)
+    private static void ReportIfBlock(in SyntaxNodeAnalysisContext context, StatementSyntax body, string kind, bool followedByElse)
     {
         if (body is not BlockSyntax block || block.Statements.Count != 1)
             return;
@@ -159,7 +158,7 @@ public sealed class OmitSingleStatementBracesAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(Rule, block.OpenBraceToken.GetLocation(), kind));
     }
 
-    private static void ReportSimpleEmbedded(SyntaxNodeAnalysisContext context, StatementSyntax body, string kind)
+    private static void ReportSimpleEmbedded(in SyntaxNodeAnalysisContext context, StatementSyntax body, string kind)
     {
         if (body is not BlockSyntax block || block.Statements.Count != 1)
             return;
