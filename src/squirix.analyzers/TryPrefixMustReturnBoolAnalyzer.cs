@@ -46,6 +46,10 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (!HasTryPrefix(name) || ReturnsBoolLike(method.ReturnType))
             return;
 
+        // A partial method is reported once, on its definition part.
+        if (!ReferenceEquals(AnalyzerHelpers.GetPartialDefinition(method), method))
+            return;
+
         if (AnalyzerHelpers.IsCompilerOrGenerated(method))
             return;
 
@@ -73,12 +77,11 @@ public sealed class TryPrefixMustReturnBoolAnalyzer : DiagnosticAnalyzer
         if (type == null || type.TypeKind == TypeKind.Interface)
             return false;
 
-        var target = AnalyzerHelpers.GetPartialDefinition(method);
         foreach (var iface in type.AllInterfaces)
         {
             foreach (var member in iface.GetMembers(method.Name))
             {
-                if (member is IMethodSymbol && SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), target))
+                if (member is IMethodSymbol && SymbolEqualityComparer.Default.Equals(type.FindImplementationForInterfaceMember(member), method))
                     return true;
             }
         }
