@@ -369,6 +369,82 @@ public sealed class LargeStructByValueParameterAnalyzerTests
         }
         """, 1, cancellationToken);
 
+    /// <summary>The layout attributes are found by name, so another attribute of the same name can be taken for one of them and bring an array.</summary>
+    [Test]
+    public async Task FlagsStructWithLookAlikeAttributes(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System;
+
+        sealed class StructLayoutAttribute : Attribute
+        {
+            public StructLayoutAttribute(params int[] kinds)
+            {
+            }
+
+            public int[] Size { get; set; } = [];
+        }
+
+        sealed class InlineArrayAttribute : Attribute
+        {
+            public InlineArrayAttribute(params int[] lengths)
+            {
+            }
+        }
+
+        [StructLayout(2, Size = new[] { 1 })]
+        [InlineArray(3)]
+        readonly struct Wide
+        {
+            public readonly long A;
+
+            public readonly long B;
+
+            public readonly long C;
+        }
+
+        class C
+        {
+            int M(Wide value) => value.GetHashCode();
+        }
+        """, 1, cancellationToken);
+
+    /// <summary>A layout taken for explicit gives no size when its offsets cannot be read, so nothing is reported.</summary>
+    [Test]
+    public async Task AllowsLookAlikeOffsetWithArray(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System;
+
+        sealed class StructLayoutAttribute : Attribute
+        {
+            public StructLayoutAttribute(int kind)
+            {
+            }
+        }
+
+        sealed class FieldOffsetAttribute : Attribute
+        {
+            public FieldOffsetAttribute(int[] offsets)
+            {
+            }
+        }
+
+        [StructLayout(2)]
+        readonly struct Wide
+        {
+            [FieldOffset(new[] { 0 })]
+            public readonly long A;
+
+            [FieldOffset(new[] { 8 })]
+            public readonly long B;
+
+            [FieldOffset(new[] { 16 })]
+            public readonly long C;
+        }
+
+        class C
+        {
+            int M(Wide value) => value.GetHashCode();
+        }
+        """, cancellationToken);
+
     [Test]
     public async Task FlagsNullableField(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
         // long? is 16 bytes, so the struct is 24.
