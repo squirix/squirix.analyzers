@@ -27,6 +27,10 @@ internal static class AnalyzerRunner
     public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions = null,
         CancellationToken cancellationToken = default) => RunAsync(analyzer, source, analyzerOptions, References.Value, true, cancellationToken);
 
+    /// <summary>Runs the analyzer on several files of one compilation, as with a partial type split across files.</summary>
+    public static Task<ImmutableArray<Diagnostic>> RunOnFilesAsync(DiagnosticAnalyzer analyzer, ImmutableArray<string> sources, CancellationToken cancellationToken = default) =>
+        RunAsync(analyzer, sources, null, References.Value, true, cancellationToken);
+
     /// <summary>Runs the analyzer on source that may not compile, as an IDE does while the user types; still throws when the analyzer throws.</summary>
     public static Task<ImmutableArray<Diagnostic>> RunOnIncompleteCodeAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
         RunAsync(analyzer, source, null, References.Value, false, cancellationToken);
@@ -43,11 +47,19 @@ internal static class AnalyzerRunner
         return RunAsync(analyzer, source, null, References.Value.Add(MetadataReference.CreateFromImage(image.ToArray())), true, cancellationToken);
     }
 
-    private static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions,
+    private static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, ImmutableDictionary<string, string>? analyzerOptions,
+        ImmutableArray<MetadataReference> references, bool requireCompilableSource, CancellationToken cancellationToken) =>
+        RunAsync(analyzer, [source], analyzerOptions, references, requireCompilableSource, cancellationToken);
+
+    private static async Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, ImmutableArray<string> sources, ImmutableDictionary<string, string>? analyzerOptions,
         ImmutableArray<MetadataReference> references, bool requireCompilableSource, CancellationToken cancellationToken)
     {
-        var tree = CSharpSyntaxTree.ParseText(source, cancellationToken: cancellationToken);
-        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", new[] { tree }, references, new CSharpCompilationOptions(HasTopLevelStatements(tree, cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
+        var trees = new List<SyntaxTree>();
+        for (var index = 0; index < sources.Length; index++)
+            trees.Add(CSharpSyntaxTree.ParseText(sources[index], path: $"File{index}.cs", cancellationToken: cancellationToken));
+
+        var kind = HasTopLevelStatements(trees[0], cancellationToken) ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary;
+        var compilation = CSharpCompilation.Create("Squirix.Analyzers.UnitTests", trees, references, new CSharpCompilationOptions(kind, allowUnsafe: true));
         if (requireCompilableSource)
             ThrowIfSourceDoesNotCompile(compilation, cancellationToken);
         else

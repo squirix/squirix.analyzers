@@ -496,6 +496,349 @@ public sealed class LargeStructByValueParameterAnalyzerTests
         _ = await Assert.That(diagnostics).IsEmpty();
     }
 
+    /// <summary>A delegate type fixes the signature of a method used as a method group, so 'in' would not compile there.</summary>
+    [Test]
+    public async Task AllowsMethodUsedAsMethodGroup(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System;
+        using System.Collections.Generic;
+        using System.Linq;
+
+        class C
+        {
+            private event Action<Big>? Changed;
+
+            C() => Changed += OnChanged;
+
+            long Total(IEnumerable<Big> items) => items.Select(Sum).Sum();
+
+            Func<Big, long> Pick() => Twice;
+
+            static long Sum(Big value) => value.A;
+
+            static long Twice(Big value) => value.A * 2;
+
+            void OnChanged(Big value) => _ = value.A;
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsMethodGroupFromNestedType(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System;
+
+        partial class C
+        {
+            private static long Sum(Big value) => value.A;
+
+            static unsafe long Call()
+            {
+                delegate*<Big, long> pointer = &Address;
+                return pointer(default);
+            }
+
+            private static long Address(Big value) => value.B;
+        }
+
+        partial class C
+        {
+            class Nested
+            {
+                Func<Big, long> Pick() => Sum;
+
+                class Deeper
+                {
+                    internal static long Inner(Big value) => value.C;
+                }
+
+                Func<Big, long> PickInner() => Deeper.Inner;
+            }
+        }
+        """, cancellationToken);
+
+    /// <summary>Only the overload that is used as a method group keeps its signature.</summary>
+    [Test]
+    public async Task FlagsOverloadNotUsedAsMethodGroup(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("""
+            using System;
+
+            class C
+            {
+                Func<Big, long> Pick() => Sum;
+
+                static long Sum(Big value) => value.A;
+
+                static long Sum(Big value, long extra) => value.A + extra;
+            }
+            """, null, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task FlagsMethodNamedOrOnlyCalled(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        class C
+        {
+            string Name() => nameof(Sum);
+
+            long Call(Limit seed) => Sum(default) + seed.A;
+
+            static long Sum(Big value) => value.A;
+        }
+        """, 1, cancellationToken);
+
+    /// <summary>A use from another type is not seen: the rule reads the method's own type, not the whole compilation.</summary>
+    [Test]
+    public async Task FlagsMethodGroupUsedInAnotherType(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System;
+
+        class C
+        {
+            internal static long Sum(Big value) => value.A;
+        }
+
+        class Other
+        {
+            Func<Big, long> Pick() => C.Sum;
+        }
+        """, 1, cancellationToken);
+
+    /// <summary>An override must follow the signature it overrides, so a delegate made from it holds the base method too.</summary>
+    [Test]
+    public async Task AllowsMethodWhoseOverrideIsAGroup(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System;
+
+        class C
+        {
+            protected virtual long Read(Big value) => value.A;
+
+            class Derived : C
+            {
+                protected override long Read(Big value) => value.B;
+
+                Func<Big, long> Pick() => Read;
+            }
+        }
+        """, cancellationToken);
+
+    [Test]
+    public async Task AllowsGenericAndExtensionGroups(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System;
+
+        static class Extensions
+        {
+            static Func<Big, long> Pick(string text) => text.Weigh;
+
+            static Func<Big, int, long> PickGeneric() => Add<int>;
+
+            static Func<string, Big, long> PickBlock() => Scale;
+
+            static long Weigh(this string text, Big value) => text.Length + value.A;
+
+            static long Add<T>(Big value, T extra) => value.A;
+
+            extension(string text)
+            {
+                public long Scale(Big value) => text.Length * value.A;
+            }
+        }
+        """, cancellationToken);
+
+    /// <summary>A name that binds to something else, such as a local, is not a use of the method.</summary>
+    [Test]
+    public async Task FlagsMethodWhoseNameIsALocal(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        class C
+        {
+            long Call()
+            {
+                var Sum = 1L;
+                return Sum + C.Sum(default);
+            }
+
+            static long Sum(Big value) => value.A;
+        }
+        """, 1, cancellationToken);
+
+    [Test]
+    public async Task FlagsMethodOfNestedType(CancellationToken cancellationToken)
+    {
+        var diagnostics = await RunAsync("""
+            using System;
+
+            class C
+            {
+                Func<Big, long> Pick() => Sum;
+
+                static long Sum(Big value) => value.A;
+
+                class Nested
+                {
+                    static long Other(Big value) => value.B;
+                }
+            }
+            """, null, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(10);
+    }
+
+    /// <summary>The use sits in another file of the type, in the accessor of a partial event and in a generated part.</summary>
+    [Test]
+    public async Task AllowsMethodGroupInAnotherFile(CancellationToken cancellationToken)
+    {
+        const string declarations = """
+                                    using System;
+
+                                    partial class C
+                                    {
+                                        private static Func<Big, long>? handler;
+
+                                        public partial event Func<Big, long> Changed;
+
+                                        static long OnChanged(Big value) => value.A;
+
+                                        static long Generated(Big value) => value.B;
+
+                                        static long OnlyCalled(Big value) => value.C;
+                                    }
+                                    """;
+        const string accessors = """
+                                 using System;
+
+                                 partial class C
+                                 {
+                                     public partial event Func<Big, long> Changed { add => handler = OnChanged; remove => handler = OnChanged; }
+
+                                     static long Call() => OnlyCalled(default);
+                                 }
+                                 """;
+        const string generated = """
+                                 // <auto-generated/>
+                                 using System;
+
+                                 partial class C
+                                 {
+                                     class Wiring
+                                     {
+                                         Func<Big, long> Pick() => Generated;
+                                     }
+                                 }
+                                 """;
+
+        var diagnostics = await AnalyzerRunner.RunOnFilesAsync(new LargeStructByValueParameterAnalyzer(), [declarations + Types, accessors, generated], cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.GetMessage()).Contains("'value'");
+        _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(12);
+    }
+
+    /// <summary>A partial constructor must not keep the findings of its type from being reported.</summary>
+    [Test]
+    public async Task FlagsMethodsNextToPartialConstructor(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        partial class C
+        {
+            public partial C(int seed);
+
+            public partial C(int seed) { }
+
+            static long Sum(Big value) => value.A;
+
+            class Nested
+            {
+                long Other(Big value) => value.B;
+            }
+        }
+        """, 2, cancellationToken);
+
+    [Test]
+    public async Task AllowsPartialMethodUsedAsGroup(CancellationToken cancellationToken) => await AssertCleanAsync("""
+        using System;
+
+        partial class C
+        {
+            private static partial long Sum(Big value);
+
+            private static partial long Sum(Big value) => value.A;
+
+            Func<Big, long> Pick() => Sum;
+        }
+        """, cancellationToken);
+
+    /// <summary>A call after ?. is a call like any other, so it does not hold the report back.</summary>
+    [Test]
+    public async Task FlagsMethodCalledConditionally(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        class C
+        {
+            long? Call(C? other) => other?.Sum(default);
+
+            long Sum(Big value) => value.A;
+        }
+        """ + "\n#nullable enable", 1, cancellationToken);
+
+    /// <summary>While a conversion does not bind, every method the name may mean keeps its signature.</summary>
+    [Test]
+    public async Task AllowsCandidatesOfBrokenConversion(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+
+                              class C
+                              {
+                                  Func<int> Pick() => Sum;
+
+                                  static long Sum(Big value) => value.A;
+
+                                  static long Sum(Big value, long extra) => value.A + extra;
+                              }
+                              """;
+
+        var diagnostics = await AnalyzerRunner.RunOnIncompleteCodeAsync(new LargeStructByValueParameterAnalyzer(), source + Types, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    /// <summary>Another file is not bound: there a mention of the name outside a call counts, whatever it names.</summary>
+    [Test]
+    public async Task AllowsSameNameInAnotherFile(CancellationToken cancellationToken)
+    {
+        const string declarations = """
+                                    partial class C
+                                    {
+                                        static long Length(Big value) => value.A;
+
+                                        static long Named(Big value) => value.B;
+                                    }
+                                    """;
+        const string other = """
+                             partial class C
+                             {
+                                 static int Size(string text) => text.Length;
+
+                                 static string Name() => nameof(Named);
+                             }
+                             """;
+
+        var diagnostics = await AnalyzerRunner.RunOnFilesAsync(new LargeStructByValueParameterAnalyzer(), [declarations + Types, other], cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(4);
+    }
+
+    /// <summary>A constructor has no name to be used by, so a mention of anything else does not hold it back.</summary>
+    [Test]
+    public async Task FlagsConstructorNextToMethodGroups(CancellationToken cancellationToken) => await AssertFlaggedAsync("""
+        using System;
+
+        class C
+        {
+            C(Big value) => _ = value.A;
+
+            Func<Big, long> Pick() => Sum;
+
+            static long Sum(Big value) => value.A;
+        }
+        """, 1, cancellationToken);
+
     [Test]
     public async Task SkipsGeneratedCode(CancellationToken cancellationToken) => await AssertCleanAsync("""
         // <auto-generated/>

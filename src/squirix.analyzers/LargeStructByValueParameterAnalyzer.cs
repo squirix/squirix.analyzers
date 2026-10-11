@@ -59,6 +59,7 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
         var maxSize = 0;
         var checkedSignature = false;
+        var checkedUses = false;
         foreach (var parameter in method.Parameters)
         {
             if (parameter.RefKind != RefKind.None || parameter.IsParams || parameter.Type is not INamedTypeSymbol { TypeKind: TypeKind.Struct, IsReadOnly: true } type)
@@ -80,6 +81,15 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
             if (HasByReferenceOverload(method, parameter) || !CanBeReadOnlyReference(parameter, declaration, context.SemanticModel))
                 continue;
+
+            // The search for uses reads the whole type, so it comes last and once. Only an ordinary method has a name to be used by.
+            if (!checkedUses)
+            {
+                if (declaration is MethodDeclarationSyntax && IsUsedAsMethodGroup(method, context.SemanticModel, context.CancellationToken))
+                    return;
+
+                checkedUses = true;
+            }
 
             var location = GetLocation(parameter, context.CancellationToken);
             if (location != null)
@@ -193,6 +203,34 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    /// <summary>Returns whether a name is the thing being called, as in <c language="csharp">Sum(x)</c> or <c language="csharp">this.Sum(x)</c>.</summary>
+    private static bool IsCalled(SimpleNameSyntax name)
+    {
+        ExpressionSyntax callee = name;
+        switch (name.Parent)
+        {
+            case MemberAccessExpressionSyntax access when access.Name == name:
+                callee = access;
+                break;
+            case MemberBindingExpressionSyntax binding when binding.Name == name:
+                callee = binding;
+                break;
+        }
+
+        return callee.Parent is InvocationExpressionSyntax invocation && invocation.Expression == callee;
+    }
+
+    private static bool IsInsideNameOf(SyntaxNode node)
+    {
+        for (var parent = node.Parent; parent != null; parent = parent.Parent)
+        {
+            if (parent is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } })
+                return true;
+        }
+
+        return false;
+    }
+
     // Data flow does not treat 'ref' passed to a 'ref readonly' parameter as a write, but 'ref' on an 'in' parameter does not compile.
     private static bool IsPassedByReference(BaseMethodDeclarationSyntax declaration, string parameterName)
     {
@@ -208,4 +246,71 @@ public sealed class LargeStructByValueParameterAnalyzer : DiagnosticAnalyzer
 
     private static bool IsUntouched(DataFlowAnalysis? flow, IParameterSymbol parameter) =>
         flow is { Succeeded: true } && !flow.WrittenInside.Contains(parameter) && !flow.Captured.Contains(parameter) && !flow.UnsafeAddressTaken.Contains(parameter);
+
+    /// <summary>
+    /// Returns whether the method is used as a value somewhere in its outermost type or in a type nested there:
+    /// converted to a delegate, subscribed to an event, or taken the address of. A delegate type fixes the signature of
+    /// such a method, so <c language="csharp">in</c> would stop that use compiling. The search reads the syntax of every
+    /// part of the type, generated ones included. A mention in this file is bound; one in another file of a partial
+    /// type is taken as a use without binding, since any name outside a call is close enough to be careful about.
+    /// </summary>
+    private static bool IsUsedAsMethodGroup(IMethodSymbol method, SemanticModel semanticModel, CancellationToken cancellationToken)
+    {
+        var outermost = method.ContainingType;
+        while (outermost.ContainingType != null)
+            outermost = outermost.ContainingType;
+
+        foreach (var reference in outermost.DeclaringSyntaxReferences)
+        {
+            var part = reference.GetSyntax(cancellationToken);
+            foreach (var node in part.DescendantNodes())
+            {
+                if (node is not SimpleNameSyntax name || name.Identifier.ValueText != method.Name || IsCalled(name) || IsInsideNameOf(name))
+                    continue;
+
+                if (part.SyntaxTree != semanticModel.SyntaxTree || RefersTo(semanticModel.GetSymbolInfo(name, cancellationToken), method))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Returns the symbol a method is known by wherever it is used: unconstructed, unreduced, and the definition part of a partial method.</summary>
+    private static IMethodSymbol Normalize(IMethodSymbol method)
+    {
+        method = (method.ReducedFrom ?? method).OriginalDefinition;
+        return method.PartialDefinitionPart ?? method;
+    }
+
+    /// <summary>
+    /// Returns whether a bound name is the method, an override of it (which must follow its signature), or the static
+    /// form of it as an extension-block member.
+    /// </summary>
+    private static bool RefersTo(SymbolInfo info, IMethodSymbol method)
+    {
+        var target = Normalize(method);
+        if (RefersTo(info.Symbol, target))
+            return true;
+
+        foreach (var candidate in info.CandidateSymbols)
+        {
+            if (RefersTo(candidate, target))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool RefersTo(ISymbol? symbol, IMethodSymbol target)
+    {
+        for (var found = symbol as IMethodSymbol; found != null; found = found.OverriddenMethod)
+        {
+            var known = Normalize(found);
+            if (SymbolEqualityComparer.Default.Equals(known, target) || SymbolEqualityComparer.Default.Equals(known, target.AssociatedExtensionImplementation))
+                return true;
+        }
+
+        return false;
+    }
 }
