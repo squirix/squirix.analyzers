@@ -13,11 +13,11 @@ and code-smell guards. They are applied at build time and their findings are sur
 ## Installation
 
 Add the package reference from [nuget.org](https://www.nuget.org/packages/squirix.analyzers) and use the latest
-published version (`0.1.14` at the time of writing):
+published version (`0.1.15` at the time of writing):
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="squirix.analyzers" Version="0.1.14" PrivateAssets="all" />
+    <PackageReference Include="squirix.analyzers" Version="0.1.15" PrivateAssets="all" />
 </ItemGroup>
 ```
 
