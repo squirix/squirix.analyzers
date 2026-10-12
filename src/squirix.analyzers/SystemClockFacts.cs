@@ -45,21 +45,16 @@ internal static class SystemClockFacts
         while (current.Parent is ParenthesizedExpressionSyntax or PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression })
             current = (ExpressionSyntax)current.Parent;
 
-        switch (current.Parent)
+        return current.Parent switch
         {
-            case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.CoalesceExpression } coalesce:
-                return coalesce.Right == current;
-            case AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.CoalesceAssignmentExpression } coalesceAssignment:
-                return coalesceAssignment.Right == current;
-            case AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression } assignment:
-                return assignment.Right == current && AssignsOwnInstanceMember(semanticModel, assignment, cancellationToken);
-            case EqualsValueClauseSyntax initializer:
-                return IsInstanceMemberInitializer(initializer);
-            case ArgumentSyntax { Parent: ArgumentListSyntax { Parent: ConstructorInitializerSyntax or PrimaryConstructorBaseTypeSyntax } }:
-                return true;
-            default:
-                return false;
-        }
+            BinaryExpressionSyntax { RawKind: (int)SyntaxKind.CoalesceExpression } coalesce => coalesce.Right == current,
+            AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.CoalesceAssignmentExpression } coalesceAssignment => coalesceAssignment.Right == current,
+            AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression } assignment =>
+                assignment.Right == current && AssignsOwnInstanceMember(semanticModel, assignment, cancellationToken),
+            EqualsValueClauseSyntax initializer => IsInstanceMemberInitializer(initializer),
+            ArgumentSyntax { Parent: ArgumentListSyntax { Parent: ConstructorInitializerSyntax or PrimaryConstructorBaseTypeSyntax } } => true,
+            _ => false,
+        };
     }
 
     private static bool AssignsOwnInstanceMember(SemanticModel semanticModel, AssignmentExpressionSyntax assignment, CancellationToken cancellationToken)

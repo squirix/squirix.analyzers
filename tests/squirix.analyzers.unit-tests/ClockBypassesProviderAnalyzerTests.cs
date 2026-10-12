@@ -176,6 +176,24 @@ public sealed class ClockBypassesProviderAnalyzerTests
     }
 
     [Test]
+    public async Task FlagsClockReadInComparison(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+
+                              class Worker
+                              {
+                                  public bool IsDue(TimeProvider clock, DateTime due) => DateTime.UtcNow == due;
+                              }
+                              """;
+
+        var diagnostics = await RunAsync(source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+    }
+
+    [Test]
     public async Task FlagsDateTimeNowWithField(CancellationToken cancellationToken)
     {
         const string source = """

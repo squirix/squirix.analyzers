@@ -123,7 +123,7 @@ public sealed class ClockBypassesTimeProviderAnalyzer : DiagnosticAnalyzer
         for (var current = node.Parent; current != null; current = current.Parent)
         {
             SyntaxNode? parameters = null;
-            var modifiers = default(SyntaxTokenList);
+            SyntaxTokenList modifiers;
             switch (current)
             {
                 case TypeDeclarationSyntax type:
@@ -219,13 +219,16 @@ public sealed class ClockBypassesTimeProviderAnalyzer : DiagnosticAnalyzer
         while (current.Parent is ParenthesizedExpressionSyntax)
             current = current.Parent;
 
-        // A comparison with TimeProvider.System asks which provider this is and reads no time.
-        if (current.Parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression })
-            return false;
+        if (memberAccess.Name.Identifier.ValueText == "System")
+        {
+            // A comparison with TimeProvider.System asks which provider this is and reads no time.
+            if (current.Parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression })
+                return false;
 
-        // A hidden default is the other rule's finding.
-        if (memberAccess.Name.Identifier.ValueText == "System" && SystemClockFacts.IsHiddenDefault(semanticModel, memberAccess, cancellationToken))
-            return false;
+            // A hidden default is the other rule's finding.
+            if (SystemClockFacts.IsHiddenDefault(semanticModel, memberAccess, cancellationToken))
+                return false;
+        }
 
         for (var ancestor = current.Parent; ancestor is ExpressionSyntax or ArgumentSyntax or ArgumentListSyntax; ancestor = ancestor.Parent)
         {
