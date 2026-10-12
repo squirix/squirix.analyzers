@@ -84,6 +84,7 @@ auto-fix (code fix provider) yet.
 | [`SQR0034`](docs/rules/SQR0034.md) | Style       | `NoGlobalUsingAnalyzer`                   | No global using directives, including generated ones.                |
 | [`SQR0035`](docs/rules/SQR0035.md) | Style       | `NoPrimaryConstructorAnalyzer`            | No primary constructors on classes and structs.                      |
 | [`SQR0036`](docs/rules/SQR0036.md) | Design      | `NoSystemClockDefaultAnalyzer`            | No `TimeProvider.System` default for a `TimeProvider` dependency.    |
+| [`SQR0038`](docs/rules/SQR0038.md) | Reliability | `CancellationCatchFilterAnalyzer`         | Filter a cancellation catch by the cancellation token.               |
 
 ## Building
 
