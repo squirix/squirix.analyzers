@@ -74,7 +74,8 @@ public sealed class ClockBypassesTimeProviderAnalyzer : DiagnosticAnalyzer
                     _ => null,
                 };
 
-                if (!SystemClockFacts.IsTimeProvider(memberType))
+                // TimeProvider.System is the system clock itself, which a type derived from TimeProvider inherits.
+                if (!SystemClockFacts.IsTimeProvider(memberType) || SystemClockFacts.IsSystemType(member.ContainingType, "TimeProvider"))
                     continue;
 
                 if (!member.IsStatic && !instanceAllowed)
@@ -223,6 +224,10 @@ public sealed class ClockBypassesTimeProviderAnalyzer : DiagnosticAnalyzer
         {
             // A comparison with TimeProvider.System asks which provider this is and reads no time.
             if (current.Parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression })
+                return false;
+
+            // A member set in an object initializer gets the clock the creating code names for that object.
+            if (current.Parent is AssignmentExpressionSyntax { Parent: InitializerExpressionSyntax } assignment && assignment.Right == current)
                 return false;
 
             // A hidden default is the other rule's finding.

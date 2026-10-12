@@ -136,6 +136,45 @@ public sealed class ClockBypassesProviderAnalyzerTests
     }
 
     [Test]
+    public async Task AllowsObjectInitializerMember(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+
+                              class Options
+                              {
+                                  public required TimeProvider Clock { get; init; }
+                              }
+
+                              class Worker
+                              {
+                                  public Options Create(TimeProvider clock) => new Options { Clock = TimeProvider.System };
+                              }
+                              """;
+
+        var diagnostics = await RunAsync(source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task AllowsClockReadInsideTimeProvider(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+
+                              sealed class OffsetClock : TimeProvider
+                              {
+                                  public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow.AddHours(1);
+                              }
+                              """;
+
+        var diagnostics = await RunAsync(source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
     public async Task AllowsStaticLambdaInsideMethod(CancellationToken cancellationToken)
     {
         const string source = """
