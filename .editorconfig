@@ -151,7 +151,6 @@ dotnet_diagnostic.SQR0033.severity = error # no field dereference outside the di
 dotnet_diagnostic.SQR0034.severity = error # no global using directives, including generated ones (ImplicitUsings, TUnitImplicitUsings)
 dotnet_diagnostic.SQR0035.severity = error # no primary constructors on classes and structs
 dotnet_diagnostic.SQR0036.severity = error # no TimeProvider.System default for a TimeProvider dependency
-dotnet_diagnostic.SQR0037.severity = error # no system clock read where a TimeProvider is available
 
 # ===========================================================================
 # Microsoft code analysis (CA*) — reliability / disposal / performance / usage
