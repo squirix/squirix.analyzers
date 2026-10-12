@@ -13,11 +13,11 @@ and code-smell guards. They are applied at build time and their findings are sur
 ## Installation
 
 Add the package reference from [nuget.org](https://www.nuget.org/packages/squirix.analyzers) and use the latest
-published version (`0.1.15` at the time of writing):
+published version (`0.1.16` at the time of writing):
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="squirix.analyzers" Version="0.1.15" PrivateAssets="all" />
+    <PackageReference Include="squirix.analyzers" Version="0.1.16" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -84,7 +84,6 @@ auto-fix (code fix provider) yet.
 | [`SQR0034`](docs/rules/SQR0034.md) | Style       | `NoGlobalUsingAnalyzer`                   | No global using directives, including generated ones.                |
 | [`SQR0035`](docs/rules/SQR0035.md) | Style       | `NoPrimaryConstructorAnalyzer`            | No primary constructors on classes and structs.                      |
 | [`SQR0036`](docs/rules/SQR0036.md) | Design      | `NoSystemClockDefaultAnalyzer`            | No `TimeProvider.System` default for a `TimeProvider` dependency.    |
-| [`SQR0037`](docs/rules/SQR0037.md) | Usage       | `ClockBypassesTimeProviderAnalyzer`       | No system clock read where a `TimeProvider` is available.            |
 
 ## Building
 
