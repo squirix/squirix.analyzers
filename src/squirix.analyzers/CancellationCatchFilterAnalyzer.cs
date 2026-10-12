@@ -97,6 +97,8 @@ public sealed class CancellationCatchFilterAnalyzer : DiagnosticAnalyzer
                     return null;
                 case LocalFunctionStatementSyntax localFunction when FindToken(semanticModel, localFunction.ParameterList, cancellationToken) is { } token:
                     return token;
+                case SimpleLambdaExpressionSyntax simple when FindToken(semanticModel, simple.Parameter, cancellationToken) is { } token:
+                    return token;
                 case ParenthesizedLambdaExpressionSyntax lambda when FindToken(semanticModel, lambda.ParameterList, cancellationToken) is { } token:
                     return token;
                 case AnonymousMethodExpressionSyntax { ParameterList: { } list } when FindToken(semanticModel, list, cancellationToken) is { } token:
@@ -111,10 +113,13 @@ public sealed class CancellationCatchFilterAnalyzer : DiagnosticAnalyzer
     {
         foreach (var parameter in parameters.Parameters)
         {
-            if (semanticModel.GetDeclaredSymbol(parameter, cancellationToken) is { } symbol && symbol.Type.ToDisplayString() == "System.Threading.CancellationToken")
-                return symbol;
+            if (FindToken(semanticModel, parameter, cancellationToken) is { } token)
+                return token;
         }
 
         return null;
     }
+
+    private static IParameterSymbol? FindToken(SemanticModel semanticModel, ParameterSyntax parameter, CancellationToken cancellationToken) =>
+        semanticModel.GetDeclaredSymbol(parameter, cancellationToken) is { } symbol && symbol.Type.ToDisplayString() == "System.Threading.CancellationToken" ? symbol : null;
 }

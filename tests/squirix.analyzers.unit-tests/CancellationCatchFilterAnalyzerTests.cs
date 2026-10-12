@@ -274,6 +274,36 @@ public sealed class CancellationCatchFilterAnalyzerTests
     }
 
     [Test]
+    public async Task FlagsCatchInSimpleLambda(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+
+                              class Worker
+                              {
+                                  public Func<CancellationToken, Task> Create() => async token =>
+                                  {
+                                      try
+                                      {
+                                          await Task.Delay(1, token);
+                                      }
+                                      catch (OperationCanceledException)
+                                      {
+                                      }
+                                  };
+                              }
+                              """;
+
+        var diagnostics = await RunAsync(source, cancellationToken);
+
+        var diagnostic = await Assert.That(diagnostics).HasSingleItem();
+        _ = await Assert.That(diagnostic.Id).IsEqualTo(RuleId);
+        _ = await Assert.That(diagnostic.GetMessage()).Contains("token.IsCancellationRequested");
+    }
+
+    [Test]
     public async Task FlagsFilterUnrelatedToCancellation(CancellationToken cancellationToken)
     {
         const string source = """
