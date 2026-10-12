@@ -152,6 +152,8 @@ dotnet_diagnostic.SQR0034.severity = error # no global using directives, includi
 dotnet_diagnostic.SQR0035.severity = error # no primary constructors on classes and structs
 dotnet_diagnostic.SQR0036.severity = error # no TimeProvider.System default for a TimeProvider dependency
 dotnet_diagnostic.SQR0038.severity = error # filter a cancellation catch by the cancellation token
+dotnet_diagnostic.SQR0039.severity = error # no null logger default for a logger dependency
+dotnet_diagnostic.SQR0040.severity = error # no logger in a static field or property
 
 # ===========================================================================
 # Microsoft code analysis (CA*) — reliability / disposal / performance / usage
