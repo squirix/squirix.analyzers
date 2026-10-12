@@ -1,3 +1,11 @@
+## Release 0.1.16
+
+### Removed Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+SQR0037 | Usage    | Warning  | Removed: whether a system clock read next to a TimeProvider is a mistake depends on the code, so the rule was not general enough
+
 ## Release 0.1.14
 
 ### New Rules
