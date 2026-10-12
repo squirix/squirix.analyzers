@@ -199,6 +199,10 @@ public sealed class IncompleteCodeTests
                                                        }
                                                    }
 
+                                                   namespace Microsoft.Extensions.Logging { public interface ILogger { } }
+
+                                                   namespace Microsoft.Extensions.Logging.Abstractions { public class NullLogger : Microsoft.Extensions.Logging.ILogger { public static NullLogger Instance { get; } = new NullLogger(); } }
+
                                                    namespace TUnit.Core
                                                    {
                                                        class TestExecution
@@ -221,6 +225,10 @@ public sealed class IncompleteCodeTests
                                                    class Holder(int size) { public int Size => size; }
 
                                                    class Timed { private TimeProvider _clock = TimeProvider.System; long Read() => Environment.TickCount64 + _clock.GetTimestamp(); }
+
+                                                   class Canceled { static async Task RunAsync(System.Threading.CancellationToken token) { try { await Task.Delay(1, token); } catch (OperationCanceledException) { } } }
+
+                                                   class Logged { static Microsoft.Extensions.Logging.ILogger Shared = null!; Microsoft.Extensions.Logging.ILogger _log = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance; }
 
                                                    class Base : IDisposable
                                                    {

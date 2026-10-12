@@ -43,10 +43,10 @@ public sealed class NoSystemClockDefaultAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeMemberAccess(SyntaxNodeAnalysisContext context)
     {
         var memberAccess = (MemberAccessExpressionSyntax)context.Node;
-        if (!SystemClockFacts.IsTimeProviderSystem(context.SemanticModel, memberAccess, context.CancellationToken))
+        if (!DependencyDefaultFacts.IsTimeProviderSystem(context.SemanticModel, memberAccess, context.CancellationToken))
             return;
 
-        if (SystemClockFacts.IsHiddenDefault(context.SemanticModel, memberAccess, context.CancellationToken))
+        if (DependencyDefaultFacts.IsHiddenDefault(context.SemanticModel, memberAccess, context.CancellationToken))
             context.ReportDiagnostic(Diagnostic.Create(Rule, memberAccess.GetLocation()));
     }
 }
