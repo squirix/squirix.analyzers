@@ -222,6 +222,8 @@ public sealed class IncompleteCodeTests
 
                                                    class Timed { private TimeProvider _clock = TimeProvider.System; long Read() => Environment.TickCount64 + _clock.GetTimestamp(); }
 
+                                                   class Canceled { static async Task RunAsync(System.Threading.CancellationToken token) { try { await Task.Delay(1, token); } catch (OperationCanceledException) { } } }
+
                                                    class Base : IDisposable
                                                    {
                                                        ~Base() => Dispose(false);
