@@ -10,18 +10,6 @@ namespace Squirix.Analyzers;
 /// </summary>
 internal static class SystemClockFacts
 {
-    /// <summary>Returns whether the type is TimeProvider or derives from it.</summary>
-    internal static bool IsTimeProvider(ITypeSymbol? type)
-    {
-        for (var current = type; current != null; current = current.BaseType)
-        {
-            if (IsSystemType(current, "TimeProvider"))
-                return true;
-        }
-
-        return false;
-    }
-
     /// <summary>Returns whether the type is the type of that name in the System namespace.</summary>
     internal static bool IsSystemType(ITypeSymbol? type, string name) =>
         type is INamedTypeSymbol { ContainingType: null, ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } } && type.Name == name;
