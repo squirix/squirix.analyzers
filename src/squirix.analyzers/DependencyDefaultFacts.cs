@@ -6,9 +6,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Squirix.Analyzers;
 
 /// <summary>
-/// Answers questions about TimeProvider and the places where TimeProvider.System stands in for a missing dependency.
+/// Answers questions about the places where a well-known default, such as TimeProvider.System, stands in for a missing dependency.
 /// </summary>
-internal static class SystemClockFacts
+internal static class DependencyDefaultFacts
 {
     /// <summary>Returns whether the type is the type of that name in the System namespace.</summary>
     internal static bool IsSystemType(ITypeSymbol? type, string name) =>
@@ -23,7 +23,7 @@ internal static class SystemClockFacts
     }
 
     /// <summary>
-    /// Returns whether the expression supplies a TimeProvider that the caller did not choose: the right side of a
+    /// Returns whether the expression supplies a dependency that the caller did not choose: the right side of a
     /// null-coalescing operator, the initializer of an instance field or property, an argument of a constructor initializer,
     /// or the value assigned to an instance field or property of the containing type.
     /// </summary>
