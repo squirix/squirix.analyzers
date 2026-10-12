@@ -83,6 +83,8 @@ auto-fix (code fix provider) yet.
 | [`SQR0033`](docs/rules/SQR0033.md) | Reliability | `FinalizerDisposeFieldAnalyzer`           | No field dereference outside `disposing` in a finalizable type.      |
 | [`SQR0034`](docs/rules/SQR0034.md) | Style       | `NoGlobalUsingAnalyzer`                   | No global using directives, including generated ones.                |
 | [`SQR0035`](docs/rules/SQR0035.md) | Style       | `NoPrimaryConstructorAnalyzer`            | No primary constructors on classes and structs.                      |
+| [`SQR0036`](docs/rules/SQR0036.md) | Design      | `NoSystemClockDefaultAnalyzer`            | No `TimeProvider.System` default for a `TimeProvider` dependency.    |
+| [`SQR0037`](docs/rules/SQR0037.md) | Usage       | `ClockBypassesTimeProviderAnalyzer`       | No system clock read where a `TimeProvider` is available.            |
 
 ## Building
 

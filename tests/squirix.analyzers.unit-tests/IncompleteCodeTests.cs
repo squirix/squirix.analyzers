@@ -220,6 +220,8 @@ public sealed class IncompleteCodeTests
 
                                                    class Holder(int size) { public int Size => size; }
 
+                                                   class Timed { private TimeProvider _clock = TimeProvider.System; long Read() => Environment.TickCount64 + _clock.GetTimestamp(); }
+
                                                    class Base : IDisposable
                                                    {
                                                        ~Base() => Dispose(false);
