@@ -14,6 +14,36 @@ public sealed class CancellationCatchFilterAnalyzerTests
     private const string RuleId = "SQR0038";
 
     [Test]
+    public async Task AllowsBodyThatReadsToken(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              using System;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+
+                              class Worker
+                              {
+                                  public async Task RunAsync(CancellationToken cancellationToken)
+                                  {
+                                      try
+                                      {
+                                          await Task.Delay(1, cancellationToken);
+                                      }
+                                      catch (OperationCanceledException)
+                                      {
+                                          if (!cancellationToken.IsCancellationRequested)
+                                              Console.WriteLine("timeout");
+                                      }
+                                  }
+                              }
+                              """;
+
+        var diagnostics = await RunAsync(source, cancellationToken);
+
+        _ = await Assert.That(diagnostics).IsEmpty();
+    }
+
+    [Test]
     public async Task AllowsCatchThatRethrows(CancellationToken cancellationToken)
     {
         const string source = """

@@ -9,8 +9,8 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Squirix.Analyzers;
 
 /// <summary>
-/// Flags a catch of OperationCanceledException or TaskCanceledException that has no filter checking a cancellation token,
-/// in a function that takes a CancellationToken (SQR0038).
+/// Flags a catch of OperationCanceledException or TaskCanceledException that reads no cancellation token in its filter or
+/// its body, in a function that takes a CancellationToken (SQR0038).
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class CancellationCatchFilterAnalyzer : DiagnosticAnalyzer
@@ -52,7 +52,9 @@ public sealed class CancellationCatchFilterAnalyzer : DiagnosticAnalyzer
         if (caught?.ToDisplayString() is not ("System.OperationCanceledException" or "System.Threading.Tasks.TaskCanceledException"))
             return;
 
-        if (ChecksCancellation(context.SemanticModel, catchClause.Filter, context.CancellationToken))
+        // A body that reads a token tells the cancellations apart itself, as a filter would.
+        if (ReadsCancellation(context.SemanticModel, catchClause.Filter?.FilterExpression, context.CancellationToken)
+            || ReadsCancellation(context.SemanticModel, catchClause.Block, context.CancellationToken))
             return;
 
         var token = FindToken(context.SemanticModel, catchClause, context.CancellationToken);
@@ -60,13 +62,13 @@ public sealed class CancellationCatchFilterAnalyzer : DiagnosticAnalyzer
             context.ReportDiagnostic(Diagnostic.Create(Rule, catchClause.CatchKeyword.GetLocation(), caught.Name, token.Name));
     }
 
-    /// <summary>Returns whether the filter reads a cancellation token or a cancellation token source, whichever one it is.</summary>
-    private static bool ChecksCancellation(SemanticModel semanticModel, CatchFilterClauseSyntax? filter, CancellationToken cancellationToken)
+    /// <summary>Returns whether the code reads a cancellation token or a cancellation token source, whichever one it is.</summary>
+    private static bool ReadsCancellation(SemanticModel semanticModel, SyntaxNode? code, CancellationToken cancellationToken)
     {
-        if (filter == null)
+        if (code == null)
             return false;
 
-        foreach (var node in filter.FilterExpression.DescendantNodesAndSelf())
+        foreach (var node in code.DescendantNodesAndSelf())
         {
             if (node is not (IdentifierNameSyntax or MemberAccessExpressionSyntax))
                 continue;
