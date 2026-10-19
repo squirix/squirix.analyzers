@@ -37,7 +37,7 @@
              exactly that version and do not raise it to track the latest release: a newer reference makes the analyzer fail to load
              (CS9057) on the .NET 10.0.100 SDK. Renovate is configured to leave this package alone. -->
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" PrivateAssets="all"/>
-        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.402" PrivateAssets="all"/>
         <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
         <None Include="..\..\icon.png" Pack="true" PackagePath="\"/>
     </ItemGroup>
