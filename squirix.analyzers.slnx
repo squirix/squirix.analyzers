@@ -6,6 +6,7 @@
         <Project Path="src/squirix.analyzers/squirix.analyzers.csproj"/>
     </Folder>
     <Folder Name="/tests/">
+        <Project Path="tests/squirix.analyzers.fuzz/Squirix.Analyzers.Fuzz.csproj"/>
         <Project Path="tests/squirix.analyzers.unit-tests/Squirix.Analyzers.UnitTests.csproj"/>
     </Folder>
 </Solution>
