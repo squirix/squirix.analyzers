@@ -93,7 +93,16 @@ internal sealed class AnalysisEngine
             false,
             false);
 
-        _ = await compilation.WithAnalyzers(_filter.Analyzers, options).GetAnalyzerDiagnosticsAsync(cancellationToken);
+        try
+        {
+            _ = await compilation.WithAnalyzers(_filter.Analyzers, options).GetAnalyzerDiagnosticsAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The analyzer driver reports the exceptions of the analyzers through the callback, so this one is thrown by Roslyn outside of them
+            findings.Add(Finding.FromException(FindingKind.RoslynException, CompilerComponent, [], exception));
+        }
+
         foreach (var (analyzer, exception) in exceptions)
         {
             if (exception is not OperationCanceledException)

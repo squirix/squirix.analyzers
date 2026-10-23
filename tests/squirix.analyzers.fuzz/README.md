@@ -21,6 +21,8 @@ analyzer, and the IDE shows it as an AD0001 of each of these rules. The analyzer
 then hangs when it is used again.
 
 All the rules are enabled, and the code is compiled with the .NET assemblies of the harness, as the unit tests compile their snippets.
+The compiler binds the methods one after the other (`concurrentBuild: false`), so an input always runs the same code. Under the load of the workers,
+Roslyn still rarely throws on an input that it analyzes the next time, so the harness keeps a finding only when the input reproduces it.
 
 ## Options of the rules
 

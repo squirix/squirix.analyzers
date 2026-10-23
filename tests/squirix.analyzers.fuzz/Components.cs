@@ -25,7 +25,10 @@ internal static class Components
 
     public static ImmutableArray<DiagnosticAnalyzer> Analyzers { get; } = CreateAnalyzers();
 
-    /// <summary>The rules disabled by default, if any, are enabled, so all the rules run.</summary>
+    /// <summary>
+    /// The rules disabled by default, if any, are enabled, so all the rules run. The compiler binds the methods one after the other, so an input
+    /// always runs the same code, and the rare races of the nullable analysis of Roslyn under load are not reported for an analyzer.
+    /// </summary>
     public static CSharpCompilationOptions CompilationOptions { get; } = CreateCompilationOptions();
 
     /// <summary>The assemblies of the .NET runtime that runs the harness, as the unit tests compile their snippets with.</summary>
@@ -95,7 +98,7 @@ internal static class Components
             foreach (var descriptor in analyzer.SupportedDiagnostics)
                 severities[descriptor.Id] = ReportDiagnostic.Warn;
 
-        return new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true, nullableContextOptions: NullableContextOptions.Enable)
+        return new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true, nullableContextOptions: NullableContextOptions.Enable, concurrentBuild: false)
             .WithSpecificDiagnosticOptions(severities);
     }
 

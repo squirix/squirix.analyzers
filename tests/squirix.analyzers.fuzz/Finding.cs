@@ -44,7 +44,7 @@ internal sealed class Finding
 
         // The same defect of Roslyn is reached through every analyzer that asks the semantic model about the code, so the frames of Roslyn
         // identify it, rather than the analyzer
-        return kind == FindingKind.AnalyzerException && IsThrownByRoslyn(exception, frames, text)
+        return kind == FindingKind.RoslynException || (kind == FindingKind.AnalyzerException && IsThrownByRoslyn(exception, frames, text))
             ? new Finding
             {
                 Kind = FindingKind.RoslynException,
@@ -68,7 +68,8 @@ internal sealed class Finding
 
     /// <summary>
     /// Whether Roslyn throws by itself, rather than because of the analyzer: no frame of the analyzers is in the stack trace, or the exception
-    /// is thrown in Roslyn and is not an <see cref="ArgumentException" />, which Roslyn throws when an analyzer passes a wrong argument to its API.
+    /// is thrown in Roslyn and is not an <see cref="ArgumentException" /> of its API, which Roslyn throws when an analyzer passes a wrong argument.
+    /// An <see cref="ArgumentException" /> of a collection used by Roslyn, such as a duplicate key, is a defect of Roslyn.
     /// </summary>
     private static bool IsThrownByRoslyn(Exception exception, ImmutableArray<string> analyzerFrames, string text)
     {
@@ -76,7 +77,8 @@ internal sealed class Finding
             return true;
 
         var topFrames = StackTraceParser.GetTopFrames(text, 1);
-        return exception is not ArgumentException && topFrames.Length == 1 && topFrames[0] != analyzerFrames[0];
+        return topFrames.Length == 1 && topFrames[0] != analyzerFrames[0]
+            && (exception is not ArgumentException || !topFrames[0].StartsWith("Microsoft.CodeAnalysis.", StringComparison.Ordinal));
     }
 
     private static string GetShortFrame(string frame)

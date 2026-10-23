@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using SharpFuzz;
@@ -43,8 +44,19 @@ internal sealed class LibFuzzerTarget
 
         var source = Encoding.UTF8.GetString(data);
         var findings = _engine.RunAsync(source).GetAwaiter().GetResult();
+        if (findings.Count == 0)
+            return;
+
+        // Under load, Roslyn rarely throws on an input that it analyzes the next time, so a finding is kept only when the input reproduces it
+        var signatures = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var finding in _engine.RunAsync(source).GetAwaiter().GetResult())
+            _ = signatures.Add(finding.Signature);
+
         foreach (var finding in findings)
         {
+            if (!signatures.Contains(finding.Signature))
+                continue;
+
             if (_targetSignature != null)
             {
                 // Report the finding to libFuzzer, so it can minimize the input
