@@ -129,7 +129,8 @@ jobs:
     report:
         name: Report
         needs: fuzz
-        if: github.event_name == 'schedule' || inputs.report
+        # The findings are uploaded even when the fuzz job fails or times out after saving them
+        if: ${{ !cancelled() && needs.fuzz.result != 'skipped' && (github.event_name == 'schedule' || inputs.report) }}
         runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions:

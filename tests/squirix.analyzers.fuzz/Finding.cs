@@ -11,6 +11,9 @@ internal sealed class Finding
 {
     private const string RoslynComponent = "Microsoft.CodeAnalysis";
 
+    // The frames of the runtime above the code that throws, such as the helpers of a collection, are fewer than this
+    private const int MaxOwnerFrameIndex = 32;
+
     private const int SignatureFrameCount = 5;
 
     /// <summary>The full name of the analyzer, or of the component that throws when it is not an analyzer.</summary>
@@ -67,18 +70,23 @@ internal sealed class Finding
     }
 
     /// <summary>
-    /// Whether Roslyn throws by itself, rather than because of the analyzer: no frame of the analyzers is in the stack trace, or the exception
-    /// is thrown in Roslyn and is not an <see cref="ArgumentException" /> of its API, which Roslyn throws when an analyzer passes a wrong argument.
-    /// An <see cref="ArgumentException" /> of a collection used by Roslyn, such as a duplicate key, is a defect of Roslyn.
+    /// Whether Roslyn throws by itself, rather than because of the analyzer: no frame of the analyzers is in the stack trace, or the first frame
+    /// outside the runtime, the code that owns the throw, is in Roslyn. An analyzer that indexes a list out of range throws from a frame of the runtime,
+    /// and owns the exception. An <see cref="ArgumentException" /> that Roslyn throws itself validates an argument that the analyzer passed to its API,
+    /// whereas one of a collection used by Roslyn, such as a duplicate key, is a defect of Roslyn.
     /// </summary>
     private static bool IsThrownByRoslyn(Exception exception, ImmutableArray<string> analyzerFrames, string text)
     {
         if (analyzerFrames.IsEmpty)
             return true;
 
-        var topFrames = StackTraceParser.GetTopFrames(text, 1);
-        return topFrames.Length == 1 && topFrames[0] != analyzerFrames[0]
-            && (exception is not ArgumentException || !topFrames[0].StartsWith("Microsoft.CodeAnalysis.", StringComparison.Ordinal));
+        var topFrames = StackTraceParser.GetTopFrames(text, MaxOwnerFrameIndex);
+        var owner = 0;
+        while (owner < topFrames.Length && topFrames[owner].StartsWith("System.", StringComparison.Ordinal))
+            owner++;
+
+        return owner < topFrames.Length && topFrames[owner].StartsWith(RoslynComponent + ".", StringComparison.Ordinal)
+            && (exception is not ArgumentException || owner > 0);
     }
 
     private static string GetShortFrame(string frame)

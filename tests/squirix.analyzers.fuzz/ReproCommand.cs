@@ -66,8 +66,14 @@ internal static class ReproCommand
             return;
         }
 
-        // libFuzzer names the inputs of the corpus after their hash, without extension
-        var directoryFiles = new List<string>(Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories));
+        // libFuzzer names the inputs of the corpus after their hash, without extension, and a folder of findings has their details next to the inputs
+        var directoryFiles = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories))
+        {
+            if (!file.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                directoryFiles.Add(file);
+        }
+
         directoryFiles.Sort(StringComparer.Ordinal);
         files.AddRange(directoryFiles);
     }

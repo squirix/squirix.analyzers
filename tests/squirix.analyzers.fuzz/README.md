@@ -9,13 +9,14 @@ The harness reports these defects:
 
 | Kind | Description |
 | ---- | ----------- |
-| `AnalyzerException` | An analyzer throws (AD0001), or Roslyn throws an `ArgumentException` that an analyzer passed it |
+| `AnalyzerException` | An analyzer throws (AD0001), or Roslyn rejects an argument of an analyzer with an `ArgumentException` |
 | `Crash` | The process crashes, e.g. on a stack overflow |
 | `Timeout` | An analyzer does not complete within 60 seconds (twice the libFuzzer timeout) |
 
 The exceptions that Roslyn throws by itself (`RoslynException`), and the exceptions of the harness itself (`HarnessException`), are saved, but no
-issue is opened for them. Roslyn throws by itself when no frame of the analyzers is in the stack trace, or when another exception than an
-`ArgumentException` is thrown in Roslyn below a call of an analyzer, such as a `NullReferenceException` in `SemanticModel.GetTypeInfo` on invalid code.
+issue is opened for them. Roslyn throws by itself when no frame of the analyzers is in the stack trace, or when the first frame outside the runtime
+(`System.*`) is in Roslyn, such as a `NullReferenceException` in `SemanticModel.GetTypeInfo` on invalid code, except for an `ArgumentException` that
+Roslyn throws itself to reject an argument of the analyzer. An analyzer that indexes a list out of range throws from the runtime, and owns the exception.
 Every analyzer that asks the semantic model about the code reaches such a defect, so its signature is computed from the frames of Roslyn, not of the
 analyzer, and the IDE shows it as an AD0001 of each of these rules. The analyzers do not run when the compiler throws on the input, as the compilation
 then hangs when it is used again.

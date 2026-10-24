@@ -174,7 +174,8 @@ internal sealed class Campaign
     private async Task MinimizeFindingsAsync(TimeSpan duration)
     {
         var deadline = DateTimeOffset.UtcNow + duration;
-        var engine = new AnalysisEngine(ComponentFilter.Create([], new HashSet<string>(StringComparer.Ordinal)));
+        // The analyzers that crashed the process or did not complete still do so on a smaller input, and this process runs it
+        var engine = new AnalysisEngine(ComponentFilter.Create([], HarnessEnvironment.ReadSuppressedComponents(SuppressedComponentsFile)));
         var findingDirectories = new List<string>(Directory.EnumerateDirectories(FindingsDirectory));
         findingDirectories.Sort(StringComparer.Ordinal);
         foreach (var findingDirectory in findingDirectories)

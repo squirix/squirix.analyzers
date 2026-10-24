@@ -28,10 +28,12 @@ internal static class HarnessEnvironment
 
     public static string? TargetSignature => GetString(TargetSignatureVariable);
 
-    public static HashSet<string> GetSuppressedComponents()
+    public static HashSet<string> GetSuppressedComponents() => ReadSuppressedComponents(GetPath(SuppressedComponentsFileVariable));
+
+    /// <summary>Reads a file that lists the full names of the analyzers not to run, one per line.</summary>
+    public static HashSet<string> ReadSuppressedComponents(string? path)
     {
         var suppressed = new HashSet<string>(StringComparer.Ordinal);
-        var path = GetPath(SuppressedComponentsFileVariable);
         if (path == null || !File.Exists(path))
             return suppressed;
 
