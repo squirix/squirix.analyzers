@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <OutputType>Exe</OutputType>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>Squirix.Analyzers.Fuzz</RootNamespace>
+        <AssemblyName>Squirix.Analyzers.Fuzz</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The version of the unit tests: the analyzers run in the compilers newer than the Roslyn version they are compiled against. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0"/>
+        <PackageReference Include="SharpFuzz" Version="2.3.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Referenced as an analyzer too, so the rules of the repository check the harness, as they check the unit tests. -->
+        <ProjectReference Include="..\..\src\squirix.analyzers\squirix.analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
+    </ItemGroup>
+
+</Project>

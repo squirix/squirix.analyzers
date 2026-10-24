@@ -1,0 +1,157 @@
+# Fuzz the analyzers, and open an issue for each new finding. See tests/squirix.analyzers.fuzz/README.md
+name: Fuzz
+
+on:
+    workflow_dispatch:
+        inputs:
+            duration-minutes:
+                description: "Duration of the fuzzing, in minutes"
+                type: number
+                default: 120
+            report:
+                description: "Open an issue for each new finding"
+                type: boolean
+                default: true
+    schedule:
+        -   cron: "0 3 * * 0"
+
+concurrency:
+    group: fuzz
+    cancel-in-progress: false
+
+env:
+    DOTNET_NOLOGO: true
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+    SHARPFUZZ_VERSION: 2.3.0
+    # https://github.com/Metalnem/libfuzzer-dotnet/releases
+    LIBFUZZER_DOTNET_URL: https://github.com/Metalnem/libfuzzer-dotnet/releases/download/v2025.05.02.0904/libfuzzer-dotnet-ubuntu
+    LIBFUZZER_DOTNET_SHA256: c2c2a90d94c409a4af339a0d4f244e0442c5a5d249be0f1252ba07871f285958
+
+defaults:
+    run:
+        shell: pwsh
+
+jobs:
+    fuzz:
+        name: Fuzz
+        # The scheduled runs would open issues in the forks
+        if: github.event_name == 'workflow_dispatch' || github.repository == 'squirix/squirix.analyzers'
+        runs-on: ubuntu-latest
+        timeout-minutes: 240
+        permissions:
+            contents: read
+            actions: read # Download the corpus of the previous run
+        steps:
+            -   name: Set Git Options
+                shell: bash
+                run: |
+                    git config --global core.autocrlf false
+                    git config --global core.eol lf
+
+            -   name: Checkout
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    persist-credentials: false
+
+            -   name: Setup .NET
+                uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+                with:
+                    global-json-file: global.json
+
+            -   name: Install SharpFuzz and libfuzzer-dotnet
+                run: |
+                    dotnet tool install --global SharpFuzz.CommandLine --version $env:SHARPFUZZ_VERSION
+
+                    $libFuzzer = Join-Path $env:RUNNER_TEMP "libfuzzer-dotnet"
+                    Invoke-WebRequest $env:LIBFUZZER_DOTNET_URL -OutFile $libFuzzer -MaximumRetryCount 3 -RetryIntervalSec 5
+                    $hash = (Get-FileHash $libFuzzer -Algorithm SHA256).Hash
+                    if ($hash -ne $env:LIBFUZZER_DOTNET_SHA256) {
+                        Write-Error "Unexpected SHA-256 of libfuzzer-dotnet: $hash"
+                        exit 1
+                    }
+
+                    chmod +x $libFuzzer
+                    "LIBFUZZER=$libFuzzer" >> $env:GITHUB_ENV
+
+            -   name: Download the corpus of the previous run
+                env:
+                    GH_TOKEN: ${{ github.token }}
+                run: |
+                    $directory = Join-Path $env:RUNNER_TEMP "previous-corpus"
+                    $runs = gh run list --repo $env:GITHUB_REPOSITORY --workflow fuzz.yml --status completed --limit 10 --json databaseId | ConvertFrom-Json
+                    foreach ($run in $runs) {
+                        gh run download $run.databaseId --repo $env:GITHUB_REPOSITORY --name fuzz-corpus --dir $directory
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host "Using the corpus of the run $($run.databaseId)"
+                            "PREVIOUS_CORPUS=$directory" >> $env:GITHUB_ENV
+                            break
+                        }
+                    }
+
+                    exit 0
+
+            -   name: Fuzz
+                env:
+                    DURATION_MINUTES: ${{ inputs.duration-minutes || 120 }}
+                run: ./tests/squirix.analyzers.fuzz/eng/run.ps1 -LibFuzzer $env:LIBFUZZER -DurationMinutes $env:DURATION_MINUTES -OutputDirectory artifacts/fuzz -PreviousCorpus $env:PREVIOUS_CORPUS
+
+            -   name: Upload the corpus
+                if: always()
+                uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+                with:
+                    name: fuzz-corpus
+                    path: artifacts/fuzz/corpus-merged
+                    if-no-files-found: ignore
+                    retention-days: 30
+
+            -   name: Upload the findings
+                if: always()
+                uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+                with:
+                    name: fuzz-findings
+                    path: artifacts/fuzz/findings
+                    if-no-files-found: ignore
+                    retention-days: 90
+
+            -   name: Upload the logs
+                if: always()
+                uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+                with:
+                    name: fuzz-logs
+                    path: |
+                        artifacts/fuzz/logs
+                        artifacts/fuzz/artifacts
+                        artifacts/fuzz/state/suppressed.txt
+                    if-no-files-found: ignore
+                    retention-days: 14
+
+    # A separate job, so the token that can write the issues is not available to the fuzzed code
+    report:
+        name: Report
+        needs: fuzz
+        # The findings are uploaded even when the fuzz job fails or times out after saving them
+        if: ${{ !cancelled() && needs.fuzz.result != 'skipped' && (github.event_name == 'schedule' || inputs.report) }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        permissions:
+            contents: read
+            issues: write
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    fetch-depth: 0 # The script checks that the fuzzed commit contains the fix of the issues closed as completed
+                    persist-credentials: false
+
+            -   name: Download the findings
+                uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+                continue-on-error: true # There is no artifact when there is no finding
+                with:
+                    name: fuzz-findings
+                    path: artifacts/fuzz/findings
+
+            -   name: Open the issues
+                env:
+                    GH_TOKEN: ${{ github.token }}
+                    RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                run: ./tests/squirix.analyzers.fuzz/eng/report.ps1 -FindingsDirectory artifacts/fuzz/findings -RunUrl $env:RUN_URL
