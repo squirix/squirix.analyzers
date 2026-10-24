@@ -73,7 +73,8 @@ internal sealed class Finding
     /// Whether Roslyn throws by itself, rather than because of the analyzer: no frame of the analyzers is in the stack trace, or the first frame
     /// outside the runtime, the code that owns the throw, is in Roslyn. An analyzer that indexes a list out of range throws from a frame of the runtime,
     /// and owns the exception. An <see cref="ArgumentException" /> that Roslyn throws itself validates an argument that the analyzer passed to its API,
-    /// whereas one of a collection used by Roslyn, such as a duplicate key, is a defect of Roslyn.
+    /// whereas one of a collection used by Roslyn, such as a duplicate key, is a defect of Roslyn. The method that throws is the one of
+    /// <see cref="Exception.TargetSite" />, as the stack trace hides the throw helpers of the runtime, such as the one of a duplicate key.
     /// </summary>
     private static bool IsThrownByRoslyn(Exception exception, ImmutableArray<string> analyzerFrames, string text)
     {
@@ -86,8 +87,11 @@ internal sealed class Finding
             owner++;
 
         return owner < topFrames.Length && topFrames[owner].StartsWith(RoslynComponent + ".", StringComparison.Ordinal)
-            && (exception is not ArgumentException || owner > 0);
+            && (exception is not ArgumentException || !IsDeclaredInRoslyn(exception.TargetSite));
     }
+
+    private static bool IsDeclaredInRoslyn(MethodBase? method) =>
+        method?.DeclaringType?.Assembly.GetName().Name is { } name && name.StartsWith(RoslynComponent, StringComparison.Ordinal);
 
     private static string GetShortFrame(string frame)
     {
