@@ -10,6 +10,48 @@ namespace Squirix.Analyzers.UnitTests;
 public sealed class PreferEqualityOperatorCodeFixTests
 {
     [Test]
+    public async Task FixAllRewritesBothForms(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(string first, string second) => first is null && second is not null && (first is null ? second : first) is not null;
+                              }
+                              """;
+
+        const string expected = """
+                                class C
+                                {
+                                    bool M(string first, string second) => first == null && second != null && (first == null ? second : first) != null;
+                                }
+                                """;
+
+        var fixedSource = await CodeFixRunner.FixAllAsync(new PreferEqualityOperatorAnalyzer(), new PreferEqualityOperatorCodeFixProvider(), source, cancellationToken);
+
+        _ = await Assert.That(fixedSource).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task KeepsCommentBetweenIsAndNot(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(string value) => value is /* keep */ not null;
+                              }
+                              """;
+
+        const string expected = """
+                                class C
+                                {
+                                    bool M(string value) => value != /* keep */ null;
+                                }
+                                """;
+
+        _ = await Assert.That(await FixAsync(source, cancellationToken)).IsEqualTo(expected);
+    }
+
+    [Test]
     public async Task KeepsCommentsAroundTheCheck(CancellationToken cancellationToken)
     {
         const string source = """
@@ -145,6 +187,28 @@ public sealed class PreferEqualityOperatorCodeFixTests
                                         if (value == null)
                                             return;
                                     }
+                                }
+                                """;
+
+        _ = await Assert.That(await FixAsync(source, cancellationToken)).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task ParenthesizesWhereBindingDiffers(CancellationToken cancellationToken)
+    {
+        const string source = """
+                              class C
+                              {
+                                  bool M(bool flag, object input, string first, string second, int? left, int? right) =>
+                                      first is null == flag && input as string is null && left + right is not null && (first ?? second) is null;
+                              }
+                              """;
+
+        const string expected = """
+                                class C
+                                {
+                                    bool M(bool flag, object input, string first, string second, int? left, int? right) =>
+                                        first == null == flag && input as string == null && left + right != null && (first ?? second) == null;
                                 }
                                 """;
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Composition;
 using System.Threading;
@@ -42,9 +43,10 @@ public sealed class PreferEqualityOperatorCodeFixProvider : CodeFixProvider
             if (!TryGetNullCheck(nullPattern, out var isPattern, out var negated))
                 continue;
 
+            // One equivalence key for both forms, so a fix-all rewrites 'is null' and 'is not null' together.
             var title = negated ? "Use '!='" : "Use '=='";
             context.RegisterCodeFix(
-                CodeAction.Create(title, cancellationToken => ReplaceAsync(context.Document, isPattern, negated, cancellationToken), title),
+                CodeAction.Create(title, cancellationToken => ReplaceAsync(context.Document, isPattern, negated, cancellationToken), NullCheckRuleId),
                 diagnostic);
         }
     }
@@ -57,11 +59,14 @@ public sealed class PreferEqualityOperatorCodeFixProvider : CodeFixProvider
 
         var pattern = (ConstantPatternSyntax)(negated ? ((UnaryPatternSyntax)isPattern.Pattern).Pattern : isPattern.Pattern);
 
-        // 'x is not null' becomes 'x != null': the operator takes the leading trivia of 'is' and the trailing trivia of 'not'.
-        var lastOperatorToken = negated ? ((UnaryPatternSyntax)isPattern.Pattern).OperatorToken : isPattern.IsKeyword;
+        // The operator keeps every trivia of 'is' and 'not', so a comment between them survives.
+        var trailingTrivia = isPattern.IsKeyword.TrailingTrivia;
+        if (isPattern.Pattern is UnaryPatternSyntax notPattern)
+            trailingTrivia = JoinTrivia(trailingTrivia, notPattern.OperatorToken.LeadingTrivia, notPattern.OperatorToken.TrailingTrivia);
+
         var operatorToken = SyntaxFactory.Token(negated ? SyntaxKind.ExclamationEqualsToken : SyntaxKind.EqualsEqualsToken)
             .WithLeadingTrivia(isPattern.IsKeyword.LeadingTrivia)
-            .WithTrailingTrivia(lastOperatorToken.TrailingTrivia);
+            .WithTrailingTrivia(trailingTrivia);
 
         var comparison = SyntaxFactory.BinaryExpression(negated ? SyntaxKind.NotEqualsExpression : SyntaxKind.EqualsExpression, isPattern.Expression, operatorToken,
             pattern.Expression);
@@ -72,6 +77,27 @@ public sealed class PreferEqualityOperatorCodeFixProvider : CodeFixProvider
             .WithAdditionalAnnotations(Simplifier.Annotation);
 
         return document.WithSyntaxRoot(root.ReplaceNode(isPattern, replacement));
+    }
+
+    /// <summary>Joins trivia lists, keeping one whitespace where two meet, so 'is /* c */ not null' becomes '!= /* c */ null'.</summary>
+    private static SyntaxTriviaList JoinTrivia(in SyntaxTriviaList first, in SyntaxTriviaList second, in SyntaxTriviaList third)
+    {
+        var joined = new List<SyntaxTrivia>(first.Count + second.Count + third.Count);
+        AddTrivia(joined, in first);
+        AddTrivia(joined, in second);
+        AddTrivia(joined, in third);
+        return SyntaxFactory.TriviaList(joined);
+    }
+
+    private static void AddTrivia(List<SyntaxTrivia> joined, in SyntaxTriviaList trivia)
+    {
+        foreach (var item in trivia)
+        {
+            if (item.IsKind(SyntaxKind.WhitespaceTrivia) && joined.Count > 0 && joined[joined.Count - 1].IsKind(SyntaxKind.WhitespaceTrivia))
+                continue;
+
+            joined.Add(item);
+        }
     }
 
     private static bool TryGetNullCheck(ConstantPatternSyntax nullPattern, out IsPatternExpressionSyntax isPattern, out bool negated)

@@ -31,7 +31,7 @@ jobs:
                 uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
                 with:
                     path: ~/.nuget/packages
-                    key: ${{ runner.os }}-dotnet10-nuget-${{ hashFiles('**/global.json', '**/*.csproj') }}
+                    key: ${{ runner.os }}-dotnet10-nuget-${{ hashFiles('**/global.json', '**/*.csproj', '**/Directory.Build.props') }}
                     restore-keys: |
                         ${{ runner.os }}-dotnet10-nuget-
 
@@ -176,6 +176,7 @@ jobs:
                     Expand-Archive analyzer.zip -DestinationPath analyzer
 
                     # Every assembly of the folder, as NuGet hands them to the compiler: the code fix assembly must not stop the analyzer from loading.
+                    if (-not (Test-Path analyzer/analyzers/dotnet/cs/squirix.analyzers.codefixes.dll)) { throw 'The package does not carry the code fix assembly.' }
                     $analyzers = Get-ChildItem analyzer/analyzers/dotnet/cs/*.dll | ForEach-Object { "-analyzer:$($_.FullName)" }
                     $output = & toolset/tasks/net472/csc.exe -nologo -target:library -out:artifacts/sample.dll @analyzers tests/squirix.analyzers.framework-compiler/Sample.cs 2>&1 | Out-String
                     Write-Host $output
