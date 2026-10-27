@@ -10,7 +10,7 @@
     {
       "description": "The analyzer is compiled against the Roslyn shipped in the minimum supported .NET SDK; raising it makes the analyzer fail to load on that SDK. The test project may keep tracking newer Roslyn.",
       "matchFileNames": ["src/**"],
-      "matchPackageNames": ["Microsoft.CodeAnalysis.CSharp"],
+      "matchPackageNames": ["Microsoft.CodeAnalysis.CSharp", "Microsoft.CodeAnalysis.CSharp.Workspaces"],
       "enabled": false
     }
   ]

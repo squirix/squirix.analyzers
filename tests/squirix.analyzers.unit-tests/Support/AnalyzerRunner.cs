@@ -21,6 +21,9 @@ internal static class AnalyzerRunner
 
     private static readonly Lazy<ImmutableArray<MetadataReference>> References = new(LoadReferences);
 
+    /// <summary>Gets the references of the runtime the tests run on, as every test compilation sees them.</summary>
+    public static ImmutableArray<MetadataReference> RuntimeReferences => References.Value;
+
     public static Task<ImmutableArray<Diagnostic>> RunAsync(DiagnosticAnalyzer analyzer, string source, CancellationToken cancellationToken = default) =>
         RunAsync(analyzer, source, null, cancellationToken);
 
