@@ -1,0 +1,20 @@
+<Project>
+
+    <!-- The analyzer and the code fix assemblies ship in one package and carry its version. -->
+    <PropertyGroup>
+        <Version>0.1.17</Version>
+    </PropertyGroup>
+
+    <!-- The src projects check their own source with the last published version of the package; bump the version after each release.
+         A project cannot reference a package of its own id (NU1108), so the package is only downloaded and its assembly is handed to the
+         compiler. -->
+    <PropertyGroup>
+        <OwnRulesPackageVersion>0.1.17</OwnRulesPackageVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageDownload Include="squirix.analyzers" Version="[$(OwnRulesPackageVersion)]"/>
+        <Analyzer Include="$(NuGetPackageRoot)squirix.analyzers\$(OwnRulesPackageVersion)\analyzers\dotnet\cs\squirix.analyzers.dll"/>
+    </ItemGroup>
+
+</Project>

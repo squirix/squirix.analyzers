@@ -13,7 +13,6 @@
         <!-- Pack as a Roslyn analyzer NuGet package. -->
         <IsPackable>true</IsPackable>
         <PackageId>squirix.analyzers</PackageId>
-        <Version>0.1.17</Version>
         <Authors>Squirix Team</Authors>
         <Description>Design-time Roslyn analyzers that enforce squirix's internal coding conventions: brace style, member-size limits, naming rules, and code-smell guards.</Description>
         <RepositoryUrl>https://github.com/squirix/Squirix.Analyzers</RepositoryUrl>
@@ -42,15 +41,9 @@
         <None Include="..\..\icon.png" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
-    <!-- The package checks its own source with its last published version; bump the version after each release. A project cannot
-         reference a package of its own id (NU1108), so the package is only downloaded and its assembly is handed to the compiler. -->
-    <PropertyGroup>
-        <OwnRulesPackageVersion>0.1.17</OwnRulesPackageVersion>
-    </PropertyGroup>
-
     <ItemGroup>
-        <PackageDownload Include="squirix.analyzers" Version="[$(OwnRulesPackageVersion)]"/>
-        <Analyzer Include="$(NuGetPackageRoot)squirix.analyzers\$(OwnRulesPackageVersion)\analyzers\dotnet\cs\squirix.analyzers.dll"/>
+        <!-- Built first so its assembly can be packed next to the analyzer; nothing in the analyzer references it. -->
+        <ProjectReference Include="..\squirix.analyzers.codefixes\squirix.analyzers.codefixes.csproj" ReferenceOutputAssembly="false" PrivateAssets="all"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -65,6 +58,12 @@
                                     PackagePath="analyzers/dotnet/cs"
                                     Visible="false"/>
             <TfmSpecificPackageFile Include="$(TargetDir)\$(AssemblyName).pdb"
+                                    PackagePath="analyzers/dotnet/cs"
+                                    Visible="false"/>
+            <TfmSpecificPackageFile Include="..\squirix.analyzers.codefixes\bin\$(Configuration)\$(TargetFramework)\squirix.analyzers.codefixes.dll"
+                                    PackagePath="analyzers/dotnet/cs"
+                                    Visible="false"/>
+            <TfmSpecificPackageFile Include="..\squirix.analyzers.codefixes\bin\$(Configuration)\$(TargetFramework)\squirix.analyzers.codefixes.pdb"
                                     PackagePath="analyzers/dotnet/cs"
                                     Visible="false"/>
         </ItemGroup>

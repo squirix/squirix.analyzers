@@ -4,6 +4,7 @@
     </Configurations>
     <Folder Name="/src/">
         <Project Path="src/squirix.analyzers/squirix.analyzers.csproj"/>
+        <Project Path="src/squirix.analyzers.codefixes/squirix.analyzers.codefixes.csproj"/>
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/squirix.analyzers.fuzz/Squirix.Analyzers.Fuzz.csproj"/>
