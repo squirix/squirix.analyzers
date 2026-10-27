@@ -43,8 +43,8 @@ SQR0002.max_methods_per_type = 30
 ## Rules
 
 Rules are prefixed with `SQR`. Detailed documentation, including non-compliant/compliant examples, lives in
-[docs/rules](docs/rules). Each diagnostic links to its page at the tag of the installed version. No rule ships an
-auto-fix (code fix provider) yet.
+[docs/rules](docs/rules). Each diagnostic links to its page at the tag of the installed version. `SQR0012` ships an
+auto-fix (code fix provider); the other rules do not yet.
 
 | Rule                               | Category    | Analyzer                                  | What it enforces                                                     |
 |------------------------------------|-------------|-------------------------------------------|----------------------------------------------------------------------|
@@ -94,7 +94,7 @@ Requires the .NET SDK. The analyzer target is `netstandard2.0`; the unit-test pr
 
 The repository obeys its own rules, all at error severity. The tests are checked by the analyzer built from this
 repository. The analyzer source cannot be checked by its own build, so it is checked by the last published package;
-after a release, raise `OwnRulesPackageVersion` in `src/squirix.analyzers/squirix.analyzers.csproj`.
+after a release, raise `OwnRulesPackageVersion` in `src/Directory.Build.props`.
 
 ```bash
 dotnet build squirix.analyzers.slnx -c Release

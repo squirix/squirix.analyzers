@@ -15,11 +15,13 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0"/>
-        <PackageReference Include="TUnit" Version="1.74.0"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0"/>
+        <PackageReference Include="TUnit" Version="1.76.28"/>
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\squirix.analyzers\squirix.analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true"/>
+        <ProjectReference Include="..\..\src\squirix.analyzers.codefixes\squirix.analyzers.codefixes.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
