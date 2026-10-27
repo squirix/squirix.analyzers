@@ -45,7 +45,7 @@
     <!-- The package checks its own source with its last published version; bump the version after each release. A project cannot
          reference a package of its own id (NU1108), so the package is only downloaded and its assembly is handed to the compiler. -->
     <PropertyGroup>
-        <OwnRulesPackageVersion>0.1.12</OwnRulesPackageVersion>
+        <OwnRulesPackageVersion>0.1.17</OwnRulesPackageVersion>
     </PropertyGroup>
 
     <ItemGroup>
