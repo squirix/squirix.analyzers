@@ -2,7 +2,7 @@
 
     <!-- The analyzer and the code fix assemblies ship in one package and carry its version. -->
     <PropertyGroup>
-        <Version>0.1.17</Version>
+        <Version>0.1.18</Version>
     </PropertyGroup>
 
     <!-- The src projects check their own source with the last published version of the package; bump the version after each release.
