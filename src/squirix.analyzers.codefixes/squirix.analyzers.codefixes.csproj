@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <!-- Ships next to the analyzer in the squirix.analyzers package. Code fixes need Microsoft.CodeAnalysis.Workspaces, which the
+             compiler does not load, so they live in their own assembly (RS1038) and the analyzer assembly stays free of it. -->
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <LangVersion>12.0</LangVersion>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>Squirix.Analyzers</RootNamespace>
+        <DebugType>portable</DebugType>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" PrivateAssets="all"/>
+        <!-- The same Roslyn floor as the analyzer: the .NET 10 SDK ships Roslyn 5.0.0. Renovate is configured to leave this package alone. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.403" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false"/>
+    </ItemGroup>
+
+</Project>

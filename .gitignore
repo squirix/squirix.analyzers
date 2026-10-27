@@ -27,3 +27,6 @@ coverage*.xml
 ## Misc
 *.log
 .DS_Store
+
+## Fuzzing output
+artifacts/
