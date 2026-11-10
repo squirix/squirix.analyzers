@@ -64,8 +64,8 @@ The `repro` command runs the analyzers on files, on any OS, and prints the findi
 dotnet run --project tests/squirix.analyzers.fuzz --configuration Release -- repro input.cs
 ```
 
-`--only <type>` runs only some analyzers (full type names, separated by commas). `--compiler-only` collects compiler diagnostics without running
-analyzers. Timeout triage uses this mode to leave timeouts in the compiler-only run unattributed.
+`--only <type>` runs only some analyzers (full type names, separated by commas). `--compiler-only` runs Roslyn without analyzers and reports compiler
+exceptions as findings. Ordinary compiler diagnostics are discarded. Timeout triage uses this mode to leave timeouts in the compiler-only run unattributed.
 
 A folder runs all its files, for instance the corpus of a run or the snippets of the tests:
 
