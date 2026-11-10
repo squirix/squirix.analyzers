@@ -75,6 +75,17 @@ internal static class Triage
         if (!allResult.TimedOut)
             return null;
 
+        var compilerResult = await ChildProcess.RunHarnessAsync(["repro", "--compiler-only", input], timeout, cancellationToken);
+        if (compilerResult.TimedOut)
+        {
+            return new Finding
+            {
+                Kind = FindingKind.Timeout,
+                Component = UnknownComponent,
+                Message = $"The compiler-only run did not complete within {timeout.TotalSeconds:F0} seconds",
+            };
+        }
+
         var candidates = new List<DiagnosticAnalyzer>(Components.Analyzers);
         var groupCount = Math.Max(2, Environment.ProcessorCount);
         while (candidates.Count > 1)

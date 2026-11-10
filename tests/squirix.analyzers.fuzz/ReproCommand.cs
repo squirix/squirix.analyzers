@@ -14,7 +14,15 @@ internal static class ReproCommand
     public static async Task<int> RunAsync(CommandLineArguments arguments)
     {
         var only = arguments.GetString("only")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
-        var engine = new AnalysisEngine(ComponentFilter.Create(only, HarnessEnvironment.GetSuppressedComponents()));
+        var compilerOnly = arguments.HasFlag("compiler-only");
+        if (compilerOnly && only.Length > 0)
+        {
+            Console.Error.WriteLine("--compiler-only and --only cannot be used together");
+            return 2;
+        }
+
+        var filter = compilerOnly ? ComponentFilter.CompilerOnly : ComponentFilter.Create(only, HarnessEnvironment.GetSuppressedComponents());
+        var engine = new AnalysisEngine(filter);
         var json = arguments.HasFlag("json");
         var findingsDirectory = HarnessEnvironment.FindingsDirectory;
 

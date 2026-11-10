@@ -13,6 +13,8 @@ internal sealed class ComponentFilter
         Analyzers = analyzers;
     }
 
+    public static ComponentFilter CompilerOnly { get; } = new([]);
+
     public ImmutableArray<DiagnosticAnalyzer> Analyzers { get; }
 
     /// <summary>Creates a filter.</summary>

@@ -7,7 +7,7 @@ namespace Squirix.Analyzers.Fuzz;
 /// <summary>The arguments of a subcommand: <c>--name value</c> options, <c>--name</c> flags, and positional values.</summary>
 internal sealed class CommandLineArguments
 {
-    private static readonly HashSet<string> Flags = new(StringComparer.Ordinal) { "json" };
+    private static readonly HashSet<string> Flags = new(StringComparer.Ordinal) { "compiler-only", "json" };
 
     private readonly Dictionary<string, string?> _options = new(StringComparer.Ordinal);
 

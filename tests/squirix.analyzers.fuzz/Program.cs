@@ -9,7 +9,7 @@ internal static class Program
                                  Usage:
                                    Squirix.Analyzers.Fuzz
                                        Run under libFuzzer (see eng/run.ps1)
-                                   Squirix.Analyzers.Fuzz repro [--only <type>[,<type>...]] [--json] <file|directory>...
+                                   Squirix.Analyzers.Fuzz repro [--compiler-only | --only <type>[,<type>...]] [--json] <file|directory>...
                                        Run the analyzers on the inputs and print the findings
                                    Squirix.Analyzers.Fuzz triage --kind <crash|timeout> --input <file> [--log <file>] [--timeout <seconds>]
                                        Find the analyzer that crashes the process or does not complete
