@@ -18,7 +18,7 @@
         <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" PrivateAssets="all"/>
         <!-- The same Roslyn floor as the analyzer: the .NET 10 SDK ships Roslyn 5.0.0. Renovate is configured to leave this package alone. -->
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" PrivateAssets="all"/>
-        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.403" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="11.0.100" PrivateAssets="all"/>
     </ItemGroup>
 
     <ItemGroup>
