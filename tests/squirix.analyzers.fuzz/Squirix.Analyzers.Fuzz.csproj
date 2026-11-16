@@ -12,7 +12,7 @@
 
     <ItemGroup>
         <!-- The version of the unit tests: the analyzers run in the compilers newer than the Roslyn version they are compiled against. -->
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0"/>
         <PackageReference Include="SharpFuzz" Version="2.3.0"/>
     </ItemGroup>
 
